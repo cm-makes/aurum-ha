@@ -19,7 +19,6 @@ from ..const import (
     MODE_CHARGING,
     SD_STATE_STANDBY,
     SD_STATE_DETECTED,
-    SD_STATE_WAITING,
     SD_STATE_RUNNING,
     SD_STATE_DONE,
     DEFAULT_DEV_NOMINAL_POWER,
@@ -75,6 +74,11 @@ class DeviceManager:
             "min_on_time": cfg.get("min_on_time", DEFAULT_DEV_MIN_ON_TIME),
             "min_off_time": cfg.get("min_off_time", DEFAULT_DEV_MIN_OFF_TIME),
 
+            # Deadline scheduling
+            "deadline": cfg.get("deadline"),           # "HH:MM" or None
+            "estimated_runtime": cfg.get("estimated_runtime", 0),  # minutes
+            "force_started": False,
+
             # Startup detection
             "startup_detection": cfg.get("startup_detection", False),
             "sd_state": "",
@@ -91,11 +95,15 @@ class DeviceManager:
             "sd_finish_detected_at": None,
 
             # Runtime state
-            "on_since": None,
+            "on_since": None,       # When AURUM turned it on (for min_on_time)
             "last_on": None,
             "last_off": None,
             "runtime_today_s": 0,
             "total_switches": 0,
+            "_runtime_tick": None,  # Last runtime accumulation timestamp
+
+            # Manual override: if device turned on externally, protect it
+            "managed_on": False,    # True = AURUM turned it on
         }
 
     # ══════════════════════════════════════════════════════════════
@@ -124,28 +132,59 @@ class DeviceManager:
             is_on = self._is_device_on(dev)
             power = self._get_device_power(dev)
 
+            # Deadline check: must this device start now?
+            # Checked first – deadline overrides everything except SD running
+            deadline_urgent = self._deadline_urgent(dev, now)
+
             # Skip SD devices that are running a program
             if dev["startup_detection"] and dev["sd_state"] == SD_STATE_RUNNING:
                 if is_on:
                     remaining_excess -= power
                 continue
 
+            if deadline_urgent and not is_on:
+                # Force start – deadline approaching
+                self._turn_on(dev, now, excess, battery_soc)
+                dev["force_started"] = True
+                remaining_excess -= dev["nominal_power"]
+                self.hass.log(
+                    f"AURUM [{dev['name']}]: Force-started "
+                    f"(deadline {dev['deadline']}, "
+                    f"est. {dev['estimated_runtime']}min)")
+                continue
+
+            if deadline_urgent and is_on:
+                # Already running under deadline pressure – don't turn off
+                remaining_excess -= power
+                continue
+
             # Skip SD devices in standby (keep switch on for detection)
             if dev["startup_detection"] and dev["sd_state"] == SD_STATE_STANDBY:
                 continue
 
+            # Manual override: device was turned on externally → don't touch
+            if is_on and not dev["managed_on"]:
+                if dev["on_since"] is None:
+                    dev["on_since"] = now
+                remaining_excess -= power
+                continue
+
             # Battery mode restrictions
             if battery_mode == MODE_CHARGING:
-                if is_on:
+                if is_on and not dev["force_started"]:
                     self._turn_off(dev, now, excess, battery_soc,
                                    "battery_charging")
+                elif is_on:
+                    remaining_excess -= power  # force-started, keep running
                 continue
 
             if battery_mode == MODE_LOW_SOC:
                 if battery_soc < dev["soc_threshold"]:
-                    if is_on:
+                    if is_on and not dev["force_started"]:
                         self._turn_off(dev, now, excess, battery_soc,
                                        "soc_below_threshold")
+                    elif is_on:
+                        remaining_excess -= power
                     continue
 
             # Turn ON logic
@@ -157,7 +196,10 @@ class DeviceManager:
                         remaining_excess -= dev["nominal_power"]
             else:
                 # Device is on – check if we need to turn it off
-                if remaining_excess < -dev["hysteresis_off"]:
+                if dev["force_started"]:
+                    # Force-started device: keep running
+                    remaining_excess -= power
+                elif remaining_excess < -dev["hysteresis_off"]:
                     if self._min_on_ok(dev, now):
                         if self._debounce_ok(dev, now, "off"):
                             self._turn_off(dev, now, excess, battery_soc,
@@ -181,6 +223,8 @@ class DeviceManager:
             if is_on:
                 if dev["startup_detection"] and dev["sd_state"]:
                     state = dev["sd_state"]
+                elif not dev["managed_on"]:
+                    state = "manual_override"
                 else:
                     state = "on"
                 devices_on += 1
@@ -195,6 +239,7 @@ class DeviceManager:
                 "sd_state": dev.get("sd_state", ""),
                 "soc_threshold": dev["soc_threshold"],
                 "priority": dev["priority"],
+                "force_started": dev.get("force_started", False),
             })
 
         shared["device_states"] = device_states
@@ -222,18 +267,52 @@ class DeviceManager:
         self.hass.turn_on(dev["switch_entity"])
         dev["on_since"] = now
         dev["last_on"] = now
+        dev["_runtime_tick"] = now
         dev["total_switches"] += 1
+        dev["managed_on"] = True
         self._log_action(dev, "ON", excess, soc, "surplus_available")
 
     def _turn_off(self, dev, now, excess, soc, reason):
         """Turn a device off."""
         self.hass.turn_off(dev["switch_entity"])
-        if dev["on_since"]:
-            elapsed = (now - dev["on_since"]).total_seconds()
-            dev["runtime_today_s"] += elapsed
         dev["on_since"] = None
         dev["last_off"] = now
+        dev["_runtime_tick"] = None
+        dev["managed_on"] = False
+        dev["force_started"] = False
         self._log_action(dev, "OFF", excess, soc, reason)
+
+    def _deadline_urgent(self, dev, now):
+        """Check if device must start now to meet its deadline.
+
+        Returns True if: time_remaining < estimated_runtime + buffer.
+        """
+        deadline_str = dev.get("deadline")
+        est_runtime = dev.get("estimated_runtime", 0)
+        if not deadline_str or not est_runtime:
+            return False
+
+        try:
+            parts = deadline_str.split(":")
+            deadline_hour = int(parts[0])
+            deadline_min = int(parts[1]) if len(parts) > 1 else 0
+
+            deadline_today = now.replace(
+                hour=deadline_hour, minute=deadline_min,
+                second=0, microsecond=0)
+
+            # If deadline already passed today, not urgent
+            if now >= deadline_today:
+                dev["force_started"] = False
+                return False
+
+            time_remaining = (deadline_today - now).total_seconds()
+            runtime_needed = est_runtime * 60  # minutes to seconds
+            buffer = 300  # 5 min safety buffer
+
+            return time_remaining <= (runtime_needed + buffer)
+        except (ValueError, IndexError):
+            return False
 
     def _debounce_ok(self, dev, now, direction):
         """Check if debounce period has passed."""
@@ -257,10 +336,14 @@ class DeviceManager:
     def _update_runtimes(self, now):
         """Accumulate runtime for devices that are currently on."""
         for dev in self.devices:
-            if dev["on_since"] and self._is_device_on(dev):
-                elapsed = (now - dev["on_since"]).total_seconds()
-                dev["runtime_today_s"] += elapsed
-                dev["on_since"] = now
+            if self._is_device_on(dev):
+                tick = dev.get("_runtime_tick") or dev.get("on_since")
+                if tick:
+                    elapsed = (now - tick).total_seconds()
+                    dev["runtime_today_s"] += max(0, elapsed)
+                dev["_runtime_tick"] = now
+            else:
+                dev["_runtime_tick"] = None
 
     def _log_action(self, dev, action, excess, soc, reason):
         """Log a device action to CSV."""
@@ -345,6 +428,10 @@ class DeviceManager:
         elif dev["sd_state"] == SD_STATE_DONE:
             if is_on:
                 self.hass.turn_off(dev["switch_entity"])
+                dev["on_since"] = None
+                dev["last_off"] = now
+                dev["_runtime_tick"] = None
+                dev["managed_on"] = False
                 self._log_action(
                     dev, "OFF", 0, 0, "program_finished")
             dev["sd_state"] = SD_STATE_STANDBY

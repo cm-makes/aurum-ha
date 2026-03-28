@@ -54,6 +54,7 @@ class AurumDeviceActiveSensor(CoordinatorEntity, BinarySensorEntity):
             if ds["name"] == self._dev_name:
                 state = ds.get("state", "off")
                 self._attr_is_on = state not in ("off", "done", "standby")
+                self.async_write_ha_state()
                 return
         self._attr_is_on = False
         self.async_write_ha_state()

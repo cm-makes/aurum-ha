@@ -29,6 +29,8 @@ from .const import (
     CONF_DEV_PRIORITY,
     CONF_DEV_SOC_THRESHOLD,
     CONF_DEV_STARTUP_DETECTION,
+    CONF_DEV_DEADLINE,
+    CONF_DEV_ESTIMATED_RUNTIME,
     DEFAULT_BATTERY_CAPACITY_WH,
     DEFAULT_TARGET_SOC,
     DEFAULT_MIN_SOC,
@@ -141,6 +143,17 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             CONF_DEV_STARTUP_DETECTION,
             default=d.get(CONF_DEV_STARTUP_DETECTION, False),
         ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_DEV_DEADLINE,
+            default=d.get(CONF_DEV_DEADLINE, vol.UNDEFINED),
+        ): selector.TimeSelector(),
+        vol.Optional(
+            CONF_DEV_ESTIMATED_RUNTIME,
+            default=d.get(CONF_DEV_ESTIMATED_RUNTIME, vol.UNDEFINED),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=10, max=480, step=10,
+            unit_of_measurement="min",
+            mode=selector.NumberSelectorMode.BOX)),
     })
 
 

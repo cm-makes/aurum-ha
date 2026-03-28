@@ -39,6 +39,8 @@ CONF_DEV_DEBOUNCE_ON = "debounce_on"
 CONF_DEV_DEBOUNCE_OFF = "debounce_off"
 CONF_DEV_MIN_ON_TIME = "min_on_time"
 CONF_DEV_MIN_OFF_TIME = "min_off_time"
+CONF_DEV_DEADLINE = "deadline"
+CONF_DEV_ESTIMATED_RUNTIME = "estimated_runtime"
 
 # ── Device defaults ──────────────────────────────────────────────
 DEFAULT_DEV_NOMINAL_POWER = 1000
@@ -62,6 +64,5 @@ DEVICE_ACTIVE_STATES = ("on", "running", "manual_override")
 # ── Startup Detection states ─────────────────────────────────────
 SD_STATE_STANDBY = "standby"
 SD_STATE_DETECTED = "detected"
-SD_STATE_WAITING = "waiting"
 SD_STATE_RUNNING = "running"
 SD_STATE_DONE = "done"

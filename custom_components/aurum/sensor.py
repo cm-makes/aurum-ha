@@ -150,6 +150,7 @@ class AurumDeviceStatusSensor(CoordinatorEntity, SensorEntity):
         for ds in (self.coordinator.device_states or []):
             if ds["name"] == self._dev_name:
                 self._attr_native_value = ds.get("state", "off")
+                self.async_write_ha_state()
                 return
         self._attr_native_value = "unknown"
         self.async_write_ha_state()
@@ -176,6 +177,7 @@ class AurumDevicePowerSensor(CoordinatorEntity, SensorEntity):
         for ds in (self.coordinator.device_states or []):
             if ds["name"] == self._dev_name:
                 self._attr_native_value = ds.get("power", 0)
+                self.async_write_ha_state()
                 return
         self._attr_native_value = 0
         self.async_write_ha_state()
@@ -201,6 +203,7 @@ class AurumDeviceRuntimeSensor(CoordinatorEntity, SensorEntity):
             if ds["name"] == self._dev_name:
                 secs = ds.get("runtime_today_s", 0)
                 self._attr_native_value = round(secs / 60, 1)
+                self.async_write_ha_state()
                 return
         self._attr_native_value = 0
         self.async_write_ha_state()
