@@ -1,0 +1,72 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energiequellen",
+        "description": "Schritt 1/2: Wähle deine Netz-, PV- und Batterie-Sensoren.",
+        "data": {
+          "grid_power_entity": "Netzleistung (W, positiv = Bezug)",
+          "pv_power_entity": "PV-Erzeugung (W, optional)",
+          "battery_soc_entity": "Batterie-Ladestand (%, optional)"
+        }
+      },
+      "battery": {
+        "title": "Batterie & System",
+        "description": "Schritt 2/2: Batteriekapazität und Update-Intervall konfigurieren.",
+        "data": {
+          "battery_capacity_wh": "Batteriekapazität",
+          "target_soc": "Ziel-SOC (Ladeziel)",
+          "min_soc": "Mindest-SOC (Geräte-Abschaltung)",
+          "update_interval": "Update-Intervall"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "AURUM ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AURUM Einstellungen",
+        "description": "{device_list}",
+        "data": {
+          "action": "Was möchtest du tun?"
+        }
+      },
+      "settings": {
+        "title": "Energie & Batterie",
+        "description": "Energiequellen und Batterieparameter ändern.",
+        "data": {
+          "grid_power_entity": "Netzleistung (W, positiv = Bezug)",
+          "pv_power_entity": "PV-Erzeugung (W, optional)",
+          "battery_soc_entity": "Batterie-Ladestand (%)",
+          "battery_capacity_wh": "Batteriekapazität",
+          "target_soc": "Ziel-SOC (Ladeziel)",
+          "min_soc": "Mindest-SOC (Geräte-Abschaltung)",
+          "update_interval": "Update-Intervall"
+        }
+      },
+      "add_device": {
+        "title": "Gerät hinzufügen",
+        "description": "Konfiguriere ein Gerät für die AURUM-Steuerung.",
+        "data": {
+          "name": "Gerätename",
+          "switch_entity": "Schalter-Entity (Ein/Aus)",
+          "power_entity": "Leistungssensor (W, optional)",
+          "nominal_power": "Nennleistung",
+          "priority": "Priorität (höher = wird zuerst eingeschaltet)",
+          "soc_threshold": "SOC-Schwelle (Gerät geht darunter aus)",
+          "startup_detection": "Programmerkennung (Waschmaschine etc.)"
+        }
+      },
+      "remove_device": {
+        "title": "Gerät entfernen",
+        "description": "Wähle ein Gerät zum Entfernen.",
+        "data": {
+          "device_to_remove": "Gerät entfernen"
+        }
+      }
+    }
+  }
+}

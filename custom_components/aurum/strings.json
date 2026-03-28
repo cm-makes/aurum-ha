@@ -1,0 +1,72 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Energy Sources",
+        "description": "Step 1/2: Select your grid, PV and battery sensors.",
+        "data": {
+          "grid_power_entity": "Grid power sensor (W, positive = import)",
+          "pv_power_entity": "PV production sensor (W, optional)",
+          "battery_soc_entity": "Battery state of charge (%, optional)"
+        }
+      },
+      "battery": {
+        "title": "Battery & System Settings",
+        "description": "Step 2/2: Configure battery parameters and update interval.",
+        "data": {
+          "battery_capacity_wh": "Battery capacity",
+          "target_soc": "Target SOC (charge goal)",
+          "min_soc": "Minimum SOC (device cutoff)",
+          "update_interval": "Update interval"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "AURUM is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AURUM Settings",
+        "description": "{device_list}",
+        "data": {
+          "action": "What would you like to do?"
+        }
+      },
+      "settings": {
+        "title": "Energy & Battery Settings",
+        "description": "Update your energy sources and battery parameters.",
+        "data": {
+          "grid_power_entity": "Grid power sensor (W, positive = import)",
+          "pv_power_entity": "PV production sensor (W, optional)",
+          "battery_soc_entity": "Battery state of charge (%)",
+          "battery_capacity_wh": "Battery capacity",
+          "target_soc": "Target SOC (charge goal)",
+          "min_soc": "Minimum SOC (device cutoff)",
+          "update_interval": "Update interval"
+        }
+      },
+      "add_device": {
+        "title": "Add Device",
+        "description": "Configure a device to be controlled by AURUM.",
+        "data": {
+          "name": "Device name",
+          "switch_entity": "Switch entity (to turn on/off)",
+          "power_entity": "Power sensor (W, optional)",
+          "nominal_power": "Nominal power consumption",
+          "priority": "Priority (higher = turned on first)",
+          "soc_threshold": "SOC threshold (device turns off below this)",
+          "startup_detection": "Enable startup detection (washing machines etc.)"
+        }
+      },
+      "remove_device": {
+        "title": "Remove Device",
+        "description": "Select a device to remove.",
+        "data": {
+          "device_to_remove": "Device to remove"
+        }
+      }
+    }
+  }
+}
