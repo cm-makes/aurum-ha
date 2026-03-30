@@ -110,6 +110,14 @@ Every 15 seconds:
 - [ ] Push notifications
 - [ ] Dashboard cards
 
+## Support the Project
+
+If AURUM saves you energy and money, consider supporting its development:
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=github)](https://github.com/sponsors/cm-makes)
+
+Your support helps keep this project alive and growing.
+
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
