@@ -4,7 +4,7 @@ Thanks for your interest in improving AURUM! Here's how to get started.
 
 ## Reporting Bugs
 
-1. Check [existing issues](https://github.com/Chris0479/aurum-ha/issues) first
+1. Check [existing issues](https://github.com/cm-makes/aurum-ha/issues) first
 2. Open a new issue using the **Bug Report** template
 3. Include your HA version, AURUM version, and relevant logs
 
@@ -16,7 +16,7 @@ Open an issue using the **Feature Request** template. Describe the use case, not
 
 ```bash
 # Clone the repository
-git clone https://github.com/Chris0479/aurum-ha.git
+git clone https://github.com/cm-makes/aurum-ha.git
 cd aurum-ha
 
 # Copy into your HA dev environment

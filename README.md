@@ -1,7 +1,7 @@
 # AURUM – Solar Surplus Optimizer
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/Chris0479/aurum-ha?style=flat)](https://github.com/Chris0479/aurum-ha/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat)](https://github.com/cm-makes/aurum-ha/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
@@ -32,7 +32,7 @@
 ### HACS (recommended)
 
 1. Open HACS → Integrations → ⋮ → Custom repositories
-2. Add `https://github.com/Chris0479/aurum-ha` as **Integration**
+2. Add `https://github.com/cm-makes/aurum-ha` as **Integration**
 3. Search for "AURUM" and install
 4. Restart Home Assistant
 
