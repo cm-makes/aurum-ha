@@ -372,8 +372,77 @@ def test_startup_detection():
 
     check(w["sd_state"] == "standby",
           f"Low power sustained -> done -> standby (got {w['sd_state']})")
-    check(h.states["switch.w"] == "off",
-          "Program finished -> washer OFF")
+    # After DONE → STANDBY, SD auto-enables plug for next detection
+    check(h.states["switch.w"] == "on",
+          "Program done: plug back ON for detection (Helios-Logik)")
+
+
+def test_sd_no_surplus():
+    title("4b: SD Without Surplus (Helios-Logik)")
+    h, en, bat, dm = setup([
+        dev("Spueler", "switch.sp", pw="sensor.sp_power", nom=2000,
+            prio=80, sd=True,
+            sd_power_threshold=10, sd_detection_time=5,
+            sd_min_runtime=60, sd_finish_power=5,
+            sd_finish_time=30, sd_max_runtime=7200),
+    ])
+    sp = dm.devices[0]
+    t = datetime(2026, 3, 28, 10, 0)
+
+    # No surplus, plug is OFF → SD must turn it ON for detection
+    cycle(h, en, bat, dm, grid=500, soc=90, t=t,
+          powers={"sensor.sp_power": "0"})
+    check(h.states["switch.sp"] == "on",
+          "No surplus: SD plug auto-enabled for detection")
+    check(sp["sd_state"] == "standby",
+          "State is standby (waiting for program start)")
+
+    # Device now on, drawing 2W standby
+    t += timedelta(seconds=15)
+    cycle(h, en, bat, dm, grid=500, soc=90, t=t,
+          powers={"sensor.sp_power": "2"})
+    check(h.states["switch.sp"] == "on",
+          "Standby 2W: plug stays ON")
+
+    # User starts dishwasher → 1500W
+    t += timedelta(seconds=15)
+    cycle(h, en, bat, dm, grid=500, soc=90, t=t,
+          powers={"sensor.sp_power": "1500"})
+    check(sp["sd_state"] == "detected",
+          "1500W spike detected (no surplus needed!)")
+
+    # Sustained → running
+    t += timedelta(seconds=15)
+    cycle(h, en, bat, dm, grid=500, soc=90, t=t,
+          powers={"sensor.sp_power": "1400"})
+    check(sp["sd_state"] == "running",
+          "Sustained → running (program protected)")
+
+    # Battery charging mode (SOC 5%) → program STILL protected
+    t += timedelta(seconds=15)
+    cycle(h, en, bat, dm, grid=2000, soc=5, t=t,
+          powers={"sensor.sp_power": "1300"})
+    check(h.states["switch.sp"] == "on",
+          "SOC 5% + no surplus: program PROTECTED (Helios-Logik)")
+
+    # Program finishes
+    t += timedelta(seconds=120)  # past min_runtime
+    for i in range(4):
+        t += timedelta(seconds=15)
+        cycle(h, en, bat, dm, grid=500, soc=90, t=t,
+              powers={"sensor.sp_power": "2"})
+
+    check(h.states["switch.sp"] in ("on", "off"),
+          f"Program done, state={sp['sd_state']}")
+
+    # After done → next cycle turns plug back on for standby detection
+    t += timedelta(seconds=15)
+    cycle(h, en, bat, dm, grid=500, soc=90, t=t,
+          powers={"sensor.sp_power": "0"})
+    check(h.states["switch.sp"] == "on",
+          "After done: plug back ON for next program detection")
+    check(sp["sd_state"] == "standby",
+          "Ready for next cycle (standby)")
 
 
 def test_hysteresis_debounce():
@@ -494,11 +563,14 @@ def test_deadline():
     ])
     w = dm.devices[0]
 
-    # 14:00 – 4h to deadline, 2h estimated → not urgent yet (4h > 2h+5min)
+    # 14:00 – 4h to deadline, 2h estimated → not urgent yet
+    # But SD device: plug is ON for detection (Helios-Logik)
     t = datetime(2026, 3, 28, 14, 0)
     cycle(h, en, bat, dm, grid=500, soc=90, t=t)  # no surplus
-    check(h.states["switch.w"] == "off",
-          "14:00: 4h left, 2h needed -> not urgent, stays OFF")
+    check(h.states["switch.w"] == "on",
+          "14:00: SD device -> plug ON for detection (not yet urgent)")
+    check(w["force_started"] == False,
+          "14:00: not urgent -> force_started=False")
 
     # 15:55 – 2h5min left, 2h+5min needed → URGENT!
     t2 = datetime(2026, 3, 28, 15, 55)
@@ -651,7 +723,7 @@ def test_missing_features():
     title("11: Remaining Recommendations")
     warn("No daily runtime target (e.g. 'pool needs 4h/day')")
     warn("No EMA reset when large device switches on/off")
-    warn("SD standby assumes plug is already ON - no auto-enable")
+    # Fixed: SD now auto-enables plug for detection (Helios-Logik)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -667,6 +739,7 @@ if __name__ == "__main__":
     test_priority()
     test_battery_modes()
     test_startup_detection()
+    test_sd_no_surplus()
     test_hysteresis_debounce()
     test_manual_override()
     test_deadline()

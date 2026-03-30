@@ -1,0 +1,45 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for AURUM? Describe the use case and we'll see if it fits!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation or limitation you're running into.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you imagine this working? Be as specific as you like.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you tried any workarounds?
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Device control
+        - Battery management
+        - Scheduling / Deadlines
+        - Pricing / Tariffs
+        - Dashboard / UI
+        - Notifications
+        - Other
+    validations:
+      required: true

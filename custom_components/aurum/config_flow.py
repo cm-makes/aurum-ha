@@ -243,14 +243,15 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
                         options=[
                             selector.SelectOptionDict(
                                 value="settings",
-                                label="Edit energy & battery settings"),
+                                label="menu_edit_energy"),
                             selector.SelectOptionDict(
                                 value="add_device",
-                                label="Add a device"),
+                                label="menu_add_device"),
                             selector.SelectOptionDict(
                                 value="remove_device",
-                                label="Remove a device"),
+                                label="menu_remove_device"),
                         ],
+                        translation_key="action",
                         mode=selector.SelectSelectorMode.LIST,
                     )
                 ),

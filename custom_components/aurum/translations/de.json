@@ -3,37 +3,37 @@
     "step": {
       "user": {
         "title": "Energiequellen",
-        "description": "Schritt 1/2: Verbinde AURUM mit deinen Energiesensoren.",
+        "description": "Schritt 1/2: Verbinde AURUM mit deinen Energiesensoren. Du brauchst mindestens einen Netzzähler-Sensor.",
         "data": {
-          "grid_power_entity": "Netzleistungs-Sensor",
-          "pv_power_entity": "PV-Erzeugungs-Sensor",
-          "battery_soc_entity": "Batterie-SOC-Sensor"
+          "grid_power_entity": "Netzzähler",
+          "pv_power_entity": "PV-Erzeugung (optional)",
+          "battery_soc_entity": "Batterie-Ladestand (optional)"
         },
         "data_description": {
-          "grid_power_entity": "Dein Netzzähler-Sensor (z.B. Shelly 3EM, SMA, Fronius). Muss in Watt melden — positiv = Netzbezug, negativ = Einspeisung. Das ist der wichtigste Sensor.",
-          "pv_power_entity": "Die aktuelle Erzeugung deines Wechselrichters in Watt. Optional — wird nur zur Anzeige genutzt, nicht für die Überschussberechnung.",
-          "battery_soc_entity": "Der Ladestand deiner Hausbatterie in Prozent. Leer lassen falls keine Batterie vorhanden — AURUM verteilt dann den gesamten Überschuss direkt."
+          "grid_power_entity": "Der Sensor deines Netzzählers (z.B. Shelly 3EM, SMA, Fronius, Kostal). Muss den aktuellen Verbrauch in Watt melden. Positiver Wert = du beziehst Strom, negativer Wert = du speist ein. Das ist der wichtigste Sensor — ohne ihn kann AURUM nicht arbeiten.",
+          "pv_power_entity": "Wie viel Strom deine Solaranlage gerade erzeugt (in Watt). Wird nur zur Anzeige genutzt, nicht für die Berechnung. Kann leer bleiben.",
+          "battery_soc_entity": "Wie voll deine Hausbatterie gerade ist (in Prozent, 0–100%). Leer lassen wenn du keine Batterie hast — AURUM verteilt dann den gesamten Überschuss direkt an die Geräte."
         }
       },
       "battery": {
-        "title": "Batterie & System",
-        "description": "Schritt 2/2: Konfiguriere Batterieparameter und Update-Frequenz.",
+        "title": "Batterie-Einstellungen",
+        "description": "Schritt 2/2: Wie soll AURUM mit deiner Batterie umgehen? Wenn du keine Batterie hast, kannst du die Standardwerte belassen.",
         "data": {
-          "battery_capacity_wh": "Batteriekapazität (Wh)",
-          "target_soc": "Ziel-SOC",
-          "min_soc": "Mindest-SOC",
-          "update_interval": "Update-Intervall"
+          "battery_capacity_wh": "Batteriegröße",
+          "target_soc": "Ladeziel",
+          "min_soc": "Batterie-Reserve",
+          "update_interval": "Aktualisierung"
         },
         "data_description": {
-          "battery_capacity_wh": "Nutzbare Kapazität deiner Batterie in Wattstunden (z.B. 10000 für eine 10-kWh-Batterie).",
-          "target_soc": "Ladeziel in %. Über diesem Wert dürfen alle Geräte laufen. Darunter gelten die individuellen SOC-Schwellen pro Gerät.",
-          "min_soc": "Sicherheitsgrenze in %. Unter diesem Wert werden ALLE Geräte abgeschaltet, um die Batterie vor Tiefentladung zu schützen.",
-          "update_interval": "Wie oft AURUM Sensoren liest und Geräte steuert (in Sekunden). 15s ist für die meisten Setups empfohlen."
+          "battery_capacity_wh": "Wie groß ist deine Batterie? Angabe in Wattstunden. Beispiele: 5.000 Wh = 5 kWh, 10.000 Wh = 10 kWh.",
+          "target_soc": "Ab welchem Ladestand dürfen alle Geräte laufen? Standardmäßig 80%. Solange die Batterie darunter liegt, lässt AURUM nur Geräte mit besonderer Freigabe laufen.",
+          "min_soc": "Unter welchem Ladestand sollen ALLE Geräte abgeschaltet werden? Schützt deine Batterie vor Tiefentladung. Standard: 10%.",
+          "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden."
         }
       }
     },
     "abort": {
-      "already_configured": "AURUM ist bereits konfiguriert."
+      "already_configured": "AURUM ist bereits eingerichtet. Du kannst es unter Einstellungen → Integrationen konfigurieren."
     }
   },
   "options": {
@@ -47,58 +47,67 @@
       },
       "settings": {
         "title": "Energie & Batterie",
-        "description": "Energiequellen und Batterieparameter ändern.",
+        "description": "Hier kannst du deine Sensoren und Batterie-Einstellungen ändern.",
         "data": {
-          "grid_power_entity": "Netzleistungs-Sensor",
-          "pv_power_entity": "PV-Erzeugungs-Sensor",
-          "battery_soc_entity": "Batterie-SOC-Sensor",
-          "battery_capacity_wh": "Batteriekapazität (Wh)",
-          "target_soc": "Ziel-SOC",
-          "min_soc": "Mindest-SOC",
-          "update_interval": "Update-Intervall"
+          "grid_power_entity": "Netzzähler",
+          "pv_power_entity": "PV-Erzeugung (optional)",
+          "battery_soc_entity": "Batterie-Ladestand",
+          "battery_capacity_wh": "Batteriegröße",
+          "target_soc": "Ladeziel",
+          "min_soc": "Batterie-Reserve",
+          "update_interval": "Aktualisierung"
         },
         "data_description": {
-          "grid_power_entity": "Dein Netzzähler in Watt. Positiv = Bezug, negativ = Einspeisung.",
-          "pv_power_entity": "PV-Erzeugung in Watt (optional, nur zur Anzeige).",
-          "battery_soc_entity": "Batterie-Ladestand in %.",
-          "battery_capacity_wh": "Nutzbare Batteriekapazität in Wattstunden.",
-          "target_soc": "Über diesem SOC dürfen alle Geräte laufen. Darunter gelten Geräte-Schwellen.",
-          "min_soc": "Unter diesem SOC werden ALLE Geräte abgeschaltet (Batterieschutz).",
-          "update_interval": "Sensor-Abfrage und Gerätesteuerungs-Intervall in Sekunden."
+          "grid_power_entity": "Dein Netzzähler-Sensor in Watt. Positiv = Strombezug, negativ = Einspeisung.",
+          "pv_power_entity": "Aktuelle PV-Erzeugung in Watt (optional, nur zur Anzeige).",
+          "battery_soc_entity": "Aktueller Batterie-Ladestand in Prozent.",
+          "battery_capacity_wh": "Batteriegröße in Wattstunden (z.B. 10.000 Wh = 10 kWh).",
+          "target_soc": "Ab diesem Ladestand dürfen alle Geräte laufen. Darunter gelten die individuellen Schwellen pro Gerät.",
+          "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
+          "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s."
         }
       },
       "add_device": {
         "title": "Gerät hinzufügen",
-        "description": "Füge ein Gerät zur AURUM-Steuerung hinzu. Jede smarte Steckdose oder jeder Schalter in Home Assistant funktioniert.",
+        "description": "Füge ein Gerät hinzu, das AURUM mit Solarstrom steuern soll. Es funktioniert jede smarte Steckdose die in Home Assistant erscheint.",
         "data": {
           "name": "Gerätename",
-          "switch_entity": "Schalter-Entity",
-          "power_entity": "Leistungssensor (optional)",
-          "nominal_power": "Nennleistung",
+          "switch_entity": "Smarte Steckdose / Schalter",
+          "power_entity": "Verbrauchsmessung (optional)",
+          "nominal_power": "Stromverbrauch (Watt)",
           "priority": "Priorität",
-          "soc_threshold": "SOC-Schwelle",
+          "soc_threshold": "Mindest-Ladestand",
           "startup_detection": "Programmerkennung",
-          "deadline": "Deadline (optional)",
-          "estimated_runtime": "Geschätzte Programmlaufzeit"
+          "deadline": "Fertig bis (optional)",
+          "estimated_runtime": "Programmdauer (Minuten)"
         },
         "data_description": {
-          "name": "Ein sprechender Name wie 'Waschmaschine' oder 'Poolpumpe'. Wird für Sensor-Namen in Home Assistant verwendet.",
-          "switch_entity": "Die smarte Steckdose oder der Schalter für dieses Gerät (z.B. switch.shelly_plug_waschmaschine). Jede switch.* oder input_boolean.* Entity funktioniert.",
-          "power_entity": "Ein Sensor der den aktuellen Stromverbrauch dieses Geräts in Watt misst. Falls nicht gesetzt, wird die Nennleistung verwendet.",
-          "nominal_power": "Erwarteter Stromverbrauch in Watt wenn das Gerät läuft. Wird für Überschussberechnung und als Fallback ohne Leistungssensor verwendet.",
-          "priority": "Geräte mit höherer Priorität bekommen Überschuss zuerst. Nutze 80-100 für wichtige Lasten (Waschmaschine), 50-70 für nützliches (Poolpumpe), 20-40 für optionales (Wallbox).",
-          "soc_threshold": "Wenn der Batterie-SOC unter das Ziel fällt, darf dieses Gerät nur laufen wenn der SOC über dieser Schwelle liegt. Auf 0 setzen zum Deaktivieren.",
-          "startup_detection": "Aktivieren für Geräte mit Programmen (Waschmaschine, Spülmaschine, Trockner). Wenn ein Programm erkannt wird, schützt AURUM es vor Unterbrechung — auch wenn der Überschuss auf null fällt.",
-          "deadline": "Uhrzeit bis wann das Gerät seinen Zyklus beendet haben soll (z.B. 18:00). Wenn die verbleibende Zeit bis zur Deadline kürzer ist als die geschätzte Laufzeit, startet AURUM das Gerät unabhängig vom Überschuss. Leer lassen zum Deaktivieren.",
-          "estimated_runtime": "Wie lange ein typisches Programm dauert in Minuten (z.B. 120 für einen 2-Stunden-Waschgang). Wird zusammen mit der Deadline verwendet, um zu berechnen wann das Gerät spätestens starten muss."
+          "name": "Gib dem Gerät einen eindeutigen Namen, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'. Wird als Sensor-Name in Home Assistant angezeigt.",
+          "switch_entity": "Die smarte Steckdose die das Gerät ein- und ausschaltet. Einfach aus der Liste wählen — es werden alle verfügbaren Steckdosen und Schalter angezeigt.",
+          "power_entity": "Hat die Steckdose eine Verbrauchsmessung? Dann hier den Leistungs-Sensor wählen. AURUM nutzt dann den echten Verbrauch statt den geschätzten Wert. Kann leer bleiben.",
+          "nominal_power": "Wie viel Strom verbraucht das Gerät ungefähr? Steht oft auf dem Typenschild. Beispiele: Waschmaschine ≈ 2.000W, Poolpumpe ≈ 500W, Wallbox ≈ 3.700W. Wird als Schätzung genutzt wenn kein Verbrauchssensor vorhanden ist.",
+          "priority": "Welche Geräte sollen zuerst Solarstrom bekommen? Höhere Zahl = wichtiger. Empfehlung: 80–100 für Waschmaschine/Spülmaschine, 50–70 für Poolpumpe/Heizstab, 20–40 für Wallbox.",
+          "soc_threshold": "Wenn die Batterie unter das Ladeziel fällt: Ab welchem Ladestand darf dieses Gerät trotzdem noch laufen? Auf 0 setzen wenn das Gerät nur bei vollem Überschuss laufen soll.",
+          "startup_detection": "Aktivieren für Geräte die ein Programm durchlaufen (Waschmaschine, Spülmaschine, Trockner). AURUM erkennt den Programmstart automatisch und schützt das laufende Programm vor Unterbrechung — selbst wenn gerade keine Sonne scheint.",
+          "deadline": "Bis wann soll das Gerät fertig sein? Beispiel: 18:00 wenn die Wäsche zum Abendessen fertig sein soll. AURUM startet das Gerät rechtzeitig — auch ohne Solarüberschuss. Leer lassen wenn es keine Zeitvorgabe gibt.",
+          "estimated_runtime": "Wie lange dauert ein typischer Durchlauf? Beispiele: Waschmaschine ≈ 120 min, Spülmaschine ≈ 150 min. Wird zusammen mit der Deadline benutzt, damit AURUM rechtzeitig startet."
         }
       },
       "remove_device": {
         "title": "Gerät entfernen",
-        "description": "Wähle ein Gerät zum Entfernen aus der AURUM-Steuerung.",
+        "description": "Wähle ein Gerät das du aus der AURUM-Steuerung entfernen möchtest.",
         "data": {
           "device_to_remove": "Gerät entfernen"
         }
+      }
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "menu_edit_energy": "Energie- & Batterie-Einstellungen bearbeiten",
+        "menu_add_device": "Gerät hinzufügen",
+        "menu_remove_device": "Gerät entfernen"
       }
     }
   }

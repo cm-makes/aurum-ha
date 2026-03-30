@@ -1,8 +1,13 @@
 # AURUM – Solar Surplus Optimizer
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/Chris0479/aurum-ha?style=flat)](https://github.com/Chris0479/aurum-ha/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
 **AURUM** (*Latin: Gold*) automatically distributes your PV surplus power to household devices — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
+
+> **No coding required.** Install via HACS, add your grid sensor, configure devices through the UI — done.
 
 ## Features
 
@@ -105,6 +110,14 @@ Every 15 seconds:
 - [ ] Push notifications
 - [ ] Dashboard cards
 
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## License
 
 MIT License — see [LICENSE](LICENSE)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.

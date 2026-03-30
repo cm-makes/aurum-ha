@@ -3,37 +3,37 @@
     "step": {
       "user": {
         "title": "Energy Sources",
-        "description": "Step 1/2: Connect AURUM to your energy sensors.",
+        "description": "Step 1/2: Connect AURUM to your energy sensors. You need at least a grid meter sensor.",
         "data": {
-          "grid_power_entity": "Grid power sensor",
-          "pv_power_entity": "PV production sensor",
-          "battery_soc_entity": "Battery SOC sensor"
+          "grid_power_entity": "Grid meter",
+          "pv_power_entity": "Solar production (optional)",
+          "battery_soc_entity": "Battery level (optional)"
         },
         "data_description": {
-          "grid_power_entity": "Your grid meter (e.g. Shelly 3EM, SMA, Fronius). Must report watts — positive = importing from grid, negative = exporting to grid. This is the most important sensor.",
-          "pv_power_entity": "Your solar inverter's current production in watts. Optional — only used for display, not for surplus calculation.",
-          "battery_soc_entity": "Your home battery's state of charge in percent. Leave empty if you don't have a battery — AURUM will distribute all surplus directly."
+          "grid_power_entity": "Your grid meter sensor (e.g. Shelly 3EM, SMA, Fronius, Kostal). Must report current power in watts. Positive = drawing from grid, negative = feeding into grid. This is the most important sensor — AURUM can't work without it.",
+          "pv_power_entity": "How much power your solar panels are generating right now (in watts). Only used for display, not for calculations. Can be left empty.",
+          "battery_soc_entity": "How full your home battery is right now (in percent, 0–100%). Leave empty if you don't have a battery — AURUM will send all surplus power directly to your devices."
         }
       },
       "battery": {
-        "title": "Battery & System Settings",
-        "description": "Step 2/2: Configure how AURUM handles your battery and update frequency.",
+        "title": "Battery Settings",
+        "description": "Step 2/2: How should AURUM handle your battery? If you don't have a battery, you can keep the defaults.",
         "data": {
-          "battery_capacity_wh": "Battery capacity (Wh)",
-          "target_soc": "Target SOC",
-          "min_soc": "Minimum SOC",
-          "update_interval": "Update interval"
+          "battery_capacity_wh": "Battery size",
+          "target_soc": "Charge target",
+          "min_soc": "Battery reserve",
+          "update_interval": "Update speed"
         },
         "data_description": {
-          "battery_capacity_wh": "Usable capacity of your battery in watt-hours (e.g. 10000 for a 10 kWh battery).",
-          "target_soc": "Charge goal in %. Above this level, all devices are allowed to run. Below it, only devices whose individual SOC threshold is met.",
-          "min_soc": "Safety floor in %. Below this, ALL devices are turned off to protect the battery from deep discharge.",
-          "update_interval": "How often AURUM reads sensors and adjusts devices (in seconds). 15s is recommended for most setups."
+          "battery_capacity_wh": "How large is your battery? Enter in watt-hours. Examples: 5,000 Wh = 5 kWh, 10,000 Wh = 10 kWh.",
+          "target_soc": "At what charge level should all devices be allowed to run? Default: 80%. While the battery is below this, AURUM only runs devices with special permission.",
+          "min_soc": "Below what charge level should ALL devices be turned off? Protects your battery from deep discharge. Default: 10%.",
+          "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed."
         }
       }
     },
     "abort": {
-      "already_configured": "AURUM is already configured."
+      "already_configured": "AURUM is already set up. You can configure it under Settings → Integrations."
     }
   },
   "options": {
@@ -46,59 +46,68 @@
         }
       },
       "settings": {
-        "title": "Energy & Battery Settings",
-        "description": "Update your energy sources and battery parameters.",
+        "title": "Energy & Battery",
+        "description": "Change your sensors and battery settings.",
         "data": {
-          "grid_power_entity": "Grid power sensor",
-          "pv_power_entity": "PV production sensor",
-          "battery_soc_entity": "Battery SOC sensor",
-          "battery_capacity_wh": "Battery capacity (Wh)",
-          "target_soc": "Target SOC",
-          "min_soc": "Minimum SOC",
-          "update_interval": "Update interval"
+          "grid_power_entity": "Grid meter",
+          "pv_power_entity": "Solar production (optional)",
+          "battery_soc_entity": "Battery level",
+          "battery_capacity_wh": "Battery size",
+          "target_soc": "Charge target",
+          "min_soc": "Battery reserve",
+          "update_interval": "Update speed"
         },
         "data_description": {
-          "grid_power_entity": "Your grid meter in watts. Positive = import, negative = export.",
-          "pv_power_entity": "Solar inverter production in watts (optional, for display only).",
-          "battery_soc_entity": "Battery state of charge in %.",
-          "battery_capacity_wh": "Usable battery capacity in watt-hours.",
-          "target_soc": "Above this SOC, all devices are allowed. Below, per-device thresholds apply.",
-          "min_soc": "Below this SOC, ALL devices are turned off to protect the battery.",
-          "update_interval": "Sensor polling and device control interval in seconds."
+          "grid_power_entity": "Your grid meter sensor in watts. Positive = drawing from grid, negative = feeding in.",
+          "pv_power_entity": "Current solar production in watts (optional, display only).",
+          "battery_soc_entity": "Current battery charge level in percent.",
+          "battery_capacity_wh": "Battery size in watt-hours (e.g. 10,000 Wh = 10 kWh).",
+          "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
+          "min_soc": "Below this level, ALL devices are turned off (battery protection).",
+          "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s."
         }
       },
       "add_device": {
         "title": "Add Device",
-        "description": "Add a device to be controlled by AURUM. Any smart plug or switch in Home Assistant works.",
+        "description": "Add a device that AURUM should control with solar power. Any smart plug that shows up in Home Assistant works.",
         "data": {
           "name": "Device name",
-          "switch_entity": "Switch entity",
-          "power_entity": "Power sensor (optional)",
-          "nominal_power": "Nominal power draw",
+          "switch_entity": "Smart plug / switch",
+          "power_entity": "Power measurement (optional)",
+          "nominal_power": "Power consumption (watts)",
           "priority": "Priority",
-          "soc_threshold": "SOC threshold",
-          "startup_detection": "Startup detection",
-          "deadline": "Deadline (optional)",
-          "estimated_runtime": "Estimated program runtime"
+          "soc_threshold": "Minimum battery level",
+          "startup_detection": "Program detection",
+          "deadline": "Must finish by (optional)",
+          "estimated_runtime": "Program duration (minutes)"
         },
         "data_description": {
-          "name": "A friendly name like 'Washing Machine' or 'Pool Pump'. Used for sensor names in Home Assistant.",
-          "switch_entity": "The smart plug or switch that controls this device (e.g. switch.shelly_plug_washer). Any switch.* or input_boolean.* entity works.",
-          "power_entity": "A sensor measuring this device's real-time power draw in watts. If not set, the nominal power value is used instead.",
-          "nominal_power": "Expected power consumption in watts when the device is running. Used for surplus calculations and as fallback when no power sensor is set.",
-          "priority": "Higher priority devices get surplus power first. Use 80-100 for essential loads (washing machine), 50-70 for nice-to-have (pool pump), 20-40 for optional (EV charger).",
-          "soc_threshold": "When battery SOC drops below the target, this device will only run if SOC is still above this threshold. Set to 0 to disable.",
-          "startup_detection": "Enable for appliances that run programs (washing machines, dishwashers, dryers). When a program starts, AURUM protects it from being interrupted — even if surplus drops to zero.",
-          "deadline": "Time by which this device should have finished its cycle (e.g. 18:00). If the remaining time before the deadline is less than the estimated runtime, AURUM will force-start the device regardless of surplus. Leave empty to disable.",
-          "estimated_runtime": "How long a typical program takes in minutes (e.g. 120 for a 2-hour wash cycle). Used together with deadline to calculate when to force-start."
+          "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'. This name will appear as a sensor in Home Assistant.",
+          "switch_entity": "The smart plug that turns this device on and off. Just pick it from the list — all available plugs and switches are shown.",
+          "power_entity": "Does your smart plug measure power consumption? Then select its power sensor here. AURUM will use the real consumption instead of the estimate. Can be left empty.",
+          "nominal_power": "How much power does this device use when running? Usually written on the device label. Examples: Washing machine ~ 2,000W, Pool pump ~ 500W, EV charger ~ 3,700W. Used as estimate when no power sensor is set.",
+          "priority": "Which devices should get solar power first? Higher number = more important. Recommendation: 80–100 for washing machine/dishwasher, 50–70 for pool pump/water heater, 20–40 for EV charger.",
+          "soc_threshold": "When the battery drops below the charge target: at what battery level is this device still allowed to run? Set to 0 if the device should only run with full surplus.",
+          "startup_detection": "Enable for appliances that run programs (washing machines, dishwashers, dryers). AURUM automatically detects when a program starts and protects it from being interrupted — even when the sun goes behind clouds.",
+          "deadline": "When does this device need to be finished? Example: 18:00 if laundry needs to be done by dinner time. AURUM will start the device in time — even without solar surplus. Leave empty if there's no time requirement.",
+          "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start."
         }
       },
       "remove_device": {
         "title": "Remove Device",
-        "description": "Select a device to remove from AURUM control.",
+        "description": "Choose a device to remove from AURUM control.",
         "data": {
           "device_to_remove": "Device to remove"
         }
+      }
+    }
+  },
+  "selector": {
+    "action": {
+      "options": {
+        "menu_edit_energy": "Edit energy & battery settings",
+        "menu_add_device": "Add a device",
+        "menu_remove_device": "Remove a device"
       }
     }
   }

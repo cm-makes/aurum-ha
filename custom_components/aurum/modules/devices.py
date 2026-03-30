@@ -5,7 +5,7 @@ Priority-based surplus distribution to household devices.
 Supports hysteresis, debounce, min on/off times, and
 startup detection (state machine for washing machines etc.).
 
-Simplified from HELIOS – no thermal model, no TRV, no comfort tracking.
+Focused on surplus distribution – no thermal model, no TRV, no comfort tracking.
 """
 
 import logging
@@ -155,11 +155,22 @@ class DeviceManager:
 
             if deadline_urgent and is_on:
                 # Already running under deadline pressure – don't turn off
+                dev["force_started"] = True
                 remaining_excess -= power
                 continue
 
-            # Skip SD devices in standby (keep switch on for detection)
-            if dev["startup_detection"] and dev["sd_state"] == SD_STATE_STANDBY:
+            # SD devices in standby: plug must stay ON for detection
+            # If plug is off → turn it on (draws only ~2W standby)
+            # If plug is on → keep it on, don't touch
+            if dev["startup_detection"] and dev["sd_state"] in (
+                    SD_STATE_STANDBY, SD_STATE_DETECTED):
+                if not is_on:
+                    self.hass.turn_on(dev["switch_entity"])
+                    dev["managed_on"] = True
+                    dev["on_since"] = now
+                    self.hass.log(
+                        f"AURUM SD [{dev['name']}]: "
+                        f"Plug ON for program detection (standby ~2W)")
                 continue
 
             # Manual override: device was turned on externally → don't touch
