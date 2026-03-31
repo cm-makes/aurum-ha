@@ -21,6 +21,10 @@ class EnergyManager:
         self.grid_power_entity = config.get("grid_power_entity")
         self.pv_power_entity = config.get("pv_power_entity")
         self.battery_soc_entity = config.get("battery_soc_entity")
+        self.battery_charge_power_entity = config.get(
+            "battery_charge_power_entity")
+        self.battery_discharge_power_entity = config.get(
+            "battery_discharge_power_entity")
 
         self.ema_alpha = config.get("ema_alpha", 0.3)
         self._grid_ema = None
@@ -48,9 +52,35 @@ class EnergyManager:
         else:
             shared["battery_soc"] = -1  # -1 = no battery
 
-        # Excess = negative grid power = export
-        # Positive excess means power available for devices
-        # EMA-smoothed for turn-on decisions (stable)
-        shared["excess"] = round(-self._grid_ema, 1)
-        # Raw for turn-off decisions (fast response to clouds)
-        shared["excess_raw"] = round(-grid_raw, 1)
+        # Battery charge/discharge power (optional)
+        # battery_power_net = discharge - charge
+        # Positive = net discharge, negative = net charge
+        bat_charge = 0
+        bat_discharge = 0
+        if self.battery_charge_power_entity:
+            bat_charge = get_float(
+                self.hass, self.battery_charge_power_entity, 0)
+        if self.battery_discharge_power_entity:
+            bat_discharge = get_float(
+                self.hass, self.battery_discharge_power_entity, 0)
+        battery_power_net = bat_discharge - bat_charge
+        shared["battery_power_net"] = round(battery_power_net, 1)
+        shared["battery_charge_w"] = round(bat_charge, 1)
+        shared["battery_discharge_w"] = round(bat_discharge, 1)
+
+        # Excess calculation
+        # Without battery sensors: excess = -grid (simple)
+        # With battery sensors: excess = -grid - battery_power_net
+        #   This gives TRUE PV surplus available for devices.
+        #   Example: grid=0W, battery charging 3kW → excess = 0 - (-3000) = 3000W
+        has_battery_power = (self.battery_charge_power_entity
+                             or self.battery_discharge_power_entity)
+        if has_battery_power:
+            shared["excess"] = round(
+                -self._grid_ema - battery_power_net, 1)
+            shared["excess_raw"] = round(
+                -grid_raw - battery_power_net, 1)
+        else:
+            # Fallback: simple grid-only calculation
+            shared["excess"] = round(-self._grid_ema, 1)
+            shared["excess_raw"] = round(-grid_raw, 1)

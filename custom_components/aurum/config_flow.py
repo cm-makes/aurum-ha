@@ -17,6 +17,8 @@ from .const import (
     CONF_GRID_POWER_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
+    CONF_BATTERY_CHARGE_POWER_ENTITY,
+    CONF_BATTERY_DISCHARGE_POWER_ENTITY,
     CONF_BATTERY_CAPACITY_WH,
     CONF_TARGET_SOC,
     CONF_MIN_SOC,
@@ -83,6 +85,14 @@ def _schema_energy(defaults: dict | None = None) -> vol.Schema:
         vol.Optional(
             CONF_BATTERY_SOC_ENTITY,
             default=d.get(CONF_BATTERY_SOC_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
+        vol.Optional(
+            CONF_BATTERY_CHARGE_POWER_ENTITY,
+            default=d.get(CONF_BATTERY_CHARGE_POWER_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
+        vol.Optional(
+            CONF_BATTERY_DISCHARGE_POWER_ENTITY,
+            default=d.get(CONF_BATTERY_DISCHARGE_POWER_ENTITY, vol.UNDEFINED),
         ): _SENSOR,
     })
 
