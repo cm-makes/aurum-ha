@@ -281,8 +281,13 @@ class AurumBatterySOCSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
         soc = data.get("battery_soc", -1)
-        # -1 means no battery configured
-        self._attr_native_value = soc if soc >= 0 else None
+        # -1 means no battery configured or not yet available
+        if soc >= 0:
+            self._attr_available = True
+            self._attr_native_value = round(soc, 1)
+        else:
+            self._attr_available = False
+            self._attr_native_value = None
         self.async_write_ha_state()
 
 

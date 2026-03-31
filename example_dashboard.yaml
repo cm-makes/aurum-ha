@@ -69,30 +69,36 @@ views:
             icon_color: blue
 
       ##############################################################
-      # BATTERY SECTION
+      # BATTERY SECTION (only shows when battery is configured)
       ##############################################################
-      - type: horizontal-stack
-        cards:
-          - type: gauge
+      - type: conditional
+        conditions:
+          - condition: numeric_state
             entity: sensor.aurum_battery_soc
-            name: Battery SOC
-            min: 0
-            max: 100
-            needle: true
-            severity:
-              green: 60
-              yellow: 30
-              red: 0
+            above: -1
+        card:
+          type: horizontal-stack
+          cards:
+            - type: gauge
+              entity: sensor.aurum_battery_soc
+              name: Battery SOC
+              min: 0
+              max: 100
+              needle: true
+              severity:
+                green: 60
+                yellow: 30
+                red: 0
 
-          - type: entities
-            entities:
-              - entity: sensor.aurum_battery_charge
-                name: Charging
-                icon: mdi:battery-charging
-              - entity: sensor.aurum_battery_discharge
-                name: Discharging
-                icon: mdi:battery-arrow-down
-            title: Battery Power
+            - type: entities
+              entities:
+                - entity: sensor.aurum_battery_charge
+                  name: Charging
+                  icon: mdi:battery-charging
+                - entity: sensor.aurum_battery_discharge
+                  name: Discharging
+                  icon: mdi:battery-arrow-down
+              title: Battery Power
 
       ##############################################################
       # SOC THRESHOLDS (Target & Min)
