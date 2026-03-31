@@ -36,6 +36,8 @@ class BatteryManager:
         if soc < 0:
             shared["battery_mode"] = MODE_NORMAL
             shared["excess_for_devices"] = shared.get("excess", 0)
+            shared["excess_raw_for_devices"] = shared.get(
+                "excess_raw", 0)
             return
 
         # Determine mode
@@ -51,5 +53,8 @@ class BatteryManager:
         # In charging mode: no excess available for devices
         if mode == MODE_CHARGING:
             shared["excess_for_devices"] = 0
+            shared["excess_raw_for_devices"] = 0
         else:
             shared["excess_for_devices"] = shared.get("excess", 0)
+            shared["excess_raw_for_devices"] = shared.get(
+                "excess_raw", 0)

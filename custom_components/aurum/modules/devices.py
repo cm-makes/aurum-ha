@@ -139,7 +139,8 @@ class DeviceManager:
     def update(self, shared):
         """Main device control loop (ported from HELIOS)."""
         now = shared["now"]
-        excess = shared.get("excess_for_devices", 0)
+        excess = shared.get("excess_for_devices", 0)        # EMA (turn-on)
+        excess_raw = shared.get("excess_raw_for_devices", 0)  # RAW (turn-off)
         battery_soc = shared.get("battery_soc", -1)
         battery_mode = shared.get("battery_mode", MODE_NORMAL)
 
@@ -201,13 +202,15 @@ class DeviceManager:
 
             if was_on:
                 devices_on += 1
-                turnoff_excess = excess - newly_allocated
+                # RAW excess for turn-off (fast response to clouds)
+                turnoff_excess = excess_raw - newly_allocated
 
                 should_off = self._should_turn_off(
                     dev, turnoff_excess, battery_soc,
                     soc_threshold, now)
                 dev["_pending_off"] = should_off
             else:
+                # EMA excess for turn-on (stable, prevents flapping)
                 turnon_excess = excess - newly_allocated
 
                 should_on = self._should_turn_on(
@@ -236,7 +239,7 @@ class DeviceManager:
             # Sort by priority ascending (lowest shed first)
             candidates.sort(key=lambda d: d["priority"])
 
-            deficit = -(excess - newly_allocated)
+            deficit = -(excess_raw - newly_allocated)
             freed = 0.0
             for dev in candidates:
                 self._turn_off(dev, now, excess, battery_soc,

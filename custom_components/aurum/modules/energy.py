@@ -50,4 +50,7 @@ class EnergyManager:
 
         # Excess = negative grid power = export
         # Positive excess means power available for devices
+        # EMA-smoothed for turn-on decisions (stable)
         shared["excess"] = round(-self._grid_ema, 1)
+        # Raw for turn-off decisions (fast response to clouds)
+        shared["excess_raw"] = round(-grid_raw, 1)

@@ -52,6 +52,7 @@ class AurumCoordinator(DataUpdateCoordinator):
         # ── State ──────────────────────────────────────────────────
         self.cycle = 0
         self.device_states: list[dict] = []
+        self._last_daily_reset: int = -1  # day of year
 
         # ── Create modules ─────────────────────────────────────────
         self.energy = EnergyManager(self.bridge, self.config)
@@ -153,6 +154,14 @@ class AurumCoordinator(DataUpdateCoordinator):
                 self.battery.update(shared)
             except Exception as e:
                 _LOGGER.warning("Battery error: %s", e)
+
+            # ── Daily reset (midnight) ────────────────────────────
+            today = shared["now"].timetuple().tm_yday
+            if today != self._last_daily_reset:
+                if self._last_daily_reset >= 0:
+                    self.devices.daily_reset()
+                    _LOGGER.info("AURUM: Daily counters reset")
+                self._last_daily_reset = today
 
             # ── Step 3: Device control (every 2nd cycle) ───────────
             if self.cycle % 2 == 0:
