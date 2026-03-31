@@ -15,7 +15,7 @@ views:
       # HEADER
       ##############################################################
       - type: custom:mushroom-title-card
-        title: ☀️ AURUM Solar Optimizer
+        title: AURUM Solar Optimizer
         subtitle: PV Surplus Distribution
 
       ##############################################################
@@ -34,12 +34,68 @@ views:
             icon: mdi:solar-power-variant
             icon_color: amber
           - type: entity
-            entity: sensor.aurum_active_devices
-            icon: mdi:power-plug
+            entity: sensor.aurum_battery_soc
+            icon: mdi:battery
+            icon_color: >
+              {% set soc = states('sensor.aurum_battery_soc') | float(0) %}
+              {{ 'green' if soc >= 80 else 'orange' if soc >= 30 else 'red' }}
+
+      ##############################################################
+      # ENERGY OVERVIEW (Grid, PV, House, Battery)
+      ##############################################################
+      - type: custom:mushroom-title-card
+        title: Energy Overview
+
+      - type: horizontal-stack
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.aurum_pv_power
+            name: PV
+            icon: mdi:solar-panel-large
+            icon_color: amber
+
+          - type: custom:mushroom-entity-card
+            entity: sensor.aurum_grid_power
+            name: Grid
+            icon: mdi:transmission-tower
+            icon_color: >
+              {% set grid = states('sensor.aurum_grid_power') | float(0) %}
+              {{ 'red' if grid > 0 else 'green' }}
+
+          - type: custom:mushroom-entity-card
+            entity: sensor.aurum_house_consumption
+            name: House
+            icon: mdi:home-lightning-bolt
             icon_color: blue
 
       ##############################################################
-      # POWER OVERVIEW (2 columns)
+      # BATTERY SECTION
+      ##############################################################
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            entity: sensor.aurum_battery_soc
+            name: Battery SOC
+            min: 0
+            max: 100
+            needle: true
+            severity:
+              green: 60
+              yellow: 30
+              red: 0
+
+          - type: entities
+            entities:
+              - entity: sensor.aurum_battery_charge
+                name: Charging
+                icon: mdi:battery-charging
+              - entity: sensor.aurum_battery_discharge
+                name: Discharging
+                icon: mdi:battery-arrow-down
+            title: Battery Power
+
+      ##############################################################
+      # SOC THRESHOLDS (Target & Min)
       ##############################################################
       - type: horizontal-stack
         cards:
@@ -96,15 +152,14 @@ views:
           — {{ states('sensor.aurum_washing_machine_runtime') | int }} min today
         icon: mdi:washing-machine
         icon_color: >
-          {{ 'green' if is_state('binary_sensor.aurum_washing_machine_active', 'on')
+          {{ 'green' if is_state('sensor.aurum_washing_machine', 'on')
              else 'grey' }}
         badge_icon: >
-          {{ 'mdi:check-circle' if is_state('binary_sensor.aurum_washing_machine_active', 'on')
+          {{ 'mdi:check-circle' if is_state('sensor.aurum_washing_machine', 'on')
              else 'mdi:pause-circle' }}
         badge_color: >
-          {{ 'green' if is_state('binary_sensor.aurum_washing_machine_active', 'on')
+          {{ 'green' if is_state('sensor.aurum_washing_machine', 'on')
              else 'grey' }}
-        fill_container: false
         tap_action:
           action: more-info
           entity: sensor.aurum_washing_machine
@@ -118,13 +173,13 @@ views:
           — {{ states('sensor.aurum_dishwasher_runtime') | int }} min today
         icon: mdi:dishwasher
         icon_color: >
-          {{ 'blue' if is_state('binary_sensor.aurum_dishwasher_active', 'on')
+          {{ 'blue' if is_state('sensor.aurum_dishwasher', 'on')
              else 'grey' }}
         badge_icon: >
-          {{ 'mdi:check-circle' if is_state('binary_sensor.aurum_dishwasher_active', 'on')
+          {{ 'mdi:check-circle' if is_state('sensor.aurum_dishwasher', 'on')
              else 'mdi:pause-circle' }}
         badge_color: >
-          {{ 'blue' if is_state('binary_sensor.aurum_dishwasher_active', 'on')
+          {{ 'blue' if is_state('sensor.aurum_dishwasher', 'on')
              else 'grey' }}
         tap_action:
           action: more-info
@@ -139,41 +194,20 @@ views:
           — {{ states('sensor.aurum_ev_charger_runtime') | int }} min today
         icon: mdi:ev-station
         icon_color: >
-          {{ 'teal' if is_state('binary_sensor.aurum_ev_charger_active', 'on')
+          {{ 'teal' if is_state('sensor.aurum_ev_charger', 'on')
              else 'grey' }}
         badge_icon: >
-          {{ 'mdi:check-circle' if is_state('binary_sensor.aurum_ev_charger_active', 'on')
+          {{ 'mdi:check-circle' if is_state('sensor.aurum_ev_charger', 'on')
              else 'mdi:pause-circle' }}
         badge_color: >
-          {{ 'teal' if is_state('binary_sensor.aurum_ev_charger_active', 'on')
+          {{ 'teal' if is_state('sensor.aurum_ev_charger', 'on')
              else 'grey' }}
         tap_action:
           action: more-info
           entity: sensor.aurum_ev_charger
 
       ##############################################################
-      # SOC THRESHOLDS PER DEVICE
-      ##############################################################
-      - type: custom:mushroom-title-card
-        title: SOC Thresholds
-        subtitle: Per-device minimum battery level
-
-      - type: entities
-        entities:
-          - entity: number.aurum_washing_machine_soc_threshold
-            name: Washing Machine
-            icon: mdi:washing-machine
-          - entity: number.aurum_dishwasher_soc_threshold
-            name: Dishwasher
-            icon: mdi:dishwasher
-          - entity: number.aurum_ev_charger_soc_threshold
-            name: EV Charger
-            icon: mdi:ev-station
-        title: SOC Thresholds
-        show_header_toggle: false
-
-      ##############################################################
-      # CYCLE COUNTER (optional)
+      # STATISTICS
       ##############################################################
       - type: custom:mushroom-title-card
         title: Statistics

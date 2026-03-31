@@ -63,6 +63,12 @@ async def async_setup_entry(
         AurumExcessSensor(coordinator, entry),
         AurumBatteryModeSensor(coordinator, entry),
         AurumCycleSensor(coordinator, entry),
+        AurumGridPowerSensor(coordinator, entry),
+        AurumPVPowerSensor(coordinator, entry),
+        AurumBatterySOCSensor(coordinator, entry),
+        AurumBatteryChargeSensor(coordinator, entry),
+        AurumBatteryDischargeSensor(coordinator, entry),
+        AurumHouseConsumptionSensor(coordinator, entry),
     ]
 
     for dev_state in coordinator.device_states:
@@ -207,4 +213,142 @@ class AurumDeviceRuntimeSensor(CoordinatorEntity, SensorEntity):
                 self.async_write_ha_state()
                 return
         self._attr_native_value = 0
+        self.async_write_ha_state()
+
+
+# ══════════════════════════════════════════════════════════════════
+#  ENERGY OVERVIEW SENSORS
+# ══════════════════════════════════════════════════════════════════
+
+
+class AurumGridPowerSensor(CoordinatorEntity, SensorEntity):
+    """Current grid power (positive = import, negative = export)."""
+
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:transmission-tower"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_grid_power"
+        self._attr_name = "AURUM Grid Power"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        self._attr_native_value = data.get("grid_power_raw", 0)
+        self.async_write_ha_state()
+
+
+class AurumPVPowerSensor(CoordinatorEntity, SensorEntity):
+    """Current PV production."""
+
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:solar-panel-large"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_pv_power"
+        self._attr_name = "AURUM PV Power"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        self._attr_native_value = data.get("pv_power", 0)
+        self.async_write_ha_state()
+
+
+class AurumBatterySOCSensor(CoordinatorEntity, SensorEntity):
+    """Current battery state of charge."""
+
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:battery"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_battery_soc"
+        self._attr_name = "AURUM Battery SOC"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        soc = data.get("battery_soc", -1)
+        # -1 means no battery configured
+        self._attr_native_value = soc if soc >= 0 else None
+        self.async_write_ha_state()
+
+
+class AurumBatteryChargeSensor(CoordinatorEntity, SensorEntity):
+    """Power flowing into the battery."""
+
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:battery-charging"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_battery_charge"
+        self._attr_name = "AURUM Battery Charge"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        self._attr_native_value = data.get("battery_charge_w", 0)
+        self.async_write_ha_state()
+
+
+class AurumBatteryDischargeSensor(CoordinatorEntity, SensorEntity):
+    """Power flowing out of the battery."""
+
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:battery-arrow-down"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_battery_discharge"
+        self._attr_name = "AURUM Battery Discharge"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        self._attr_native_value = data.get("battery_discharge_w", 0)
+        self.async_write_ha_state()
+
+
+class AurumHouseConsumptionSensor(CoordinatorEntity, SensorEntity):
+    """Calculated house consumption = PV + grid + battery_net."""
+
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:home-lightning-bolt"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_house_consumption"
+        self._attr_name = "AURUM House Consumption"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        pv = data.get("pv_power", 0)
+        grid = data.get("grid_power_raw", 0)
+        bat_net = data.get("battery_power_net", 0)
+        # house = PV + grid_import + battery_discharge - battery_charge
+        # bat_net = discharge - charge (positive = net discharge)
+        self._attr_native_value = round(pv + grid + bat_net, 1)
         self.async_write_ha_state()
