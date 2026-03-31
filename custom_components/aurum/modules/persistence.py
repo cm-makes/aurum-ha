@@ -138,4 +138,11 @@ class PersistenceManager:
                     "AURUM: %s was 'detected' at restart, "
                     "resetting to standby", name)
 
+        # Fix runtime_tick for devices that were on at save time
+        # Without this, the entire on_since→now period gets added again
+        now = datetime.now()
+        for dev in devices.devices:
+            if dev.get("on_since"):
+                dev["_runtime_tick"] = now
+
         _LOGGER.info("AURUM state restored from %s", self.state_file)

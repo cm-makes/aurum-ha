@@ -29,6 +29,12 @@ from .const import (
     CONF_DEV_PRIORITY,
     CONF_DEV_SOC_THRESHOLD,
     CONF_DEV_STARTUP_DETECTION,
+    CONF_DEV_HYSTERESIS_ON,
+    CONF_DEV_HYSTERESIS_OFF,
+    CONF_DEV_DEBOUNCE_ON,
+    CONF_DEV_DEBOUNCE_OFF,
+    CONF_DEV_MIN_ON_TIME,
+    CONF_DEV_MIN_OFF_TIME,
     CONF_DEV_DEADLINE,
     CONF_DEV_ESTIMATED_RUNTIME,
     DEFAULT_BATTERY_CAPACITY_WH,
@@ -38,6 +44,12 @@ from .const import (
     DEFAULT_DEV_NOMINAL_POWER,
     DEFAULT_DEV_PRIORITY,
     DEFAULT_DEV_SOC_THRESHOLD,
+    DEFAULT_DEV_HYSTERESIS_ON,
+    DEFAULT_DEV_HYSTERESIS_OFF,
+    DEFAULT_DEV_DEBOUNCE_ON,
+    DEFAULT_DEV_DEBOUNCE_OFF,
+    DEFAULT_DEV_MIN_ON_TIME,
+    DEFAULT_DEV_MIN_OFF_TIME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -153,6 +165,49 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
         ): selector.NumberSelector(selector.NumberSelectorConfig(
             min=10, max=480, step=10,
             unit_of_measurement="min",
+            mode=selector.NumberSelectorMode.BOX)),
+        # ── Timing (advanced) ────────────────────────────────
+        vol.Optional(
+            CONF_DEV_HYSTERESIS_ON,
+            default=d.get(CONF_DEV_HYSTERESIS_ON, DEFAULT_DEV_HYSTERESIS_ON),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=2000, step=10,
+            unit_of_measurement="W",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_HYSTERESIS_OFF,
+            default=d.get(CONF_DEV_HYSTERESIS_OFF, DEFAULT_DEV_HYSTERESIS_OFF),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=2000, step=10,
+            unit_of_measurement="W",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_DEBOUNCE_ON,
+            default=d.get(CONF_DEV_DEBOUNCE_ON, DEFAULT_DEV_DEBOUNCE_ON),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=1800, step=10,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_DEBOUNCE_OFF,
+            default=d.get(CONF_DEV_DEBOUNCE_OFF, DEFAULT_DEV_DEBOUNCE_OFF),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=1800, step=10,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_MIN_ON_TIME,
+            default=d.get(CONF_DEV_MIN_ON_TIME, DEFAULT_DEV_MIN_ON_TIME),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=3600, step=10,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_MIN_OFF_TIME,
+            default=d.get(CONF_DEV_MIN_OFF_TIME, DEFAULT_DEV_MIN_OFF_TIME),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=3600, step=10,
+            unit_of_measurement="s",
             mode=selector.NumberSelectorMode.BOX)),
     })
 

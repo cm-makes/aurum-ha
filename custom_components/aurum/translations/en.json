@@ -79,7 +79,13 @@
           "soc_threshold": "Minimum battery level",
           "startup_detection": "Program detection",
           "deadline": "Must finish by (optional)",
-          "estimated_runtime": "Program duration (minutes)"
+          "estimated_runtime": "Program duration (minutes)",
+          "hysteresis_on": "Hysteresis ON",
+          "hysteresis_off": "Hysteresis OFF",
+          "debounce_on": "Debounce ON",
+          "debounce_off": "Debounce OFF",
+          "min_on_time": "Minimum ON time",
+          "min_off_time": "Minimum OFF time"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'. This name will appear as a sensor in Home Assistant.",
@@ -90,7 +96,13 @@
           "soc_threshold": "When the battery drops below the charge target: at what battery level is this device still allowed to run? Set to 0 if the device should only run with full surplus.",
           "startup_detection": "Enable for appliances that run programs (washing machines, dishwashers, dryers). AURUM automatically detects when a program starts and protects it from being interrupted — even when the sun goes behind clouds.",
           "deadline": "When does this device need to be finished? Example: 18:00 if laundry needs to be done by dinner time. AURUM will start the device in time — even without solar surplus. Leave empty if there's no time requirement.",
-          "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start."
+          "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start.",
+          "hysteresis_on": "Extra surplus required beyond nominal power before turning on. Prevents flapping when surplus barely covers the device. Default: 200W.",
+          "hysteresis_off": "How far surplus can drop below zero before turning off. Higher = more tolerant of short cloud cover. Default: 100W.",
+          "debounce_on": "How long surplus must be sufficient before turning on (seconds). Prevents switching on during brief sun spikes. Default: 300s (5 min).",
+          "debounce_off": "How long deficit must persist before turning off (seconds). Lets the device ride through short clouds. Default: 600s (10 min).",
+          "min_on_time": "Once turned on, how long must the device stay on (seconds)? Protects devices that don't like short cycles. Default: 600s (10 min).",
+          "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s."
         }
       },
       "edit_device_select": {
@@ -112,7 +124,13 @@
           "soc_threshold": "Minimum battery level",
           "startup_detection": "Program detection",
           "deadline": "Must finish by (optional)",
-          "estimated_runtime": "Program duration (minutes)"
+          "estimated_runtime": "Program duration (minutes)",
+          "hysteresis_on": "Hysteresis ON",
+          "hysteresis_off": "Hysteresis OFF",
+          "debounce_on": "Debounce ON",
+          "debounce_off": "Debounce OFF",
+          "min_on_time": "Minimum ON time",
+          "min_off_time": "Minimum OFF time"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'.",
@@ -123,7 +141,13 @@
           "soc_threshold": "Below charge target: at what battery level is this device still allowed?",
           "startup_detection": "Enable for appliances with programs (washers, dishwashers). Protects running programs.",
           "deadline": "When does this device need to be finished? Leave empty if no time requirement.",
-          "estimated_runtime": "How long does a typical cycle take in minutes?"
+          "estimated_runtime": "How long does a typical cycle take in minutes?",
+          "hysteresis_on": "Extra surplus beyond nominal power before turning on (W).",
+          "hysteresis_off": "How far surplus can drop below zero before turning off (W).",
+          "debounce_on": "How long surplus must be sufficient before turning on (seconds).",
+          "debounce_off": "How long deficit must persist before turning off (seconds).",
+          "min_on_time": "Minimum time the device stays on once started (seconds).",
+          "min_off_time": "Minimum time the device stays off after being turned off (seconds)."
         }
       },
       "remove_device": {

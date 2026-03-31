@@ -79,7 +79,13 @@
           "soc_threshold": "Mindest-Ladestand",
           "startup_detection": "Programmerkennung",
           "deadline": "Fertig bis (optional)",
-          "estimated_runtime": "Programmdauer (Minuten)"
+          "estimated_runtime": "Programmdauer (Minuten)",
+          "hysteresis_on": "Hysterese EIN",
+          "hysteresis_off": "Hysterese AUS",
+          "debounce_on": "Einschaltverzögerung",
+          "debounce_off": "Ausschaltverzögerung",
+          "min_on_time": "Mindest-Einschaltzeit",
+          "min_off_time": "Mindest-Ausschaltzeit"
         },
         "data_description": {
           "name": "Gib dem Gerät einen eindeutigen Namen, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'. Wird als Sensor-Name in Home Assistant angezeigt.",
@@ -90,7 +96,13 @@
           "soc_threshold": "Wenn die Batterie unter das Ladeziel fällt: Ab welchem Ladestand darf dieses Gerät trotzdem noch laufen? Auf 0 setzen wenn das Gerät nur bei vollem Überschuss laufen soll.",
           "startup_detection": "Aktivieren für Geräte die ein Programm durchlaufen (Waschmaschine, Spülmaschine, Trockner). AURUM erkennt den Programmstart automatisch und schützt das laufende Programm vor Unterbrechung — selbst wenn gerade keine Sonne scheint.",
           "deadline": "Bis wann soll das Gerät fertig sein? Beispiel: 18:00 wenn die Wäsche zum Abendessen fertig sein soll. AURUM startet das Gerät rechtzeitig — auch ohne Solarüberschuss. Leer lassen wenn es keine Zeitvorgabe gibt.",
-          "estimated_runtime": "Wie lange dauert ein typischer Durchlauf? Beispiele: Waschmaschine ≈ 120 min, Spülmaschine ≈ 150 min. Wird zusammen mit der Deadline benutzt, damit AURUM rechtzeitig startet."
+          "estimated_runtime": "Wie lange dauert ein typischer Durchlauf? Beispiele: Waschmaschine ≈ 120 min, Spülmaschine ≈ 150 min. Wird zusammen mit der Deadline benutzt, damit AURUM rechtzeitig startet.",
+          "hysteresis_on": "Zusätzlicher Überschuss über dem Nennverbrauch der nötig ist bevor eingeschaltet wird. Verhindert Flattern bei knappem Überschuss. Standard: 200W.",
+          "hysteresis_off": "Wie weit der Überschuss unter Null fallen darf bevor abgeschaltet wird. Höherer Wert = toleranter bei kurzen Wolken. Standard: 100W.",
+          "debounce_on": "Wie lange der Überschuss ausreichen muss bevor eingeschaltet wird (Sekunden). Verhindert Einschalten bei kurzen Sonnenphasen. Standard: 300s (5 Min).",
+          "debounce_off": "Wie lange das Defizit bestehen muss bevor abgeschaltet wird (Sekunden). Lässt das Gerät kurze Wolken überbrücken. Standard: 600s (10 Min).",
+          "min_on_time": "Wie lange muss das Gerät mindestens eingeschaltet bleiben (Sekunden)? Schützt Geräte die keine kurzen Zyklen mögen. Standard: 600s (10 Min).",
+          "min_off_time": "Wie lange muss das Gerät mindestens ausgeschaltet bleiben (Sekunden)? Nützlich für Kompressoren, Lüfter mit Nachlauf. Standard: 60s."
         }
       },
       "edit_device_select": {
@@ -112,7 +124,13 @@
           "soc_threshold": "Mindest-Ladestand",
           "startup_detection": "Programmerkennung",
           "deadline": "Fertig bis (optional)",
-          "estimated_runtime": "Programmdauer (Minuten)"
+          "estimated_runtime": "Programmdauer (Minuten)",
+          "hysteresis_on": "Hysterese EIN",
+          "hysteresis_off": "Hysterese AUS",
+          "debounce_on": "Einschaltverzögerung",
+          "debounce_off": "Ausschaltverzögerung",
+          "min_on_time": "Mindest-Einschaltzeit",
+          "min_off_time": "Mindest-Ausschaltzeit"
         },
         "data_description": {
           "name": "Eindeutiger Gerätename, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'.",
@@ -123,7 +141,13 @@
           "soc_threshold": "Unter dem Ladeziel: Ab welchem Ladestand darf dieses Gerät noch laufen?",
           "startup_detection": "Aktivieren für Geräte mit Programm (Waschmaschine, Spülmaschine). Schützt laufende Programme.",
           "deadline": "Bis wann soll das Gerät fertig sein? Leer lassen wenn keine Zeitvorgabe.",
-          "estimated_runtime": "Wie lange dauert ein typischer Durchlauf in Minuten?"
+          "estimated_runtime": "Wie lange dauert ein typischer Durchlauf in Minuten?",
+          "hysteresis_on": "Zusätzlicher Überschuss über Nennverbrauch zum Einschalten (W).",
+          "hysteresis_off": "Wie weit Überschuss unter Null fallen darf vor dem Abschalten (W).",
+          "debounce_on": "Wie lange Überschuss ausreichen muss vor dem Einschalten (Sekunden).",
+          "debounce_off": "Wie lange Defizit bestehen muss vor dem Abschalten (Sekunden).",
+          "min_on_time": "Mindestzeit die das Gerät eingeschaltet bleibt (Sekunden).",
+          "min_off_time": "Mindestzeit die das Gerät ausgeschaltet bleibt (Sekunden)."
         }
       },
       "remove_device": {
