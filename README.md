@@ -1,10 +1,5 @@
 # AURUM – Solar Surplus Optimizer
 
-> [!WARNING]
-> **🚧 Work in Progress — Do not install yet!**
-> This integration is currently under active development and not yet stable.
-> Installation may cause Home Assistant to crash. A stable release is coming soon.
-
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat)](https://github.com/cm-makes/aurum-ha/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
