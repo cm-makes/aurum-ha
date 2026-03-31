@@ -64,5 +64,10 @@ DEVICE_ACTIVE_STATES = ("on", "running", "manual_override")
 # ── Startup Detection states ─────────────────────────────────────
 SD_STATE_STANDBY = "standby"
 SD_STATE_DETECTED = "detected"
+SD_STATE_WAITING = "waiting"
 SD_STATE_RUNNING = "running"
 SD_STATE_DONE = "done"
+
+# ── Deficit tolerance timers ────────────────────────────────────
+DEFAULT_EXCESS_DEFICIT_TOLERANCE = 60   # seconds
+DEFAULT_SOC_GRID_DEFICIT_TOLERANCE = 90  # seconds

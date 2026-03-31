@@ -2,10 +2,11 @@
 AURUM – Device Manager
 =======================
 Priority-based surplus distribution to household devices.
-Supports hysteresis, debounce, min on/off times, and
-startup detection (state machine for washing machines etc.).
+Supports hysteresis, debounce, min on/off times, deficit tolerance,
+switch penalty, startup detection with WAITING state, SD preemption,
+and priority-based shedding.
 
-Focused on surplus distribution – no thermal model, no TRV, no comfort tracking.
+Ported 1:1 from HELIOS logic (without thermal model, comfort temps, TRV).
 """
 
 import logging
@@ -19,6 +20,7 @@ from ..const import (
     MODE_CHARGING,
     SD_STATE_STANDBY,
     SD_STATE_DETECTED,
+    SD_STATE_WAITING,
     SD_STATE_RUNNING,
     SD_STATE_DONE,
     DEFAULT_DEV_NOMINAL_POWER,
@@ -30,18 +32,26 @@ from ..const import (
     DEFAULT_DEV_DEBOUNCE_OFF,
     DEFAULT_DEV_MIN_ON_TIME,
     DEFAULT_DEV_MIN_OFF_TIME,
+    DEFAULT_EXCESS_DEFICIT_TOLERANCE,
+    DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class DeviceManager:
-    """Manage priority-based device switching."""
+    """Manage priority-based device switching (HELIOS-compatible logic)."""
 
     def __init__(self, hass, config):
         self.hass = hass
         self.config = config
         self.action_csv = None
+
+        # Global tolerance timers
+        self.excess_deficit_tolerance = config.get(
+            "excess_deficit_tolerance", DEFAULT_EXCESS_DEFICIT_TOLERANCE)
+        self.soc_grid_deficit_tolerance = config.get(
+            "soc_grid_deficit_tolerance", DEFAULT_SOC_GRID_DEFICIT_TOLERANCE)
 
         # Load device configs
         self.devices = []
@@ -64,11 +74,15 @@ class DeviceManager:
             "power_entity": cfg.get("power_entity"),
 
             # Parameters
-            "nominal_power": cfg.get("nominal_power", DEFAULT_DEV_NOMINAL_POWER),
+            "nominal_power": cfg.get(
+                "nominal_power", DEFAULT_DEV_NOMINAL_POWER),
             "priority": cfg.get("priority", DEFAULT_DEV_PRIORITY),
-            "soc_threshold": cfg.get("soc_threshold", DEFAULT_DEV_SOC_THRESHOLD),
-            "hysteresis_on": cfg.get("hysteresis_on", DEFAULT_DEV_HYSTERESIS_ON),
-            "hysteresis_off": cfg.get("hysteresis_off", DEFAULT_DEV_HYSTERESIS_OFF),
+            "soc_threshold": cfg.get(
+                "soc_threshold", DEFAULT_DEV_SOC_THRESHOLD),
+            "hysteresis_on": cfg.get(
+                "hysteresis_on", DEFAULT_DEV_HYSTERESIS_ON),
+            "hysteresis_off": cfg.get(
+                "hysteresis_off", DEFAULT_DEV_HYSTERESIS_OFF),
             "debounce_on": cfg.get("debounce_on", DEFAULT_DEV_DEBOUNCE_ON),
             "debounce_off": cfg.get("debounce_off", DEFAULT_DEV_DEBOUNCE_OFF),
             "min_on_time": cfg.get("min_on_time", DEFAULT_DEV_MIN_ON_TIME),
@@ -91,139 +105,562 @@ class DeviceManager:
             "sd_finish_time": cfg.get("sd_finish_time", 600),
             "sd_min_runtime": cfg.get("sd_min_runtime", 300),
             "sd_detected_at": None,
+            "sd_waiting_since": None,
             "sd_running_since": None,
-            "sd_finish_detected_at": None,
+            "sd_lockout_until": None,
+            "sd_power_above_since": None,
+            "sd_power_below_since": None,
+            "sd_power_samples": [],
 
             # Runtime state
-            "on_since": None,       # When AURUM turned it on (for min_on_time)
+            "on_since": None,
             "last_on": None,
             "last_off": None,
             "runtime_today_s": 0,
             "total_switches": 0,
-            "_runtime_tick": None,  # Last runtime accumulation timestamp
+            "_runtime_tick": None,
 
-            # Manual override: if device turned on externally, protect it
-            "managed_on": False,    # True = AURUM turned it on
+            # Surplus tracking
+            "excess_since": None,          # When excess first became sufficient
+            "_excess_deficit_since": None,  # Deficit tolerance timer
+            "_soc_grid_deficit_since": None,  # SOC grid deficit timer
+            "_switch_times": [],            # Recent switch timestamps
+            "_pending_off": None,           # Deferred turn-off reason
+            "_cached_on": False,            # Cached is_on state for shedding
+
+            # Manual override
+            "managed_on": False,
         }
 
     # ══════════════════════════════════════════════════════════════
-    #  MAIN UPDATE
+    #  MAIN UPDATE (HELIOS-compatible)
     # ══════════════════════════════════════════════════════════════
 
     def update(self, shared):
-        """Main device control loop."""
+        """Main device control loop (ported from HELIOS)."""
         now = shared["now"]
         excess = shared.get("excess_for_devices", 0)
         battery_soc = shared.get("battery_soc", -1)
         battery_mode = shared.get("battery_mode", MODE_NORMAL)
 
-        # Update runtimes for devices that are on
-        self._update_runtimes(now)
-
-        # Update startup detection state machines
-        for dev in self.devices:
-            if dev["startup_detection"]:
-                self._update_sd_state(dev, now)
-
-        # Decide: turn on or off
-        remaining_excess = excess
-
-        for dev in self.devices:
-            is_on = self._is_device_on(dev)
-            power = self._get_device_power(dev)
-
-            # Deadline check: must this device start now?
-            # Checked first – deadline overrides everything except SD running
-            deadline_urgent = self._deadline_urgent(dev, now)
-
-            # Skip SD devices that are running a program
-            if dev["startup_detection"] and dev["sd_state"] == SD_STATE_RUNNING:
-                if is_on:
-                    remaining_excess -= power
-                continue
-
-            if deadline_urgent and not is_on:
-                # Force start – deadline approaching
-                self._turn_on(dev, now, excess, battery_soc)
-                dev["force_started"] = True
-                remaining_excess -= dev["nominal_power"]
-                self.hass.log(
-                    f"AURUM [{dev['name']}]: Force-started "
-                    f"(deadline {dev['deadline']}, "
-                    f"est. {dev['estimated_runtime']}min)")
-                continue
-
-            if deadline_urgent and is_on:
-                # Already running under deadline pressure – don't turn off
-                dev["force_started"] = True
-                remaining_excess -= power
-                continue
-
-            # SD devices in standby: plug must stay ON for detection
-            # If plug is off → turn it on (draws only ~2W standby)
-            # If plug is on → keep it on, don't touch
-            if dev["startup_detection"] and dev["sd_state"] in (
-                    SD_STATE_STANDBY, SD_STATE_DETECTED):
-                if not is_on:
-                    self.hass.turn_on(dev["switch_entity"])
-                    dev["managed_on"] = True
-                    dev["on_since"] = now
-                    self.hass.log(
-                        f"AURUM SD [{dev['name']}]: "
-                        f"Plug ON for program detection (standby ~2W)")
-                continue
-
-            # Manual override: device was turned on externally → don't touch
-            if is_on and not dev["managed_on"]:
-                if dev["on_since"] is None:
-                    dev["on_since"] = now
-                remaining_excess -= power
-                continue
-
-            # Battery mode restrictions
-            if battery_mode == MODE_CHARGING:
-                if is_on and not dev["force_started"]:
+        # ── Emergency: battery charging → turn off everything ────
+        if battery_mode == MODE_CHARGING:
+            for dev in self.devices:
+                # SD devices in standby: keep Shelly ON (3-5W)
+                if (dev["startup_detection"]
+                        and dev["sd_state"] in ("", SD_STATE_STANDBY)):
+                    continue
+                # SD running: don't interrupt program
+                if (dev["startup_detection"]
+                        and dev["sd_state"] == SD_STATE_RUNNING):
+                    continue
+                if self._is_device_on(dev) and dev["managed_on"]:
                     self._turn_off(dev, now, excess, battery_soc,
                                    "battery_charging")
-                elif is_on:
-                    remaining_excess -= power  # force-started, keep running
+            self._publish_device_states(shared, battery_soc)
+            return
+
+        # ── Control each device (priority-ordered) ───────────────
+        available_excess = excess
+        devices_on = 0
+        newly_allocated = 0.0
+
+        for dev in self.devices:
+            was_on = self._is_device_on(dev)
+            dev["_cached_on"] = was_on
+
+            # Accumulate runtime (SD: only count RUNNING state)
+            if was_on:
+                if (not dev["startup_detection"]
+                        or dev["sd_state"] == SD_STATE_RUNNING):
+                    self._accumulate_runtime(dev, now)
+
+            actual_power = self._get_device_power(dev) if was_on else 0
+
+            # ── 1. Manual override → force device ON ─────────────
+            if was_on and not dev["managed_on"]:
+                dev["_pending_off"] = None
+                if dev["on_since"] is None:
+                    dev["on_since"] = now
+                devices_on += 1
                 continue
 
-            if battery_mode == MODE_LOW_SOC:
-                if battery_soc < dev["soc_threshold"]:
-                    if is_on and not dev["force_started"]:
-                        self._turn_off(dev, now, excess, battery_soc,
-                                       "soc_below_threshold")
-                    elif is_on:
-                        remaining_excess -= power
-                    continue
+            # ── 2. Startup detection devices ─────────────────────
+            if dev["startup_detection"]:
+                sd_turnon = excess - newly_allocated
+                counted, sd_new = self._handle_startup_detection(
+                    dev, sd_turnon, battery_soc, actual_power, now, excess)
+                if sd_new > 0:
+                    newly_allocated += sd_new
+                if counted:
+                    devices_on += 1
+                continue
 
-            # Turn ON logic
-            if not is_on:
-                needed = dev["nominal_power"] + dev["hysteresis_on"]
-                if remaining_excess >= needed:
-                    if self._debounce_ok(dev, now, "on"):
-                        self._turn_on(dev, now, excess, battery_soc)
-                        remaining_excess -= dev["nominal_power"]
+            # ── 3. Regular devices ───────────────────────────────
+            soc_threshold = dev["soc_threshold"]
+
+            if was_on:
+                devices_on += 1
+                turnoff_excess = excess - newly_allocated
+
+                should_off = self._should_turn_off(
+                    dev, turnoff_excess, battery_soc,
+                    soc_threshold, now)
+                dev["_pending_off"] = should_off
             else:
-                # Device is on – check if we need to turn it off
-                if dev["force_started"]:
-                    # Force-started device: keep running
-                    remaining_excess -= power
-                elif remaining_excess < -dev["hysteresis_off"]:
-                    if self._min_on_ok(dev, now):
-                        if self._debounce_ok(dev, now, "off"):
-                            self._turn_off(dev, now, excess, battery_soc,
-                                           "insufficient_excess")
-                            remaining_excess += power
-                        else:
-                            remaining_excess -= power
-                    else:
-                        remaining_excess -= power
-                else:
-                    remaining_excess -= power
+                turnon_excess = excess - newly_allocated
 
-        # Publish device states
+                should_on = self._should_turn_on(
+                    dev, turnon_excess, battery_soc,
+                    soc_threshold, now)
+
+                if should_on:
+                    self._turn_on(dev, now, excess, battery_soc)
+                    newly_allocated += dev["nominal_power"]
+                    available_excess -= dev["nominal_power"]
+                    devices_on += 1
+                else:
+                    # Clear excess timer if not enough surplus
+                    needed = dev["nominal_power"] + dev["hysteresis_on"]
+                    if turnon_excess < needed:
+                        dev["excess_since"] = None
+
+        # ── Priority-based shedding ──────────────────────────────
+        candidates = []
+        for dev in self.devices:
+            reason = dev.get("_pending_off")
+            if reason and dev.get("_cached_on"):
+                candidates.append(dev)
+
+        if candidates:
+            # Sort by priority ascending (lowest shed first)
+            candidates.sort(key=lambda d: d["priority"])
+
+            deficit = -(excess - newly_allocated)
+            freed = 0.0
+            for dev in candidates:
+                self._turn_off(dev, now, excess, battery_soc,
+                               dev["_pending_off"])
+                freed += self._get_device_power(dev)
+                devices_on -= 1
+                if freed >= deficit:
+                    break
+
+        self._publish_device_states(shared, battery_soc)
+
+    # ══════════════════════════════════════════════════════════════
+    #  SHOULD TURN ON / OFF (HELIOS-compatible)
+    # ══════════════════════════════════════════════════════════════
+
+    def _should_turn_on(self, dev, available_excess, battery_soc,
+                        soc_threshold, now):
+        """Check if device should be turned on. Returns True/False."""
+        # Min off-time: don't turn back on too quickly
+        if (dev["last_off"]
+                and (now - dev["last_off"]).total_seconds()
+                < dev["min_off_time"]):
+            return False
+
+        # Select effective excess based on SOC
+        if battery_soc >= 0 and battery_soc < soc_threshold:
+            # SOC below threshold: would need grid-only check
+            # Since AURUM doesn't track grid separately, block turn-on
+            return False
+
+        # Enough excess? (nominal + hysteresis_on)
+        needed = dev["nominal_power"] + dev["hysteresis_on"]
+        if available_excess < needed:
+            return False
+
+        # Debounce: excess must persist for debounce_on * penalty seconds
+        penalty = self._get_switch_penalty(dev, now)
+        if dev["excess_since"] is None:
+            dev["excess_since"] = now
+            return False
+
+        elapsed = (now - dev["excess_since"]).total_seconds()
+        if elapsed < dev["debounce_on"] * penalty:
+            return False
+
+        return True
+
+    def _should_turn_off(self, dev, available_excess, battery_soc,
+                         soc_threshold, now):
+        """Check if device should be turned off. Returns reason or None."""
+        # Force-started devices: never turn off via surplus logic
+        if dev["force_started"]:
+            return None
+
+        # Min on-time protection
+        if dev["on_since"]:
+            on_duration = (now - dev["on_since"]).total_seconds()
+            if on_duration < dev["min_on_time"]:
+                return None
+
+        # SOC below threshold: turn off if deficit persists
+        if battery_soc >= 0 and battery_soc < soc_threshold:
+            if available_excess < -dev["hysteresis_off"]:
+                if dev["_soc_grid_deficit_since"] is None:
+                    dev["_soc_grid_deficit_since"] = now
+                    return None
+                elapsed = (
+                    now - dev["_soc_grid_deficit_since"]).total_seconds()
+                if elapsed < self.soc_grid_deficit_tolerance:
+                    return None
+                dev["_soc_grid_deficit_since"] = None
+                return "soc_grid_deficit"
+            dev["_soc_grid_deficit_since"] = None
+
+        # Excess deficit: turn off if deficit persists
+        if available_excess < -dev["hysteresis_off"]:
+            penalty = self._get_switch_penalty(dev, now)
+            if dev["_excess_deficit_since"] is None:
+                dev["_excess_deficit_since"] = now
+                return None
+
+            elapsed = (
+                now - dev["_excess_deficit_since"]).total_seconds()
+            if elapsed < self.excess_deficit_tolerance * penalty:
+                return None
+
+            dev["_excess_deficit_since"] = None
+            return "excess_deficit"
+
+        # No deficit: clear timer
+        dev["_excess_deficit_since"] = None
+        return None
+
+    def _get_switch_penalty(self, dev, now):
+        """Return debounce multiplier based on recent switch frequency.
+
+        Protects relays and prevents oscillation.
+        2+ switches/hour -> 1.5x, 4+ -> 2.0x, 6+ -> 3.0x debounce.
+        """
+        cutoff = now - timedelta(hours=1)
+        dev["_switch_times"] = [
+            t for t in dev["_switch_times"] if t > cutoff]
+        count = len(dev["_switch_times"])
+        if count > 6:
+            return 3.0
+        if count > 4:
+            return 2.0
+        if count > 2:
+            return 1.5
+        return 1.0
+
+    # ══════════════════════════════════════════════════════════════
+    #  STARTUP DETECTION STATE MACHINE (HELIOS-compatible)
+    #  States: STANDBY → DETECTED → WAITING → RUNNING → STANDBY
+    # ══════════════════════════════════════════════════════════════
+
+    def _handle_startup_detection(self, dev, turnon_excess,
+                                  battery_soc, actual_power, now, excess):
+        """Handle startup detection state machine.
+
+        Returns (counted_as_on, newly_started_power).
+        """
+        sd_state = dev["sd_state"]
+        soc_threshold = dev["soc_threshold"]
+
+        if not sd_state:
+            dev["sd_state"] = SD_STATE_STANDBY
+            sd_state = SD_STATE_STANDBY
+
+        # ── STANDBY: Shelly ON, device in standby, monitor power ─
+        if sd_state == SD_STATE_STANDBY:
+            # Ensure Shelly is ON for detection
+            if not self._is_device_on(dev):
+                self.hass.turn_on(dev["switch_entity"])
+                dev["managed_on"] = True
+                dev["on_since"] = now
+
+            if actual_power > dev["sd_power_threshold"]:
+                if dev["sd_power_above_since"] is None:
+                    dev["sd_power_above_since"] = now
+                elapsed = (
+                    now - dev["sd_power_above_since"]).total_seconds()
+                if elapsed >= dev["sd_detection_time"]:
+                    # Program start detected!
+                    self.hass.log(
+                        f"AURUM SD [{dev['name']}]: Program detected "
+                        f"({actual_power:.0f}W for {elapsed:.0f}s)")
+                    dev["sd_state"] = SD_STATE_DETECTED
+                    dev["sd_detected_at"] = now
+                    sd_state = SD_STATE_DETECTED  # fall through
+                else:
+                    return False, 0
+            else:
+                dev["sd_power_above_since"] = None
+                return False, 0
+
+        # ── DETECTED: Turn OFF immediately → WAITING (transient) ─
+        if sd_state == SD_STATE_DETECTED:
+            self._turn_off(dev, now, excess, battery_soc,
+                           "sd_pause_program")
+            dev["sd_state"] = SD_STATE_WAITING
+            dev["sd_waiting_since"] = now
+            dev["excess_since"] = None
+            self.hass.log(
+                f"AURUM SD [{dev['name']}]: Paused, "
+                f"waiting for PV excess")
+            return False, 0
+
+        # ── WAITING: Device OFF, wait for PV excess + SOC ────────
+        if sd_state == SD_STATE_WAITING:
+            nominal = dev["nominal_power"]
+
+            # Deadline check: force start if past latest_start
+            if self._deadline_urgent(dev, now):
+                self.hass.log(
+                    f"AURUM SD [{dev['name']}]: Deadline start "
+                    f"(grid power)")
+                self._turn_on(dev, now, excess, battery_soc)
+                dev["sd_state"] = SD_STATE_RUNNING
+                dev["sd_running_since"] = now
+                dev["sd_power_samples"] = []
+                dev["sd_lockout_until"] = now + timedelta(
+                    seconds=dev["sd_max_runtime"])
+                dev["excess_since"] = None
+                dev["force_started"] = True
+                return True, nominal
+
+            # PV excess check
+            needed = nominal + dev["hysteresis_on"]
+            soc_ok = battery_soc < 0 or battery_soc >= soc_threshold
+            if turnon_excess >= needed and soc_ok:
+                # Debounce: conditions must persist
+                if dev["excess_since"] is None:
+                    dev["excess_since"] = now
+                    return False, 0
+                elapsed = (
+                    now - dev["excess_since"]).total_seconds()
+                if elapsed < dev["debounce_on"]:
+                    return False, 0
+
+                # Excess sufficient + debounce passed → start
+                self._turn_on(dev, now, excess, battery_soc)
+                dev["sd_state"] = SD_STATE_RUNNING
+                dev["sd_running_since"] = now
+                dev["sd_power_samples"] = []
+                dev["sd_lockout_until"] = now + timedelta(
+                    seconds=dev["sd_max_runtime"])
+                dev["excess_since"] = None
+                dev["force_started"] = False
+                self.hass.log(
+                    f"AURUM SD [{dev['name']}]: Started "
+                    f"(excess={turnon_excess:.0f}W >= "
+                    f"{needed:.0f}W needed)")
+                return True, nominal
+            else:
+                # Try preemption before giving up
+                freed = self._preempt_for_sd(
+                    dev, needed, turnon_excess, battery_soc,
+                    soc_threshold, now, excess)
+                if freed > 0:
+                    return False, 0
+                dev["excess_since"] = None
+                return False, 0
+
+        # ── RUNNING: Program active (lockout) ────────────────────
+        if sd_state == SD_STATE_RUNNING:
+            # Collect power sample
+            if actual_power > dev["sd_standby_power"]:
+                dev["sd_power_samples"].append(actual_power)
+
+            running_since = dev["sd_running_since"]
+            runtime_s = (
+                (now - running_since).total_seconds()
+                if running_since else 0)
+
+            # A) Safety max: force finish
+            max_expired = (
+                now >= dev["sd_lockout_until"]
+                if dev["sd_lockout_until"] else False)
+
+            # B) Smart finish: power < finish_power for finish_time
+            smart_finish = False
+            if runtime_s >= dev["sd_min_runtime"]:
+                if actual_power < dev["sd_finish_power"]:
+                    if dev["sd_power_below_since"] is None:
+                        dev["sd_power_below_since"] = now
+                    below_s = (
+                        now - dev["sd_power_below_since"]
+                    ).total_seconds()
+                    if below_s >= dev["sd_finish_time"]:
+                        smart_finish = True
+                else:
+                    dev["sd_power_below_since"] = None
+
+            if smart_finish or max_expired:
+                reason = "smart_finish" if smart_finish else "max_runtime"
+                self.hass.log(
+                    f"AURUM SD [{dev['name']}]: Program complete "
+                    f"({reason}, {actual_power:.0f}W, "
+                    f"{runtime_s / 60:.0f}min)")
+                self._sd_reset(dev)
+                self._accumulate_runtime(dev, now)
+                dev["on_since"] = None
+                dev["_runtime_tick"] = None
+                return False, 0
+
+            # Still running
+            return True, 0
+
+        return False, 0
+
+    def _sd_reset(self, dev):
+        """Reset all SD state fields to standby."""
+        dev["sd_state"] = SD_STATE_STANDBY
+        dev["sd_detected_at"] = None
+        dev["sd_waiting_since"] = None
+        dev["sd_lockout_until"] = None
+        dev["sd_power_above_since"] = None
+        dev["sd_power_below_since"] = None
+        dev["sd_running_since"] = None
+        dev["sd_power_samples"] = []
+        dev["force_started"] = False
+
+    def _preempt_for_sd(self, sd_device, needed_w, turnon_excess,
+                        battery_soc, soc_threshold, now, excess):
+        """Preempt lower-priority devices to free up excess for SD device.
+
+        Returns watts freed.
+        """
+        if battery_soc >= 0 and battery_soc < soc_threshold:
+            return 0
+
+        deficit = needed_w - turnon_excess
+        if deficit <= 0:
+            return 0
+
+        candidates = []
+        for dev in self.devices:
+            if dev["name"] == sd_device["name"]:
+                continue
+            if not dev.get("_cached_on", False):
+                continue
+            if not dev["managed_on"]:
+                continue  # manual override, don't preempt
+            if dev["priority"] >= sd_device["priority"]:
+                continue
+            if (dev["startup_detection"]
+                    and dev["sd_state"] == SD_STATE_RUNNING):
+                continue
+            if dev["on_since"]:
+                on_s = (now - dev["on_since"]).total_seconds()
+                if on_s < dev["min_on_time"]:
+                    continue
+            actual_w = self._get_device_power(dev)
+            candidates.append((dev, actual_w))
+
+        if not candidates:
+            return 0
+
+        candidates.sort(key=lambda x: x[0]["priority"])
+
+        freed = 0
+        victims = []
+        for dev, power_w in candidates:
+            if freed >= deficit:
+                break
+            self._turn_off(dev, now, excess, battery_soc,
+                           f"preempt_for_{sd_device['name']}")
+            freed += power_w
+            victims.append(f"{dev['name']}({power_w:.0f}W)")
+
+        if victims:
+            self.hass.log(
+                f"AURUM PREEMPT: {', '.join(victims)} OFF "
+                f"for {sd_device['name']} "
+                f"(needs {needed_w:.0f}W, freed {freed:.0f}W)")
+        return freed
+
+    # ══════════════════════════════════════════════════════════════
+    #  DEVICE STATE HELPERS
+    # ══════════════════════════════════════════════════════════════
+
+    def _is_device_on(self, dev):
+        """Check if device switch is currently on."""
+        state = get_state_safe(self.hass, dev["switch_entity"])
+        return state == "on"
+
+    def _get_device_power(self, dev):
+        """Read current power or fall back to nominal."""
+        if dev["power_entity"]:
+            return get_float(self.hass, dev["power_entity"],
+                             dev["nominal_power"])
+        return dev["nominal_power"]
+
+    def _turn_on(self, dev, now, excess, soc):
+        """Turn a device on."""
+        self.hass.turn_on(dev["switch_entity"])
+        dev["on_since"] = now
+        dev["last_on"] = now
+        dev["_runtime_tick"] = now
+        dev["total_switches"] += 1
+        dev["managed_on"] = True
+        dev["excess_since"] = None
+        dev["_excess_deficit_since"] = None
+        dev["_soc_grid_deficit_since"] = None
+        dev["_switch_times"].append(now)
+        self._log_action(dev, "ON", excess, soc, "surplus_available")
+
+    def _turn_off(self, dev, now, excess, soc, reason):
+        """Turn a device off."""
+        self.hass.turn_off(dev["switch_entity"])
+        self._accumulate_runtime(dev, now)
+        dev["on_since"] = None
+        dev["last_off"] = now
+        dev["_runtime_tick"] = None
+        dev["managed_on"] = False
+        dev["force_started"] = False
+        dev["excess_since"] = None
+        dev["_excess_deficit_since"] = None
+        dev["_soc_grid_deficit_since"] = None
+        dev["_switch_times"].append(now)
+        self._log_action(dev, "OFF", excess, soc, reason)
+
+    def _deadline_urgent(self, dev, now):
+        """Check if device must start now to meet its deadline.
+
+        Returns True if: time_remaining < estimated_runtime + buffer.
+        """
+        deadline_str = dev.get("deadline")
+        est_runtime = dev.get("estimated_runtime", 0)
+        if not deadline_str or not est_runtime:
+            return False
+
+        try:
+            parts = deadline_str.split(":")
+            deadline_hour = int(parts[0])
+            deadline_min = int(parts[1]) if len(parts) > 1 else 0
+
+            deadline_today = now.replace(
+                hour=deadline_hour, minute=deadline_min,
+                second=0, microsecond=0)
+
+            if now >= deadline_today:
+                dev["force_started"] = False
+                return False
+
+            time_remaining = (deadline_today - now).total_seconds()
+            runtime_needed = est_runtime * 60
+            buffer = 300  # 5 min safety buffer
+
+            return time_remaining <= (runtime_needed + buffer)
+        except (ValueError, IndexError, AttributeError, TypeError):
+            return False
+
+    def _accumulate_runtime(self, dev, now):
+        """Accumulate runtime for device."""
+        tick = dev.get("_runtime_tick") or dev.get("on_since")
+        if tick:
+            elapsed = (now - tick).total_seconds()
+            dev["runtime_today_s"] += max(0, elapsed)
+        dev["_runtime_tick"] = now
+
+    def _publish_device_states(self, shared, battery_soc):
+        """Publish device states to shared dict."""
         device_states = []
         devices_on = 0
         total_power = 0
@@ -257,105 +694,6 @@ class DeviceManager:
         shared["devices_on"] = devices_on
         shared["device_power_total"] = round(total_power, 1)
 
-    # ══════════════════════════════════════════════════════════════
-    #  DEVICE STATE HELPERS
-    # ══════════════════════════════════════════════════════════════
-
-    def _is_device_on(self, dev):
-        """Check if device switch is currently on."""
-        state = get_state_safe(self.hass, dev["switch_entity"])
-        return state == "on"
-
-    def _get_device_power(self, dev):
-        """Read current power or fall back to nominal."""
-        if dev["power_entity"]:
-            return get_float(self.hass, dev["power_entity"],
-                             dev["nominal_power"])
-        return dev["nominal_power"]
-
-    def _turn_on(self, dev, now, excess, soc):
-        """Turn a device on."""
-        self.hass.turn_on(dev["switch_entity"])
-        dev["on_since"] = now
-        dev["last_on"] = now
-        dev["_runtime_tick"] = now
-        dev["total_switches"] += 1
-        dev["managed_on"] = True
-        self._log_action(dev, "ON", excess, soc, "surplus_available")
-
-    def _turn_off(self, dev, now, excess, soc, reason):
-        """Turn a device off."""
-        self.hass.turn_off(dev["switch_entity"])
-        dev["on_since"] = None
-        dev["last_off"] = now
-        dev["_runtime_tick"] = None
-        dev["managed_on"] = False
-        dev["force_started"] = False
-        self._log_action(dev, "OFF", excess, soc, reason)
-
-    def _deadline_urgent(self, dev, now):
-        """Check if device must start now to meet its deadline.
-
-        Returns True if: time_remaining < estimated_runtime + buffer.
-        """
-        deadline_str = dev.get("deadline")
-        est_runtime = dev.get("estimated_runtime", 0)
-        if not deadline_str or not est_runtime:
-            return False
-
-        try:
-            parts = deadline_str.split(":")
-            deadline_hour = int(parts[0])
-            deadline_min = int(parts[1]) if len(parts) > 1 else 0
-
-            deadline_today = now.replace(
-                hour=deadline_hour, minute=deadline_min,
-                second=0, microsecond=0)
-
-            # If deadline already passed today, not urgent
-            if now >= deadline_today:
-                dev["force_started"] = False
-                return False
-
-            time_remaining = (deadline_today - now).total_seconds()
-            runtime_needed = est_runtime * 60  # minutes to seconds
-            buffer = 300  # 5 min safety buffer
-
-            return time_remaining <= (runtime_needed + buffer)
-        except (ValueError, IndexError, AttributeError, TypeError):
-            return False
-
-    def _debounce_ok(self, dev, now, direction):
-        """Check if debounce period has passed."""
-        if direction == "on":
-            ref = dev["last_off"]
-            cooldown = dev["debounce_on"]
-        else:
-            ref = dev["last_on"]
-            cooldown = dev["debounce_off"]
-
-        if ref is None:
-            return True
-        return (now - ref).total_seconds() >= cooldown
-
-    def _min_on_ok(self, dev, now):
-        """Check if minimum on-time has been reached."""
-        if dev["on_since"] is None:
-            return True
-        return (now - dev["on_since"]).total_seconds() >= dev["min_on_time"]
-
-    def _update_runtimes(self, now):
-        """Accumulate runtime for devices that are currently on."""
-        for dev in self.devices:
-            if self._is_device_on(dev):
-                tick = dev.get("_runtime_tick") or dev.get("on_since")
-                if tick:
-                    elapsed = (now - tick).total_seconds()
-                    dev["runtime_today_s"] += max(0, elapsed)
-                dev["_runtime_tick"] = now
-            else:
-                dev["_runtime_tick"] = None
-
     def _log_action(self, dev, action, excess, soc, reason):
         """Log a device action to CSV."""
         if self.action_csv:
@@ -367,88 +705,6 @@ class DeviceManager:
                 round(soc, 1) if soc >= 0 else "n/a",
                 reason,
             ])
-
-    # ══════════════════════════════════════════════════════════════
-    #  STARTUP DETECTION STATE MACHINE
-    # ══════════════════════════════════════════════════════════════
-
-    def _update_sd_state(self, dev, now):
-        """Update startup detection state machine.
-
-        States: standby → detected → running → done → standby
-        """
-        if not dev["switch_entity"]:
-            return
-
-        is_on = self._is_device_on(dev)
-        power = self._get_device_power(dev) if is_on else 0
-        state = dev["sd_state"]
-
-        if not state:
-            dev["sd_state"] = SD_STATE_STANDBY
-
-        # STANDBY: Waiting for power spike (program start)
-        if dev["sd_state"] == SD_STATE_STANDBY:
-            if is_on and power > dev["sd_power_threshold"]:
-                dev["sd_state"] = SD_STATE_DETECTED
-                dev["sd_detected_at"] = now
-                self.hass.log(
-                    f"AURUM SD [{dev['name']}]: "
-                    f"Program detected ({power:.0f}W)")
-
-        # DETECTED: Confirm it's not a spike
-        elif dev["sd_state"] == SD_STATE_DETECTED:
-            if not is_on or power <= dev["sd_power_threshold"]:
-                dev["sd_state"] = SD_STATE_STANDBY
-                dev["sd_detected_at"] = None
-            elif dev["sd_detected_at"] and (
-                    (now - dev["sd_detected_at"]).total_seconds()
-                    >= dev["sd_detection_time"]):
-                dev["sd_state"] = SD_STATE_RUNNING
-                dev["sd_running_since"] = now
-                self.hass.log(
-                    f"AURUM SD [{dev['name']}]: "
-                    f"Program confirmed, running")
-
-        # RUNNING: Program in progress
-        elif dev["sd_state"] == SD_STATE_RUNNING:
-            runtime = (now - dev["sd_running_since"]).total_seconds()
-
-            # Max runtime exceeded → done
-            if runtime > dev["sd_max_runtime"]:
-                dev["sd_state"] = SD_STATE_DONE
-                self.hass.log(
-                    f"AURUM SD [{dev['name']}]: "
-                    f"Max runtime exceeded → done")
-                return
-
-            # Power dropped to finish level
-            if (power <= dev["sd_finish_power"]
-                    and runtime >= dev["sd_min_runtime"]):
-                if dev["sd_finish_detected_at"] is None:
-                    dev["sd_finish_detected_at"] = now
-                elif ((now - dev["sd_finish_detected_at"]).total_seconds()
-                        >= dev["sd_finish_time"]):
-                    dev["sd_state"] = SD_STATE_DONE
-                    self.hass.log(
-                        f"AURUM SD [{dev['name']}]: "
-                        f"Program finished ({runtime:.0f}s)")
-            else:
-                dev["sd_finish_detected_at"] = None
-
-        # DONE: Program finished, can turn off
-        elif dev["sd_state"] == SD_STATE_DONE:
-            if is_on:
-                self.hass.turn_off(dev["switch_entity"])
-                dev["on_since"] = None
-                dev["last_off"] = now
-                dev["_runtime_tick"] = None
-                dev["managed_on"] = False
-                self._log_action(
-                    dev, "OFF", 0, 0, "program_finished")
-            dev["sd_state"] = SD_STATE_STANDBY
-            dev["sd_running_since"] = None
-            dev["sd_finish_detected_at"] = None
 
     def daily_reset(self):
         """Reset daily counters (call at midnight)."""
