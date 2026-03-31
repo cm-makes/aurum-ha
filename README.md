@@ -101,6 +101,16 @@ Every 15 seconds:
 | `binary_sensor.aurum_{name}_active` | Binary | Is device active? |
 | `number.aurum_{name}_soc_threshold` | Number | SOC threshold slider |
 
+## Example Dashboard
+
+A ready-to-use Mushroom-based dashboard is included:
+
+📄 **[example_dashboard.yaml](example_dashboard.yaml)**
+
+Copy the contents into **Settings → Dashboards → ⋮ → Raw configuration editor**.
+
+> Requires [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) (installable via HACS)
+
 ## Roadmap
 
 - [ ] Price-aware scheduling (dynamic electricity tariffs)
