@@ -37,6 +37,21 @@ def ema_update(old_ema, new_value, alpha=0.3):
     return alpha * new_value + (1 - alpha) * old_ema
 
 
+def ema_update_asymmetric(current_ema, raw, alpha_down=0.7, alpha_up=0.2):
+    """Asymmetric EMA: fast response when grid drops, slow when it rises.
+
+    - alpha_down=0.7: Grid sinking (excess rising) → respond fast
+    - alpha_up=0.2: Grid rising (deficit spikes) → dampen
+
+    This prevents false starts from brief excess spikes while allowing
+    fast reaction to genuine PV surplus.
+    """
+    if current_ema is None:
+        return raw
+    alpha = alpha_down if raw < current_ema else alpha_up
+    return alpha * raw + (1.0 - alpha) * current_ema
+
+
 def slugify(name):
     """Convert a device name to a slug (lowercase, underscored)."""
     slug = name.lower().strip()

@@ -6,7 +6,7 @@ Calculates excess power and EMA-smoothed values.
 """
 
 import logging
-from .helpers import get_float, ema_update
+from .helpers import get_float, ema_update, ema_update_asymmetric
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,16 +27,29 @@ class EnergyManager:
             "battery_discharge_power_entity")
 
         self.ema_alpha = config.get("ema_alpha", 0.3)
-        self._grid_ema = None
+        self.ema_alpha_down = config.get("ema_alpha_down", 0.7)
+        self.ema_alpha_up = config.get("ema_alpha_up", 0.2)
+        self._grid_ema = None       # symmetric EMA (battery decisions)
+        self._grid_ema_asym = None  # asymmetric EMA (device decisions)
 
     def update(self, shared):
         """Read sensors, calculate excess, update shared dict."""
         # Grid power (positive = import, negative = export)
         grid_raw = get_float(self.hass, self.grid_power_entity, 0)
+
+        # Symmetric EMA (alpha=0.3) – used for battery decisions
         self._grid_ema = ema_update(self._grid_ema, grid_raw, self.ema_alpha)
+
+        # Asymmetric EMA (fast down=0.7, slow up=0.2) – used for device decisions
+        # Reacts quickly to grid drops (= excess rising, real PV surplus)
+        # Reacts slowly to grid spikes (= brief deficit, dampened)
+        self._grid_ema_asym = ema_update_asymmetric(
+            self._grid_ema_asym, grid_raw,
+            self.ema_alpha_down, self.ema_alpha_up)
 
         shared["grid_power_raw"] = grid_raw
         shared["grid_power_ema"] = round(self._grid_ema, 1)
+        shared["grid_power_ema_asym"] = round(self._grid_ema_asym, 1)
 
         # PV power (optional)
         if self.pv_power_entity:
@@ -69,6 +82,9 @@ class EnergyManager:
         shared["battery_discharge_w"] = round(bat_discharge, 1)
 
         # Excess calculation
+        # Uses asymmetric EMA for turn-on (stable, dampens brief spikes)
+        # Uses RAW for turn-off (fast response to clouds)
+        #
         # Without battery sensors: excess = -grid (simple)
         # With battery sensors: excess = -grid - battery_power_net
         #   This gives TRUE PV surplus available for devices.
@@ -77,10 +93,10 @@ class EnergyManager:
                              or self.battery_discharge_power_entity)
         if has_battery_power:
             shared["excess"] = round(
-                -self._grid_ema - battery_power_net, 1)
+                -self._grid_ema_asym - battery_power_net, 1)
             shared["excess_raw"] = round(
                 -grid_raw - battery_power_net, 1)
         else:
             # Fallback: simple grid-only calculation
-            shared["excess"] = round(-self._grid_ema, 1)
+            shared["excess"] = round(-self._grid_ema_asym, 1)
             shared["excess_raw"] = round(-grid_raw, 1)
