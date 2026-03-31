@@ -41,6 +41,10 @@ CONF_DEV_MIN_ON_TIME = "min_on_time"
 CONF_DEV_MIN_OFF_TIME = "min_off_time"
 CONF_DEV_DEADLINE = "deadline"
 CONF_DEV_ESTIMATED_RUNTIME = "estimated_runtime"
+CONF_DEV_INTERRUPTIBLE = "interruptible"
+CONF_DEV_MANUAL_OVERRIDE_ENTITY = "manual_override_entity"
+CONF_DEV_MUSS_HEUTE_ENTITY = "muss_heute_entity"
+CONF_DEV_RESIDUAL_POWER = "residual_power"
 
 # ── Device defaults ──────────────────────────────────────────────
 DEFAULT_DEV_NOMINAL_POWER = 1000
@@ -52,6 +56,7 @@ DEFAULT_DEV_DEBOUNCE_ON = 300
 DEFAULT_DEV_DEBOUNCE_OFF = 600
 DEFAULT_DEV_MIN_ON_TIME = 600
 DEFAULT_DEV_MIN_OFF_TIME = 60
+DEFAULT_DEV_RESIDUAL_POWER = 100
 
 # ── Battery modes ────────────────────────────────────────────────
 MODE_NORMAL = "normal"

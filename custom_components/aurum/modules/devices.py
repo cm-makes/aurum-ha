@@ -32,6 +32,7 @@ from ..const import (
     DEFAULT_DEV_DEBOUNCE_OFF,
     DEFAULT_DEV_MIN_ON_TIME,
     DEFAULT_DEV_MIN_OFF_TIME,
+    DEFAULT_DEV_RESIDUAL_POWER,
     DEFAULT_EXCESS_DEFICIT_TOLERANCE,
     DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
 )
@@ -46,8 +47,11 @@ class DeviceManager:
         self.hass = hass
         self.config = config
         self.action_csv = None
+        self.notifications = None  # Set by coordinator if available
 
-        # Global tolerance timers
+        # Global settings
+        self.residual_power = config.get(
+            "residual_power", DEFAULT_DEV_RESIDUAL_POWER)
         self.excess_deficit_tolerance = config.get(
             "excess_deficit_tolerance", DEFAULT_EXCESS_DEFICIT_TOLERANCE)
         self.soc_grid_deficit_tolerance = config.get(
@@ -88,10 +92,16 @@ class DeviceManager:
             "min_on_time": cfg.get("min_on_time", DEFAULT_DEV_MIN_ON_TIME),
             "min_off_time": cfg.get("min_off_time", DEFAULT_DEV_MIN_OFF_TIME),
 
+            # Behavior
+            "interruptible": cfg.get("interruptible", True),
+            "manual_override_entity": cfg.get("manual_override_entity"),
+            "muss_heute_entity": cfg.get("muss_heute_entity"),
+
             # Deadline scheduling
             "deadline": cfg.get("deadline"),           # "HH:MM" or None
             "estimated_runtime": cfg.get("estimated_runtime", 0),  # minutes
             "force_started": False,
+            "_scheduling_reason": None,
 
             # Startup detection
             "startup_detection": cfg.get("startup_detection", False),
@@ -178,7 +188,16 @@ class DeviceManager:
 
             actual_power = self._get_device_power(dev) if was_on else 0
 
-            # ── 1. Manual override → force device ON ─────────────
+            # ── 1. Manual override → skip device ────────────────
+            if self._is_manual_override(dev):
+                if was_on:
+                    dev["_pending_off"] = None
+                    if dev["on_since"] is None:
+                        dev["on_since"] = now
+                    devices_on += 1
+                continue
+
+            # ── 1b. Device on but not managed → manual on ──────
             if was_on and not dev["managed_on"]:
                 dev["_pending_off"] = None
                 if dev["on_since"] is None:
@@ -224,7 +243,8 @@ class DeviceManager:
                     devices_on += 1
                 else:
                     # Clear excess timer if not enough surplus
-                    needed = dev["nominal_power"] + dev["hysteresis_on"]
+                    needed = (dev["nominal_power"] + dev["hysteresis_on"]
+                              + self.residual_power)
                     if turnon_excess < needed:
                         dev["excess_since"] = None
 
@@ -270,8 +290,9 @@ class DeviceManager:
             # Since AURUM doesn't track grid separately, block turn-on
             return False
 
-        # Enough excess? (nominal + hysteresis_on)
-        needed = dev["nominal_power"] + dev["hysteresis_on"]
+        # Enough excess? (nominal + hysteresis_on + residual_power)
+        needed = (dev["nominal_power"] + dev["hysteresis_on"]
+                  + self.residual_power)
         if available_excess < needed:
             return False
 
@@ -290,6 +311,10 @@ class DeviceManager:
     def _should_turn_off(self, dev, available_excess, battery_soc,
                          soc_threshold, now):
         """Check if device should be turned off. Returns reason or None."""
+        # Non-interruptible devices never turn off via surplus logic
+        if not dev["interruptible"]:
+            return None
+
         # Force-started devices: never turn off via surplus logic
         if dev["force_started"]:
             return None
@@ -390,6 +415,10 @@ class DeviceManager:
                     dev["sd_state"] = SD_STATE_DETECTED
                     dev["sd_detected_at"] = now
                     sd_state = SD_STATE_DETECTED  # fall through
+                    self._notify(
+                        f"\U0001f50d {dev['name']} erkannt "
+                        f"– wartet auf PV-Überschuss",
+                        tag=f"aurum_sd_{dev['name']}")
                 else:
                     return False, 0
             else:
@@ -417,7 +446,8 @@ class DeviceManager:
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Deadline start "
                     f"(grid power)")
-                self._turn_on(dev, now, excess, battery_soc)
+                self._turn_on(dev, now, excess, battery_soc,
+                              "deadline_forced")
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now
                 dev["sd_power_samples"] = []
@@ -425,6 +455,10 @@ class DeviceManager:
                     seconds=dev["sd_max_runtime"])
                 dev["excess_since"] = None
                 dev["force_started"] = True
+                self._notify(
+                    f"\u26a0\ufe0f {dev['name']} per Deadline gestartet "
+                    f"(Netzstrom)",
+                    tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
 
             # PV excess check
@@ -441,7 +475,8 @@ class DeviceManager:
                     return False, 0
 
                 # Excess sufficient + debounce passed → start
-                self._turn_on(dev, now, excess, battery_soc)
+                self._turn_on(dev, now, excess, battery_soc,
+                              "excess_sufficient")
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now
                 dev["sd_power_samples"] = []
@@ -449,10 +484,15 @@ class DeviceManager:
                     seconds=dev["sd_max_runtime"])
                 dev["excess_since"] = None
                 dev["force_started"] = False
+                dev["_scheduling_reason"] = "excess_sufficient"
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Started "
                     f"(excess={turnon_excess:.0f}W >= "
                     f"{needed:.0f}W needed)")
+                self._notify(
+                    f"\u25b6\ufe0f {dev['name']} läuft jetzt "
+                    f"(PV-Überschuss)",
+                    tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
             else:
                 # Try preemption before giving up
@@ -496,14 +536,20 @@ class DeviceManager:
 
             if smart_finish or max_expired:
                 reason = "smart_finish" if smart_finish else "max_runtime"
+                runtime_min = int(runtime_s / 60)
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Program complete "
                     f"({reason}, {actual_power:.0f}W, "
-                    f"{runtime_s / 60:.0f}min)")
+                    f"{runtime_min}min)")
                 self._sd_reset(dev)
                 self._accumulate_runtime(dev, now)
                 dev["on_since"] = None
                 dev["_runtime_tick"] = None
+                self._notify(
+                    f"\u2705 {dev['name']} fertig! "
+                    f"Laufzeit: {runtime_min}min ({reason})",
+                    tag=f"aurum_sd_{dev['name']}")
+                self._reset_muss_heute(dev)
                 return False, 0
 
             # Still running
@@ -544,6 +590,8 @@ class DeviceManager:
                 continue
             if not dev["managed_on"]:
                 continue  # manual override, don't preempt
+            if not dev["interruptible"]:
+                continue  # non-interruptible, don't preempt
             if dev["priority"] >= sd_device["priority"]:
                 continue
             if (dev["startup_detection"]
@@ -576,6 +624,10 @@ class DeviceManager:
                 f"AURUM PREEMPT: {', '.join(victims)} OFF "
                 f"for {sd_device['name']} "
                 f"(needs {needed_w:.0f}W, freed {freed:.0f}W)")
+            self._notify(
+                f"\u26a1 {', '.join(victims)} aus "
+                f"\u2192 Platz für {sd_device['name']}",
+                tag=f"aurum_preempt_{sd_device['name']}")
         return freed
 
     # ══════════════════════════════════════════════════════════════
@@ -594,7 +646,7 @@ class DeviceManager:
                              dev["nominal_power"])
         return dev["nominal_power"]
 
-    def _turn_on(self, dev, now, excess, soc):
+    def _turn_on(self, dev, now, excess, soc, reason="surplus_available"):
         """Turn a device on."""
         self.hass.turn_on(dev["switch_entity"])
         dev["on_since"] = now
@@ -602,11 +654,12 @@ class DeviceManager:
         dev["_runtime_tick"] = now
         dev["total_switches"] += 1
         dev["managed_on"] = True
+        dev["_scheduling_reason"] = reason
         dev["excess_since"] = None
         dev["_excess_deficit_since"] = None
         dev["_soc_grid_deficit_since"] = None
         dev["_switch_times"].append(now)
-        self._log_action(dev, "ON", excess, soc, "surplus_available")
+        self._log_action(dev, "ON", excess, soc, reason)
 
     def _turn_off(self, dev, now, excess, soc, reason):
         """Turn a device off."""
@@ -627,11 +680,19 @@ class DeviceManager:
         """Check if device must start now to meet its deadline.
 
         Returns True if: time_remaining < estimated_runtime + buffer.
+        If muss_heute_entity is configured, deadline only applies
+        when muss_heute is ON. Without muss_heute entity, deadline
+        always applies (backward compatible).
         """
         deadline_str = dev.get("deadline")
         est_runtime = dev.get("estimated_runtime", 0)
         if not deadline_str or not est_runtime:
             return False
+
+        # If muss_heute entity is configured, respect it
+        if dev.get("muss_heute_entity"):
+            if not self._is_muss_heute(dev):
+                return False
 
         try:
             parts = deadline_str.split(":")
@@ -691,11 +752,73 @@ class DeviceManager:
                 "soc_threshold": dev["soc_threshold"],
                 "priority": dev["priority"],
                 "force_started": dev.get("force_started", False),
+                "interruptible": dev["interruptible"],
+                "scheduling_reason": dev.get("_scheduling_reason"),
             })
 
         shared["device_states"] = device_states
         shared["devices_on"] = devices_on
         shared["device_power_total"] = round(total_power, 1)
+
+    def _is_manual_override(self, dev):
+        """Check if manual override entity is active.
+
+        Returns True if override entity exists and is 'on'.
+        Graceful: returns False if entity is None or unavailable.
+        """
+        entity = dev.get("manual_override_entity")
+        if not entity:
+            return False
+        try:
+            state = self.hass.get_state(entity)
+            return state == "on"
+        except Exception:
+            return False
+
+    def _is_muss_heute(self, dev):
+        """Check if muss_heute entity is ON for a device."""
+        entity = dev.get("muss_heute_entity")
+        if not entity:
+            return False
+        try:
+            return self.hass.get_state(entity) == "on"
+        except Exception:
+            return False
+
+    def _reset_muss_heute(self, dev):
+        """Auto-reset muss_heute to OFF after program completion."""
+        entity = dev.get("muss_heute_entity")
+        if not entity:
+            return
+        try:
+            state = self.hass.get_state(entity)
+            if state == "on":
+                self.hass.call_service(
+                    "homeassistant/turn_off", entity_id=entity)
+                self.hass.log(
+                    f"AURUM: {dev['name']} muss_heute -> OFF "
+                    f"(program complete)")
+        except Exception as e:
+            self.hass.log(
+                f"Error resetting muss_heute for "
+                f"{dev['name']}: {e}", level="WARNING")
+
+    def _notify(self, message, tag=None, throttle_key=None, importance=None):
+        """Send notification via HA persistent_notification.
+
+        Uses persistent_notification.create for broad compatibility.
+        """
+        try:
+            kwargs = {
+                "message": message,
+                "title": "AURUM",
+            }
+            if tag:
+                kwargs["notification_id"] = tag
+            self.hass.call_service(
+                "persistent_notification/create", **kwargs)
+        except Exception:
+            pass  # notifications are best-effort
 
     def _log_action(self, dev, action, excess, soc, reason):
         """Log a device action to CSV."""
@@ -712,5 +835,10 @@ class DeviceManager:
     def daily_reset(self):
         """Reset daily counters (call at midnight)."""
         for dev in self.devices:
+            self.hass.log(
+                f"AURUM daily runtime {dev['name']}: "
+                f"{dev['runtime_today_s'] / 60:.1f} min")
             dev["runtime_today_s"] = 0
             dev["total_switches"] = 0
+            dev["_switch_times"] = []
+            dev["_scheduling_reason"] = None

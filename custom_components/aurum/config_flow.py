@@ -37,6 +37,10 @@ from .const import (
     CONF_DEV_MIN_OFF_TIME,
     CONF_DEV_DEADLINE,
     CONF_DEV_ESTIMATED_RUNTIME,
+    CONF_DEV_INTERRUPTIBLE,
+    CONF_DEV_MANUAL_OVERRIDE_ENTITY,
+    CONF_DEV_MUSS_HEUTE_ENTITY,
+    CONF_DEV_RESIDUAL_POWER,
     DEFAULT_BATTERY_CAPACITY_WH,
     DEFAULT_TARGET_SOC,
     DEFAULT_MIN_SOC,
@@ -50,6 +54,7 @@ from .const import (
     DEFAULT_DEV_DEBOUNCE_OFF,
     DEFAULT_DEV_MIN_ON_TIME,
     DEFAULT_DEV_MIN_OFF_TIME,
+    DEFAULT_DEV_RESIDUAL_POWER,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +64,8 @@ _SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor"))
 _SWITCH = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["switch", "input_boolean"]))
+_INPUT_BOOLEAN = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="input_boolean"))
 
 
 def _schema_energy(defaults: dict | None = None) -> vol.Schema:
@@ -165,6 +172,26 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
         ): selector.NumberSelector(selector.NumberSelectorConfig(
             min=10, max=480, step=10,
             unit_of_measurement="min",
+            mode=selector.NumberSelectorMode.BOX)),
+        # ── Behavior ──────────────────────────────────────────
+        vol.Optional(
+            CONF_DEV_INTERRUPTIBLE,
+            default=d.get(CONF_DEV_INTERRUPTIBLE, True),
+        ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_DEV_MANUAL_OVERRIDE_ENTITY,
+            default=d.get(CONF_DEV_MANUAL_OVERRIDE_ENTITY, vol.UNDEFINED),
+        ): _INPUT_BOOLEAN,
+        vol.Optional(
+            CONF_DEV_MUSS_HEUTE_ENTITY,
+            default=d.get(CONF_DEV_MUSS_HEUTE_ENTITY, vol.UNDEFINED),
+        ): _INPUT_BOOLEAN,
+        vol.Optional(
+            CONF_DEV_RESIDUAL_POWER,
+            default=d.get(CONF_DEV_RESIDUAL_POWER, DEFAULT_DEV_RESIDUAL_POWER),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=1000, step=10,
+            unit_of_measurement="W",
             mode=selector.NumberSelectorMode.BOX)),
         # ── Timing (advanced) ────────────────────────────────
         vol.Optional(
