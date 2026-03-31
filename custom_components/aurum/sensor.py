@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -117,7 +118,7 @@ class AurumBatteryModeSensor(CoordinatorEntity, SensorEntity):
 class AurumCycleSensor(CoordinatorEntity, SensorEntity):
     """Diagnostic: cycle counter."""
 
-    _attr_entity_category = "diagnostic"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:counter"
 
     def __init__(self, coordinator, entry):
