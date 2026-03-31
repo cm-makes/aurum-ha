@@ -41,10 +41,10 @@ class HassAccess:
             entity_id, state, attributes or {})
 
     def call_service(self, service, **kwargs):
-        """Call a HA service (blocking)."""
+        """Call a HA service (fire-and-forget, safe in async context)."""
         domain, service_name = service.split("/", 1)
         self._hass.services.call(
-            domain, service_name, kwargs, blocking=True)
+            domain, service_name, kwargs, blocking=False)
 
     def turn_on(self, entity_id, **kwargs):
         """Turn on a switch/input_boolean."""
@@ -52,7 +52,7 @@ class HassAccess:
         self._hass.services.call(
             domain, "turn_on",
             {"entity_id": entity_id, **kwargs},
-            blocking=True)
+            blocking=False)
 
     def turn_off(self, entity_id, **kwargs):
         """Turn off a switch/input_boolean."""
@@ -60,7 +60,7 @@ class HassAccess:
         self._hass.services.call(
             domain, "turn_off",
             {"entity_id": entity_id, **kwargs},
-            blocking=True)
+            blocking=False)
 
     def log(self, msg, level="INFO"):
         """Log a message."""

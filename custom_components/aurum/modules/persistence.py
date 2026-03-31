@@ -49,6 +49,7 @@ class PersistenceManager:
             }
 
         # Atomic write: write to temp file, then rename
+        tmp_path = None
         try:
             dir_name = os.path.dirname(self.state_file)
             fd, tmp_path = tempfile.mkstemp(
@@ -58,7 +59,7 @@ class PersistenceManager:
             os.replace(tmp_path, self.state_file)
         except Exception as e:
             _LOGGER.warning("State save failed: %s", e)
-            if os.path.exists(tmp_path):
+            if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
     def restore(self, devices):
