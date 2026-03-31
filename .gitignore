@@ -4,3 +4,14 @@ __pycache__/
 .pytest_cache/
 .vscode/
 .idea/
+
+# Sensitive files
+*.env
+.env*
+secrets*
+*.secret
+*.token
+*.key
+*.pem
+*.log
+github-recovery-codes.txt
