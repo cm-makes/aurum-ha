@@ -50,8 +50,6 @@ class DeviceManager:
         self.notifications = None  # Set by coordinator if available
 
         # Global settings
-        self.residual_power = config.get(
-            "residual_power", DEFAULT_DEV_RESIDUAL_POWER)
         self.excess_deficit_tolerance = config.get(
             "excess_deficit_tolerance", DEFAULT_EXCESS_DEFICIT_TOLERANCE)
         self.soc_grid_deficit_tolerance = config.get(
@@ -96,6 +94,8 @@ class DeviceManager:
             "interruptible": cfg.get("interruptible", True),
             "manual_override_entity": cfg.get("manual_override_entity"),
             "muss_heute_entity": cfg.get("muss_heute_entity"),
+            "residual_power": cfg.get(
+                "residual_power", DEFAULT_DEV_RESIDUAL_POWER),
 
             # Deadline scheduling
             "deadline": cfg.get("deadline"),           # "HH:MM" or None
@@ -244,7 +244,7 @@ class DeviceManager:
                 else:
                     # Clear excess timer if not enough surplus
                     needed = (dev["nominal_power"] + dev["hysteresis_on"]
-                              + self.residual_power)
+                              + dev["residual_power"])
                     if turnon_excess < needed:
                         dev["excess_since"] = None
 
@@ -292,7 +292,7 @@ class DeviceManager:
 
         # Enough excess? (nominal + hysteresis_on + residual_power)
         needed = (dev["nominal_power"] + dev["hysteresis_on"]
-                  + self.residual_power)
+                  + dev["residual_power"])
         if available_excess < needed:
             return False
 
