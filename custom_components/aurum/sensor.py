@@ -352,8 +352,13 @@ class AurumHouseConsumptionSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data or {}
         pv = data.get("pv_power", 0)
         grid = data.get("grid_power_raw", 0)
-        bat_net = data.get("battery_power_net", 0)
-        # house = PV + grid_import + battery_discharge - battery_charge
-        # bat_net = discharge - charge (positive = net discharge)
-        self._attr_native_value = round(pv + grid + bat_net, 1)
+        bat_charge = data.get("battery_charge_w", 0)
+        bat_discharge = data.get("battery_discharge_w", 0)
+        # House consumption = everything being consumed in the house
+        # = PV production + grid import + battery discharge - battery charge - grid export
+        # Simplified: grid is already net (positive=import, negative=export)
+        # house = pv + grid + discharge - charge
+        house = pv + grid + bat_discharge - bat_charge
+        # House consumption cannot be negative
+        self._attr_native_value = round(max(0, house), 1)
         self.async_write_ha_state()
