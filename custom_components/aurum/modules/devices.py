@@ -322,7 +322,7 @@ class DeviceManager:
             buffer = 300  # 5 min safety buffer
 
             return time_remaining <= (runtime_needed + buffer)
-        except (ValueError, IndexError):
+        except (ValueError, IndexError, AttributeError, TypeError):
             return False
 
     def _debounce_ok(self, dev, now, direction):
@@ -401,7 +401,8 @@ class DeviceManager:
             if not is_on or power <= dev["sd_power_threshold"]:
                 dev["sd_state"] = SD_STATE_STANDBY
                 dev["sd_detected_at"] = None
-            elif ((now - dev["sd_detected_at"]).total_seconds()
+            elif dev["sd_detected_at"] and (
+                    (now - dev["sd_detected_at"]).total_seconds()
                     >= dev["sd_detection_time"]):
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now

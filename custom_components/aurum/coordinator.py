@@ -157,7 +157,8 @@ class AurumCoordinator(DataUpdateCoordinator):
             # ── Step 3: Device control (every 2nd cycle) ───────────
             if self.cycle % 2 == 0:
                 try:
-                    self.devices.update(shared)
+                    await self.hass.async_add_executor_job(
+                        self.devices.update, shared)
                     self._cached_device_states = shared.get(
                         "device_states", [])
                 except Exception as e:
@@ -176,8 +177,11 @@ class AurumCoordinator(DataUpdateCoordinator):
 
             # ── Step 5: CSV flush ──────────────────────────────────
             if self.action_csv and self.cycle % 2 == 0:
-                await self.hass.async_add_executor_job(
-                    self.action_csv.flush)
+                try:
+                    await self.hass.async_add_executor_job(
+                        self.action_csv.flush)
+                except Exception as e:
+                    _LOGGER.warning("CSV flush error: %s", e)
 
             # ── Step 6: State persistence (every 5 min) ────────────
             if self.cycle % 20 == 0:

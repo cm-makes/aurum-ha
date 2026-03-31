@@ -82,9 +82,13 @@ class CSVLogger:
             except Exception as e:
                 self.hass.log(f"CSV rotation error: {e}", level="WARNING")
         else:
-            with open(self.path, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(self.headers)
+            try:
+                with open(self.path, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(self.headers)
+            except Exception as e:
+                self.hass.log(
+                    f"CSV init error: {e}", level="WARNING")
 
     def log_row(self, row):
         """Buffer a row for deferred write."""

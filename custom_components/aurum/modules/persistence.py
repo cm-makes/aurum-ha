@@ -19,9 +19,7 @@ class PersistenceManager:
 
     def __init__(self, hass, config):
         self.hass = hass
-        config_dir = getattr(hass, 'config_path', '/config')
-        if callable(config_dir):
-            config_dir = config_dir
+        config_dir = hass.config_path
         self.state_file = config.get(
             "state_file",
             os.path.join(str(config_dir), "aurum_state.json"))
@@ -60,7 +58,10 @@ class PersistenceManager:
         except Exception as e:
             _LOGGER.warning("State save failed: %s", e)
             if tmp_path and os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def restore(self, devices):
         """Restore device state from JSON."""

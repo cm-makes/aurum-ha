@@ -37,7 +37,7 @@ class HassAccess:
 
     def set_state(self, entity_id, state, attributes=None):
         """Set an entity state (for virtual sensors)."""
-        self._hass.states.async_set(
+        self._hass.states.set(
             entity_id, state, attributes or {})
 
     def call_service(self, service, **kwargs):
