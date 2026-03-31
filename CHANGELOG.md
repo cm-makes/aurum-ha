@@ -5,6 +5,21 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-31
+
+### Fixed
+- **Critical: Event loop deadlock** causing crash-loops on startup when devices were switched. Device control now runs in executor thread.
+- Persistence config path resolution (was using wrong API)
+- NameError in persistence save when temp file creation fails
+- `async_set` called from sync context in bridge (now uses `states.set`)
+- Null guard for startup detection state after persistence restore
+- Unhandled exceptions in CSV logger initialization and flush
+- Broadened exception handling in deadline parsing
+
+### Added
+- **Edit device** option in integration settings (Configure → Edit a device)
+- Hardened `.gitignore` for sensitive files
+
 ## [1.0.0] - 2026-03-28
 
 ### Added
