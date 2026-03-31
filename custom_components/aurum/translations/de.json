@@ -93,6 +93,39 @@
           "estimated_runtime": "Wie lange dauert ein typischer Durchlauf? Beispiele: Waschmaschine ≈ 120 min, Spülmaschine ≈ 150 min. Wird zusammen mit der Deadline benutzt, damit AURUM rechtzeitig startet."
         }
       },
+      "edit_device_select": {
+        "title": "Gerät bearbeiten",
+        "description": "Wähle ein Gerät zum Bearbeiten.",
+        "data": {
+          "device_to_edit": "Gerät bearbeiten"
+        }
+      },
+      "edit_device": {
+        "title": "Gerät bearbeiten",
+        "description": "Ändere die Einstellungen für dieses Gerät.",
+        "data": {
+          "name": "Gerätename",
+          "switch_entity": "Smarte Steckdose / Schalter",
+          "power_entity": "Verbrauchsmessung (optional)",
+          "nominal_power": "Stromverbrauch (Watt)",
+          "priority": "Priorität",
+          "soc_threshold": "Mindest-Ladestand",
+          "startup_detection": "Programmerkennung",
+          "deadline": "Fertig bis (optional)",
+          "estimated_runtime": "Programmdauer (Minuten)"
+        },
+        "data_description": {
+          "name": "Eindeutiger Gerätename, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'.",
+          "switch_entity": "Die smarte Steckdose die das Gerät ein- und ausschaltet.",
+          "power_entity": "Verbrauchssensor der Steckdose (optional, für echten Verbrauch).",
+          "nominal_power": "Wie viel Strom verbraucht das Gerät ungefähr?",
+          "priority": "Höhere Zahl = wichtiger. Bekommt zuerst Solarstrom.",
+          "soc_threshold": "Unter dem Ladeziel: Ab welchem Ladestand darf dieses Gerät noch laufen?",
+          "startup_detection": "Aktivieren für Geräte mit Programm (Waschmaschine, Spülmaschine). Schützt laufende Programme.",
+          "deadline": "Bis wann soll das Gerät fertig sein? Leer lassen wenn keine Zeitvorgabe.",
+          "estimated_runtime": "Wie lange dauert ein typischer Durchlauf in Minuten?"
+        }
+      },
       "remove_device": {
         "title": "Gerät entfernen",
         "description": "Wähle ein Gerät das du aus der AURUM-Steuerung entfernen möchtest.",
@@ -107,6 +140,7 @@
       "options": {
         "menu_edit_energy": "Energie- & Batterie-Einstellungen bearbeiten",
         "menu_add_device": "Gerät hinzufügen",
+        "menu_edit_device": "Gerät bearbeiten",
         "menu_remove_device": "Gerät entfernen"
       }
     }

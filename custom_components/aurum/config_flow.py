@@ -226,6 +226,8 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
                 return await self.async_step_settings()
             elif action == "add_device":
                 return await self.async_step_add_device()
+            elif action == "edit_device":
+                return await self.async_step_edit_device_select()
             elif action == "remove_device":
                 return await self.async_step_remove_device()
 
@@ -234,23 +236,29 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
         if device_names:
             description += f": {', '.join(device_names)}"
 
+        options = [
+            selector.SelectOptionDict(
+                value="settings",
+                label="menu_edit_energy"),
+            selector.SelectOptionDict(
+                value="add_device",
+                label="menu_add_device"),
+        ]
+        if self._devices:
+            options.append(selector.SelectOptionDict(
+                value="edit_device",
+                label="menu_edit_device"))
+            options.append(selector.SelectOptionDict(
+                value="remove_device",
+                label="menu_remove_device"))
+
         return self.async_show_form(
             step_id="init",
             description_placeholders={"device_list": description},
             data_schema=vol.Schema({
                 vol.Required("action", default="add_device"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=[
-                            selector.SelectOptionDict(
-                                value="settings",
-                                label="menu_edit_energy"),
-                            selector.SelectOptionDict(
-                                value="add_device",
-                                label="menu_add_device"),
-                            selector.SelectOptionDict(
-                                value="remove_device",
-                                label="menu_remove_device"),
-                        ],
+                        options=options,
                         translation_key="action",
                         mode=selector.SelectSelectorMode.LIST,
                     )
@@ -289,6 +297,52 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="add_device",
             data_schema=_schema_add_device(),
+        )
+
+    async def async_step_edit_device_select(self, user_input=None):
+        """Select a device to edit."""
+        if not self._devices:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            name = user_input.get("device_to_edit")
+            self._edit_device_name = name
+            return await self.async_step_edit_device()
+
+        device_names = [d["name"] for d in self._devices]
+        return self.async_show_form(
+            step_id="edit_device_select",
+            data_schema=vol.Schema({
+                vol.Required("device_to_edit"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=device_names,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }),
+        )
+
+    async def async_step_edit_device(self, user_input=None):
+        """Edit a device's settings."""
+        name = self._edit_device_name
+        dev = next((d for d in self._devices if d["name"] == name), None)
+        if dev is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            # Replace the device in the list
+            self._devices = [
+                user_input if d["name"] == name else d
+                for d in self._devices
+            ]
+            self._options[CONF_DEVICES] = self._devices
+            return self.async_create_entry(title="", data={
+                **self._current, **self._options,
+            })
+
+        return self.async_show_form(
+            step_id="edit_device",
+            data_schema=_schema_add_device(dev),
         )
 
     async def async_step_remove_device(self, user_input=None):

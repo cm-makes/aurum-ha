@@ -93,6 +93,39 @@
           "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start."
         }
       },
+      "edit_device_select": {
+        "title": "Edit Device",
+        "description": "Choose a device to edit.",
+        "data": {
+          "device_to_edit": "Device to edit"
+        }
+      },
+      "edit_device": {
+        "title": "Edit Device",
+        "description": "Change the settings for this device.",
+        "data": {
+          "name": "Device name",
+          "switch_entity": "Smart plug / switch",
+          "power_entity": "Power measurement (optional)",
+          "nominal_power": "Power consumption (watts)",
+          "priority": "Priority",
+          "soc_threshold": "Minimum battery level",
+          "startup_detection": "Program detection",
+          "deadline": "Must finish by (optional)",
+          "estimated_runtime": "Program duration (minutes)"
+        },
+        "data_description": {
+          "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'.",
+          "switch_entity": "The smart plug that turns this device on and off.",
+          "power_entity": "Power sensor of the smart plug (optional, for real consumption).",
+          "nominal_power": "How much power does this device use when running?",
+          "priority": "Higher number = more important. Gets solar power first.",
+          "soc_threshold": "Below charge target: at what battery level is this device still allowed?",
+          "startup_detection": "Enable for appliances with programs (washers, dishwashers). Protects running programs.",
+          "deadline": "When does this device need to be finished? Leave empty if no time requirement.",
+          "estimated_runtime": "How long does a typical cycle take in minutes?"
+        }
+      },
       "remove_device": {
         "title": "Remove Device",
         "description": "Choose a device to remove from AURUM control.",
@@ -107,6 +140,7 @@
       "options": {
         "menu_edit_energy": "Edit energy & battery settings",
         "menu_add_device": "Add a device",
+        "menu_edit_device": "Edit a device",
         "menu_remove_device": "Remove a device"
       }
     }
