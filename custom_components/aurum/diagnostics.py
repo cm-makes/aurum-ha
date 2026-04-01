@@ -46,10 +46,11 @@ async def async_get_config_entry_diagnostics(
     bat_charge = data.get("battery_charge_w")
     bat_discharge = data.get("battery_discharge_w")
     bat_net = data.get("battery_power_net")     # discharge - charge
-    # House consumption = PV - excess (approx, when grid/battery available)
+    # House consumption = PV + grid_import - battery_charge + battery_discharge
+    # bat_net = discharge - charge → house = pv + grid_raw + bat_net
     house_w = None
     if grid_raw is not None and bat_net is not None:
-        house_w = round(pv_w + grid_raw - bat_net, 1)
+        house_w = round(pv_w + grid_raw + bat_net, 1)
     energy = {
         "pv_power_w": data.get("pv_power"),
         "grid_power_w": grid_raw,

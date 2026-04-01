@@ -519,21 +519,27 @@ class BudgetManager:
     def _hours_until_sunset(self):
         """Calculate hours until end of PV production from forecast.
 
+        Uses hourly forecast data when available.
+        Falls back to a fixed assumed sunset hour (19:00) when no
+        hourly data is available (e.g. entity only provides a daily total).
+
         1:1 port of HELIOS BudgetManager._hours_until_sunset()
         """
-        forecast = self._get_hourly_forecast()
-        if not forecast:
-            return 0
-
         now = datetime.now()
         current_hour = now.hour + now.minute / 60.0
 
-        last_production_hour = current_hour
-        for hour, watts in forecast:
-            if watts > 50 and hour > current_hour:
-                last_production_hour = hour
+        forecast = self._get_hourly_forecast()
+        if forecast:
+            last_production_hour = current_hour
+            for hour, watts in forecast:
+                if watts > 50 and hour > current_hour:
+                    last_production_hour = hour
+            return max(0, last_production_hour - current_hour)
 
-        return max(0, last_production_hour - current_hour)
+        # Fallback: no hourly data – assume solar production until 19:00
+        # (conservative estimate for Central Europe, avoids false after_sunset)
+        assumed_sunset_hour = 19.0
+        return max(0.0, assumed_sunset_hour - current_hour)
 
     def _get_pv_today_kwh(self):
         """Get today's PV production in kWh.
