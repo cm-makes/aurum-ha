@@ -199,13 +199,15 @@ class DeviceManager:
                     devices_on += 1
                 continue
 
-            # ── 1b. Device on but not managed → manual on ──────
+            # ── 1b. Device on but not managed → track, apply turn-off logic ──
+            # Only skip when override switch is explicitly ON (block 1).
+            # A manually-started device still gets evaluated for turn-off
+            # (e.g. battery protection, insufficient surplus) so AURUM can
+            # shed it like any other device when needed.
             if was_on and not dev["managed_on"]:
-                dev["_pending_off"] = None
                 if dev["on_since"] is None:
                     dev["on_since"] = now
-                devices_on += 1
-                continue
+                # Fall through to step 2/3 for turn-off evaluation
 
             # ── 2. Startup detection devices ─────────────────────
             if dev["startup_detection"]:
