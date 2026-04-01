@@ -714,11 +714,10 @@ class BudgetManager:
         # Sync to input_number if configured
         if self.safety_factor_entity:
             try:
-                self.hass.services.call(
-                    "input_number", "set_value",
-                    {"entity_id": self.safety_factor_entity,
-                     "value": round(self.budget_safety_factor, 2)},
-                    blocking=False)
+                self.hass.call_service(
+                    "input_number/set_value",
+                    entity_id=self.safety_factor_entity,
+                    value=round(self.budget_safety_factor, 2))
             except Exception as e:
                 _LOGGER.warning(
                     "AURUM Budget: could not update %s: %s",
@@ -739,11 +738,10 @@ class BudgetManager:
         if not entity:
             return None
         try:
-            state_obj = self.hass.states.get(entity)
-            if not state_obj:
+            full_state = self.hass.get_state(entity, attribute="all")
+            if not full_state:
                 return None
-            attrs = state_obj.attributes if hasattr(
-                state_obj, "attributes") else {}
+            attrs = full_state.get("attributes", {})
 
             # ── Option 1: Open-Meteo "watts" attribute ──────────────
             watts_data = attrs.get("watts")
@@ -818,11 +816,11 @@ class BudgetManager:
         if not self.dwd_weather_entity:
             return None
         try:
-            state_obj = self.hass.states.get(self.dwd_weather_entity)
-            if not state_obj:
+            full_state = self.hass.get_state(
+                self.dwd_weather_entity, attribute="all")
+            if not full_state:
                 return None
-            attrs = state_obj.attributes if hasattr(
-                state_obj, "attributes") else {}
+            attrs = full_state.get("attributes", {})
             val = attrs.get("temperature")
             if val in (None, "unavailable", "unknown", ""):
                 return None
