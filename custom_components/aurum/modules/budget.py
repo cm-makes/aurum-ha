@@ -48,6 +48,8 @@ class BudgetManager:
     def __init__(self, hass, config):
         self.hass = hass
         self._number_values = None  # set by coordinator
+        # Direct config value (AURUM-native, used when no entity/number entity)
+        self._config_target_soc = config.get("target_soc")
 
         # ── Entity IDs ──────────────────────────────────────────────
         self.target_soc_entity = config.get("target_soc_entity")
@@ -216,7 +218,8 @@ class BudgetManager:
         """
         if (not self.target_soc_entity
                 and not (self._number_values
-                         and "target_soc" in self._number_values)):
+                         and "target_soc" in self._number_values)
+                and self._config_target_soc is None):
             return None, {}
 
         target_soc = self._get_target_soc()
@@ -370,10 +373,12 @@ class BudgetManager:
         return condition
 
     def _get_target_soc(self):
-        """Read target SOC: number_values first, fallback to entity."""
+        """Read target SOC: number_values first, then entity, then direct config."""
         if self._number_values and "target_soc" in self._number_values:
             return float(self._number_values["target_soc"])
-        return get_float(self.hass, self.target_soc_entity, default=None)
+        if self.target_soc_entity:
+            return get_float(self.hass, self.target_soc_entity, default=None)
+        return self._config_target_soc
 
     def _get_smoothed_weather_factor(self):
         """EMA-smoothed weather factor to prevent budget jumps.

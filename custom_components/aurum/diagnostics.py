@@ -40,15 +40,26 @@ async def async_get_config_entry_diagnostics(
     }
 
     # ── Energy snapshot ────────────────────────────────────────────
+    pv_w = data.get("pv_power") or 0
+    grid_raw = data.get("grid_power_raw")       # positive=import, negative=export
+    grid_ema = data.get("grid_power_ema")
+    bat_charge = data.get("battery_charge_w")
+    bat_discharge = data.get("battery_discharge_w")
+    bat_net = data.get("battery_power_net")     # discharge - charge
+    # House consumption = PV - excess (approx, when grid/battery available)
+    house_w = None
+    if grid_raw is not None and bat_net is not None:
+        house_w = round(pv_w + grid_raw - bat_net, 1)
     energy = {
         "pv_power_w": data.get("pv_power"),
-        "grid_power_w": data.get("grid_power"),
-        "house_consumption_w": data.get("house_consumption"),
+        "grid_power_w": grid_raw,
+        "grid_power_ema_w": grid_ema,
+        "house_consumption_w": house_w,
         "excess_power_w": data.get("excess"),
         "excess_for_devices_w": data.get("excess_for_devices"),
         "battery_soc_pct": data.get("battery_soc"),
-        "battery_charge_w": data.get("battery_charge"),
-        "battery_discharge_w": data.get("battery_discharge"),
+        "battery_charge_w": bat_charge,
+        "battery_discharge_w": bat_discharge,
     }
 
     # ── Battery ────────────────────────────────────────────────────
