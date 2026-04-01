@@ -1,4 +1,4 @@
-## AURUM – Example Dashboard
+## AURUM – Example Dashboard (v1.4.0)
 ## Copy this into a new Dashboard via Settings → Dashboards → Add Dashboard → Raw config editor
 ##
 ## Requirements: Mushroom Cards (installable via HACS)
@@ -39,6 +39,12 @@ views:
             icon_color: >
               {% set soc = states('sensor.aurum_battery_soc') | float(0) %}
               {{ 'green' if soc >= 80 else 'orange' if soc >= 30 else 'red' }}
+          - type: entity
+            entity: sensor.aurum_forecast_remaining
+            icon: mdi:solar-power-variant-outline
+            icon_color: >
+              {% set kwh = states('sensor.aurum_forecast_remaining') | float(0) %}
+              {{ 'green' if kwh >= 5 else 'orange' if kwh >= 1 else 'grey' }}
 
       ##############################################################
       # ENERGY OVERVIEW (Grid, PV, House, Battery)
@@ -137,6 +143,50 @@ views:
           red: -2000
 
       ##############################################################
+      # PV FORECAST & BUDGET (only shows when forecast is configured)
+      ##############################################################
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: sensor.aurum_forecast_remaining
+            state_not: unavailable
+        card:
+          type: custom:mushroom-title-card
+          title: PV Forecast & Budget
+
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: sensor.aurum_forecast_remaining
+            state_not: unavailable
+        card:
+          type: horizontal-stack
+          cards:
+            - type: custom:mushroom-entity-card
+              entity: sensor.aurum_forecast_remaining
+              name: Forecast Today
+              icon: mdi:solar-power-variant-outline
+              icon_color: >
+                {% set kwh = states('sensor.aurum_forecast_remaining') | float(0) %}
+                {{ 'green' if kwh >= 5 else 'orange' if kwh >= 1 else 'grey' }}
+
+            - type: custom:mushroom-entity-card
+              entity: sensor.aurum_budget
+              name: Device Budget
+              icon: mdi:cash-clock
+              icon_color: >
+                {% set bw = states('sensor.aurum_budget') %}
+                {{ 'green' if bw == 'unavailable' or bw | float(0) > 500
+                   else 'orange' if bw | float(0) > 0
+                   else 'red' }}
+
+            - type: custom:mushroom-entity-card
+              entity: sensor.aurum_safety_factor
+              name: Safety Factor
+              icon: mdi:shield-check
+              icon_color: teal
+
+      ##############################################################
       # DEVICES SECTION HEADER
       ##############################################################
       - type: custom:mushroom-title-card
@@ -145,8 +195,16 @@ views:
 
       ##############################################################
       # DEVICE CARDS
-      # Duplicate this block for each of your devices
-      # Replace "washing_machine" with your device name (lowercase, no spaces)
+      # Duplicate this block for each of your devices.
+      # Replace "washing_machine" with your device name (lowercase, no spaces).
+      #
+      # MANUAL OVERRIDE:
+      # Add an input_boolean per device in configuration.yaml:
+      #   input_boolean:
+      #     aurum_override_washing_machine:
+      #       name: "Waschmaschine – Manual Override"
+      # Then set manual_override_entity in the AURUM device config.
+      # When the toggle is ON, AURUM skips the device completely.
       ##############################################################
 
       # --- Device 1: Washing Machine ---
@@ -154,38 +212,58 @@ views:
         primary: Washing Machine
         secondary: >
           {{ states('sensor.aurum_washing_machine') | title }}
-          — {{ states('sensor.aurum_washing_machine_power') | int }} W
-          — {{ states('sensor.aurum_washing_machine_runtime') | int }} min today
+          — {{ states('sensor.aurum_washing_machine_power') | int(0) }} W
+          — {{ states('sensor.aurum_washing_machine_runtime') | float(0) | round(0) | int }} min today
         icon: mdi:washing-machine
         icon_color: >
-          {{ 'green' if is_state('sensor.aurum_washing_machine', 'on')
+          {% set s = states('sensor.aurum_washing_machine') %}
+          {{ 'green' if s == 'on' or s == 'running'
+             else 'blue' if s == 'manual_override'
              else 'grey' }}
         badge_icon: >
-          {{ 'mdi:check-circle' if is_state('sensor.aurum_washing_machine', 'on')
+          {% set s = states('sensor.aurum_washing_machine') %}
+          {{ 'mdi:account' if s == 'manual_override'
+             else 'mdi:check-circle' if s in ('on','running')
              else 'mdi:pause-circle' }}
         badge_color: >
-          {{ 'green' if is_state('sensor.aurum_washing_machine', 'on')
+          {% set s = states('sensor.aurum_washing_machine') %}
+          {{ 'blue' if s == 'manual_override'
+             else 'green' if s in ('on','running')
              else 'grey' }}
         tap_action:
           action: more-info
           entity: sensor.aurum_washing_machine
+
+      # --- Manual Override Toggle: Washing Machine ---
+      # Uncomment when input_boolean is configured
+      # - type: custom:mushroom-entity-card
+      #   entity: input_boolean.aurum_override_washing_machine
+      #   name: Manual Override
+      #   icon: mdi:account-lock-open
+      #   icon_color: blue
 
       # --- Device 2: Dishwasher ---
       - type: custom:mushroom-template-card
         primary: Dishwasher
         secondary: >
           {{ states('sensor.aurum_dishwasher') | title }}
-          — {{ states('sensor.aurum_dishwasher_power') | int }} W
-          — {{ states('sensor.aurum_dishwasher_runtime') | int }} min today
+          — {{ states('sensor.aurum_dishwasher_power') | int(0) }} W
+          — {{ states('sensor.aurum_dishwasher_runtime') | float(0) | round(0) | int }} min today
         icon: mdi:dishwasher
         icon_color: >
-          {{ 'blue' if is_state('sensor.aurum_dishwasher', 'on')
+          {% set s = states('sensor.aurum_dishwasher') %}
+          {{ 'blue' if s == 'on' or s == 'running'
+             else 'deep-purple' if s == 'manual_override'
              else 'grey' }}
         badge_icon: >
-          {{ 'mdi:check-circle' if is_state('sensor.aurum_dishwasher', 'on')
+          {% set s = states('sensor.aurum_dishwasher') %}
+          {{ 'mdi:account' if s == 'manual_override'
+             else 'mdi:check-circle' if s in ('on','running')
              else 'mdi:pause-circle' }}
         badge_color: >
-          {{ 'blue' if is_state('sensor.aurum_dishwasher', 'on')
+          {% set s = states('sensor.aurum_dishwasher') %}
+          {{ 'deep-purple' if s == 'manual_override'
+             else 'blue' if s in ('on','running')
              else 'grey' }}
         tap_action:
           action: more-info
@@ -196,17 +274,23 @@ views:
         primary: EV Charger
         secondary: >
           {{ states('sensor.aurum_ev_charger') | title }}
-          — {{ states('sensor.aurum_ev_charger_power') | int }} W
-          — {{ states('sensor.aurum_ev_charger_runtime') | int }} min today
+          — {{ states('sensor.aurum_ev_charger_power') | int(0) }} W
+          — {{ states('sensor.aurum_ev_charger_runtime') | float(0) | round(0) | int }} min today
         icon: mdi:ev-station
         icon_color: >
-          {{ 'teal' if is_state('sensor.aurum_ev_charger', 'on')
+          {% set s = states('sensor.aurum_ev_charger') %}
+          {{ 'teal' if s == 'on' or s == 'running'
+             else 'blue' if s == 'manual_override'
              else 'grey' }}
         badge_icon: >
-          {{ 'mdi:check-circle' if is_state('sensor.aurum_ev_charger', 'on')
+          {% set s = states('sensor.aurum_ev_charger') %}
+          {{ 'mdi:account' if s == 'manual_override'
+             else 'mdi:check-circle' if s in ('on','running')
              else 'mdi:pause-circle' }}
         badge_color: >
-          {{ 'teal' if is_state('sensor.aurum_ev_charger', 'on')
+          {% set s = states('sensor.aurum_ev_charger') %}
+          {{ 'blue' if s == 'manual_override'
+             else 'teal' if s in ('on','running')
              else 'grey' }}
         tap_action:
           action: more-info
@@ -234,3 +318,22 @@ views:
                 period: day
             stat_type: max
             name: Dishwasher today
+
+      ##############################################################
+      # DIAGNOSTICS (collapsed by default)
+      ##############################################################
+      - type: custom:mushroom-title-card
+        title: Diagnostics
+
+      - type: entities
+        entities:
+          - entity: sensor.aurum_cycle
+            name: Update Cycle
+            icon: mdi:counter
+          - entity: sensor.aurum_safety_factor
+            name: Safety Factor
+            icon: mdi:shield-check
+          - entity: sensor.aurum_budget
+            name: Device Budget
+            icon: mdi:cash-clock
+        title: AURUM Internals
