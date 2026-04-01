@@ -160,9 +160,8 @@ class BudgetManager:
         self._cycle_count += 1
         now = shared.get("now", datetime.now())
 
-        battery_soc = shared.get("battery_soc",
-                                 shared.get("combined_soc"))
-        if battery_soc is None:
+        battery_soc = shared.get("battery_soc")
+        if battery_soc is None or battery_soc < 0:
             battery_soc = get_float(
                 self.hass, self.battery_soc_entity, default=None)
 

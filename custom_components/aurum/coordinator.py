@@ -66,7 +66,9 @@ class AurumCoordinator(DataUpdateCoordinator):
         self.persistence = PersistenceManager(self.bridge, self.config)
 
         # ── Daily adaptation tracking ──────────────────────────────
-        self._last_adapt_day: int = -1   # day of year for 17:00 adapt
+        self._last_adapt_day: int = -1          # day of year for 17:00 adapt
+        self._last_weather_learning_hour: int = -1  # hour for hourly learning
+        self._last_consumption_update_day: int = -1  # day for 23:55 profile
 
         # ── CSV loggers (initialized in async_setup) ───────────────
         self.action_csv = None
@@ -85,8 +87,14 @@ class AurumCoordinator(DataUpdateCoordinator):
             self.devices.action_csv = self.action_csv
 
             try:
-                self.persistence.restore(self.devices)
+                budget_state = self.persistence.restore(self.devices)
                 _LOGGER.info("AURUM state restored")
+                if self.budget and budget_state:
+                    try:
+                        self.budget.restore_state(budget_state)
+                        _LOGGER.info("AURUM budget state restored")
+                    except Exception as be:
+                        _LOGGER.warning("Budget state restore failed: %s", be)
             except Exception as e:
                 _LOGGER.warning("State restore failed (fresh start): %s", e)
 
@@ -108,7 +116,7 @@ class AurumCoordinator(DataUpdateCoordinator):
         """Save state before shutdown."""
         try:
             await self.hass.async_add_executor_job(
-                self.persistence.save, self.devices)
+                self.persistence.save, self.devices, self.budget)
             _LOGGER.info("AURUM state saved on shutdown")
         except Exception as e:
             _LOGGER.warning("State save on shutdown failed: %s", e)
@@ -167,10 +175,24 @@ class AurumCoordinator(DataUpdateCoordinator):
             if self.budget:
                 try:
                     self.budget.update(shared)
-                    # Daily safety-factor adaptation at 17:00
                     now = shared["now"]
                     adapt_day = now.timetuple().tm_yday
-                    if (now.hour == 17 and now.minute < 1
+                    current_hour = now.hour
+
+                    # Hourly: weather factor learning (daytime only)
+                    if (current_hour != self._last_weather_learning_hour
+                            and 6 <= current_hour <= 20):
+                        self.budget.update_weather_learning(shared)
+                        self._last_weather_learning_hour = current_hour
+
+                    # Late night: update consumption profile (23:55)
+                    if (current_hour == 23 and now.minute >= 55
+                            and adapt_day != self._last_consumption_update_day):
+                        self.budget.update_consumption_profile(shared)
+                        self._last_consumption_update_day = adapt_day
+
+                    # Daily: safety-factor adaptation at 17:00
+                    if (current_hour == 17 and now.minute < 1
                             and adapt_day != self._last_adapt_day):
                         self.budget.adapt_safety_factor(shared)
                         self._last_adapt_day = adapt_day
@@ -220,7 +242,7 @@ class AurumCoordinator(DataUpdateCoordinator):
             if self.cycle % 20 == 0:
                 try:
                     await self.hass.async_add_executor_job(
-                        self.persistence.save, self.devices)
+                        self.persistence.save, self.devices, self.budget)
                 except Exception as e:
                     _LOGGER.warning("Persistence error: %s", e)
 

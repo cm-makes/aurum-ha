@@ -37,8 +37,8 @@ class PersistenceManager:
             "state_file",
             os.path.join(str(config_dir), "aurum_state.json"))
 
-    def save(self, devices):
-        """Save device state to JSON (atomic write)."""
+    def save(self, devices, budget=None):
+        """Save device state (and optional budget state) to JSON (atomic write)."""
         state = {
             "_meta": {
                 "saved_at": datetime.now().isoformat(),
@@ -59,6 +59,13 @@ class PersistenceManager:
                 dev_state[field] = dev.get(field)
 
             state[dev["name"]] = dev_state
+
+        # Save budget learned state (safety factor, weather observations, etc.)
+        if budget is not None:
+            try:
+                state["_budget"] = budget.get_state_for_save()
+            except Exception as e:
+                _LOGGER.warning("Budget state save failed: %s", e)
 
         # Atomic write: write to temp file, then rename
         tmp_path = None
@@ -167,3 +174,4 @@ class PersistenceManager:
                 dev["_runtime_tick"] = now
 
         _LOGGER.info("AURUM state restored from %s", self.state_file)
+        return state.get("_budget")  # return budget state for coordinator
