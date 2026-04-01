@@ -9,14 +9,18 @@
           "pv_power_entity": "Solar production (optional)",
           "battery_soc_entity": "Battery level (optional)",
           "battery_charge_power_entity": "Battery charge power (optional)",
-          "battery_discharge_power_entity": "Battery discharge power (optional)"
+          "battery_discharge_power_entity": "Battery discharge power (optional)",
+          "pv_forecast_entity": "PV forecast – remaining today (optional)",
+          "pv_forecast_today_entity": "PV forecast – total today (optional)"
         },
         "data_description": {
           "grid_power_entity": "Your grid meter sensor (e.g. Shelly 3EM, SMA, Fronius, Kostal). Must report current power in watts. Positive = drawing from grid, negative = feeding into grid. This is the most important sensor — AURUM can't work without it.",
           "pv_power_entity": "How much power your solar panels are generating right now (in watts). Only used for display, not for calculations. Can be left empty.",
           "battery_soc_entity": "How full your home battery is right now (in percent, 0–100%). Leave empty if you don't have a battery — AURUM will send all surplus power directly to your devices.",
           "battery_charge_power_entity": "How much power is flowing INTO your battery right now (in watts, always positive). This is crucial for accurate surplus calculation — without it, AURUM can't see power that's 'hidden' in battery charging. Usually found in your inverter or BMS integration.",
-          "battery_discharge_power_entity": "How much power is flowing OUT of your battery right now (in watts, always positive). Together with charge power, AURUM calculates the true PV surplus available for your devices."
+          "battery_discharge_power_entity": "How much power is flowing OUT of your battery right now (in watts, always positive). Together with charge power, AURUM calculates the true PV surplus available for your devices.",
+          "pv_forecast_entity": "Sensor for remaining PV energy today in kWh (e.g. Solcast 'Remaining today'). When set, activates the PV Budget module — AURUM will distribute surplus more intelligently based on the day's forecast.",
+          "pv_forecast_today_entity": "Sensor for total forecasted PV energy today in kWh (e.g. Solcast 'Forecast today'). Used to adapt the safety factor automatically at 17:00 each day. Can be left empty if you only want basic budget calculation."
         }
       },
       "battery": {
@@ -58,6 +62,8 @@
           "battery_soc_entity": "Battery level",
           "battery_charge_power_entity": "Battery charge power (optional)",
           "battery_discharge_power_entity": "Battery discharge power (optional)",
+          "pv_forecast_entity": "PV forecast – remaining today (optional)",
+          "pv_forecast_today_entity": "PV forecast – total today (optional)",
           "battery_capacity_wh": "Battery size",
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
@@ -69,6 +75,8 @@
           "battery_soc_entity": "Current battery charge level in percent.",
           "battery_charge_power_entity": "Power flowing into battery (watts, always positive). Enables accurate surplus calculation.",
           "battery_discharge_power_entity": "Power flowing out of battery (watts, always positive).",
+          "pv_forecast_entity": "Remaining PV energy today in kWh. Activates the Budget module when set.",
+          "pv_forecast_today_entity": "Total PV forecast for today in kWh. Used for daily safety factor adaptation at 17:00.",
           "battery_capacity_wh": "Battery size in watt-hours (e.g. 10,000 Wh = 10 kWh).",
           "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",

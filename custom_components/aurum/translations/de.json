@@ -9,14 +9,18 @@
           "pv_power_entity": "PV-Erzeugung (optional)",
           "battery_soc_entity": "Batterie-Ladestand (optional)",
           "battery_charge_power_entity": "Batterie-Ladeleistung (optional)",
-          "battery_discharge_power_entity": "Batterie-Entladeleistung (optional)"
+          "battery_discharge_power_entity": "Batterie-Entladeleistung (optional)",
+          "pv_forecast_entity": "PV-Prognose – Verbleibend heute (optional)",
+          "pv_forecast_today_entity": "PV-Prognose – Gesamt heute (optional)"
         },
         "data_description": {
           "grid_power_entity": "Der Sensor deines Netzzählers (z.B. Shelly 3EM, SMA, Fronius, Kostal). Muss den aktuellen Verbrauch in Watt melden. Positiver Wert = du beziehst Strom, negativer Wert = du speist ein. Das ist der wichtigste Sensor — ohne ihn kann AURUM nicht arbeiten.",
           "pv_power_entity": "Wie viel Strom deine Solaranlage gerade erzeugt (in Watt). Wird nur zur Anzeige genutzt, nicht für die Berechnung. Kann leer bleiben.",
           "battery_soc_entity": "Wie voll deine Hausbatterie gerade ist (in Prozent, 0–100%). Leer lassen wenn du keine Batterie hast — AURUM verteilt dann den gesamten Überschuss direkt an die Geräte.",
           "battery_charge_power_entity": "Wie viel Leistung gerade IN deine Batterie fließt (in Watt, immer positiv). Wichtig für eine genaue Überschussberechnung — ohne diesen Sensor kann AURUM nicht sehen, dass Strom in der Batterie 'versteckt' wird. Findest du meist in deiner Wechselrichter- oder BMS-Integration.",
-          "battery_discharge_power_entity": "Wie viel Leistung gerade AUS deiner Batterie fließt (in Watt, immer positiv). Zusammen mit der Ladeleistung berechnet AURUM den echten PV-Überschuss der für Geräte verfügbar ist."
+          "battery_discharge_power_entity": "Wie viel Leistung gerade AUS deiner Batterie fließt (in Watt, immer positiv). Zusammen mit der Ladeleistung berechnet AURUM den echten PV-Überschuss der für Geräte verfügbar ist.",
+          "pv_forecast_entity": "Sensor für die verbleibende PV-Energie heute in kWh (z.B. Solcast 'Verbleibend heute'). Wenn gesetzt, wird das PV-Budget-Modul aktiviert – AURUM verteilt Überschuss dann intelligenter auf Basis der Tagesprognose.",
+          "pv_forecast_today_entity": "Sensor für die gesamte prognostizierte PV-Energie heute in kWh (z.B. Solcast 'Prognose heute'). Wird genutzt um den Sicherheitsfaktor täglich um 17:00 Uhr automatisch anzupassen. Kann leer bleiben wenn du nur die Basisberechnung möchtest."
         }
       },
       "battery": {
@@ -58,6 +62,8 @@
           "battery_soc_entity": "Batterie-Ladestand",
           "battery_charge_power_entity": "Batterie-Ladeleistung (optional)",
           "battery_discharge_power_entity": "Batterie-Entladeleistung (optional)",
+          "pv_forecast_entity": "PV-Prognose – Verbleibend heute (optional)",
+          "pv_forecast_today_entity": "PV-Prognose – Gesamt heute (optional)",
           "battery_capacity_wh": "Batteriegröße",
           "target_soc": "Ladeziel",
           "min_soc": "Batterie-Reserve",
@@ -69,6 +75,8 @@
           "battery_soc_entity": "Aktueller Batterie-Ladestand in Prozent.",
           "battery_charge_power_entity": "Leistung die in die Batterie fließt (Watt, immer positiv). Ermöglicht genaue Überschussberechnung.",
           "battery_discharge_power_entity": "Leistung die aus der Batterie fließt (Watt, immer positiv).",
+          "pv_forecast_entity": "Verbleibende PV-Energie heute in kWh. Aktiviert das Budget-Modul wenn gesetzt.",
+          "pv_forecast_today_entity": "Gesamte PV-Prognose für heute in kWh. Für die tägliche Sicherheitsfaktor-Anpassung um 17:00.",
           "battery_capacity_wh": "Batteriegröße in Wattstunden (z.B. 10.000 Wh = 10 kWh).",
           "target_soc": "Ab diesem Ladestand dürfen alle Geräte laufen. Darunter gelten die individuellen Schwellen pro Gerät.",
           "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
