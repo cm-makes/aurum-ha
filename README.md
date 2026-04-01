@@ -17,7 +17,7 @@
 - **Battery-Aware** – Respects battery SOC with configurable target and minimum thresholds
 - **Priority-Based** – Higher priority devices get power first
 - **Per-Device SOC Threshold** – Each device can have its own minimum battery level
-- **Startup Detection** – Recognizes when washing machines or dishwashers start a program and protects the cycle from interruption
+- **Startup Detection** – Smart program management for washing machines and dishwashers: you press Start, AURUM detects the power draw, immediately pauses the device, and waits for sufficient PV surplus. When enough solar power is available, AURUM resumes the program automatically. If a deadline is set and PV never arrives, AURUM starts on grid power as a fallback.
 - **PV Forecast Budget** – Uses Solcast or Open-Meteo forecast to calculate how much power is available for devices for the rest of the day
 - **Manual Override & Muss-heute Switches** – Auto-created per device; override pauses AURUM control, "muss heute" forces the device on regardless of surplus
 - **Hysteresis & Debounce** – Prevents rapid switching with configurable margins
@@ -71,7 +71,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Nominal power** | Expected power draw in watts |
 | **Priority** | 1–100, higher = turned on first |
 | **SOC threshold** | Device only runs when battery is above this level |
-| **Startup detection** | Enable for appliances with programs (washers, dishwashers) |
+| **Startup detection** | Enable for appliances with programs (washers, dishwashers). AURUM keeps the plug on in standby, detects when you press Start, pauses immediately, and resumes when PV surplus is sufficient. |
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
 | **Deadline** | Time by which the device must have run (e.g. `18:00`) |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
