@@ -69,6 +69,9 @@ async def async_setup_entry(
         AurumBatteryChargeSensor(coordinator, entry),
         AurumBatteryDischargeSensor(coordinator, entry),
         AurumHouseConsumptionSensor(coordinator, entry),
+        AurumForecastRemainingSensor(coordinator, entry),
+        AurumBudgetWSensor(coordinator, entry),
+        AurumSafetyFactorSensor(coordinator, entry),
     ]
 
     for dev_state in coordinator.device_states:
@@ -330,6 +333,94 @@ class AurumBatteryDischargeSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
         self._attr_native_value = data.get("battery_discharge_w", 0)
+        self.async_write_ha_state()
+
+
+# ══════════════════════════════════════════════════════════════════
+#  BUDGET SENSORS  (only active when pv_forecast_entity configured)
+# ══════════════════════════════════════════════════════════════════
+
+
+class AurumForecastRemainingSensor(CoordinatorEntity, SensorEntity):
+    """Remaining PV forecast for today in kWh."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_icon = "mdi:solar-power-variant-outline"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_forecast_remaining"
+        self._attr_name = "AURUM Forecast Remaining"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        kwh = data.get("pv_forecast_remaining_kwh")
+        if kwh is not None:
+            self._attr_available = True
+            self._attr_native_value = round(float(kwh), 2)
+        else:
+            self._attr_available = False
+            self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class AurumBudgetWSensor(CoordinatorEntity, SensorEntity):
+    """Available device budget in W (None = no restriction)."""
+
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "W"
+    _attr_icon = "mdi:cash-clock"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_budget_w"
+        self._attr_name = "AURUM Budget"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        budget = data.get("device_budget_w")
+        if budget is None:
+            # No restriction (SOC above target or no forecast)
+            self._attr_native_value = None
+            self._attr_available = True
+        else:
+            self._attr_native_value = round(float(budget), 0)
+            self._attr_available = True
+        self.async_write_ha_state()
+
+
+class AurumSafetyFactorSensor(CoordinatorEntity, SensorEntity):
+    """Adaptive safety factor for PV forecast correction."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "%"
+    _attr_icon = "mdi:shield-check"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_safety_factor"
+        self._attr_name = "AURUM Safety Factor"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        sf = data.get("safety_factor")
+        if sf is not None:
+            self._attr_available = True
+            self._attr_native_value = round(float(sf) * 100, 1)
+        else:
+            self._attr_available = False
+            self._attr_native_value = None
         self.async_write_ha_state()
 
 

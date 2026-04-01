@@ -20,6 +20,7 @@ from .const import DOMAIN, VERSION, CONF_DEVICES
 from .hass_bridge import HassAccess
 from .modules.energy import EnergyManager
 from .modules.battery import BatteryManager
+from .modules.budget import BudgetManager
 from .modules.devices import DeviceManager
 from .modules.helpers import CSVLogger
 from .modules.persistence import PersistenceManager
@@ -57,8 +58,15 @@ class AurumCoordinator(DataUpdateCoordinator):
         # ── Create modules ─────────────────────────────────────────
         self.energy = EnergyManager(self.bridge, self.config)
         self.battery = BatteryManager(self.bridge, self.config)
+        # Budget module: optional – only active when pv_forecast_entity set
+        self.budget = (
+            BudgetManager(self.bridge, self.config)
+            if self.config.get("pv_forecast_entity") else None)
         self.devices = DeviceManager(self.bridge, self.config)
         self.persistence = PersistenceManager(self.bridge, self.config)
+
+        # ── Daily adaptation tracking ──────────────────────────────
+        self._last_adapt_day: int = -1   # day of year for 17:00 adapt
 
         # ── CSV loggers (initialized in async_setup) ───────────────
         self.action_csv = None
@@ -155,11 +163,27 @@ class AurumCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 _LOGGER.warning("Battery error: %s", e)
 
+            # ── Step 2b: PV forecast budget (optional) ─────────────
+            if self.budget:
+                try:
+                    self.budget.update(shared)
+                    # Daily safety-factor adaptation at 17:00
+                    now = shared["now"]
+                    adapt_day = now.timetuple().tm_yday
+                    if (now.hour == 17 and now.minute < 1
+                            and adapt_day != self._last_adapt_day):
+                        self.budget.adapt_safety_factor(shared)
+                        self._last_adapt_day = adapt_day
+                except Exception as e:
+                    _LOGGER.warning("Budget error: %s", e)
+
             # ── Daily reset (midnight) ────────────────────────────
             today = shared["now"].timetuple().tm_yday
             if today != self._last_daily_reset:
                 if self._last_daily_reset >= 0:
                     self.devices.daily_reset()
+                    if self.budget:
+                        self.budget.daily_reset()
                     _LOGGER.info("AURUM: Daily counters reset")
                 self._last_daily_reset = today
 
