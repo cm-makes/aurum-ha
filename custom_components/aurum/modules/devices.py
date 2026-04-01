@@ -765,45 +765,39 @@ class DeviceManager:
     def _is_manual_override(self, dev):
         """Check if manual override is active for this device.
 
-        Priority:
-        1. Native auto-created switch (switch.aurum_{slug}_override)
-        2. Legacy user-configured manual_override_entity (fallback)
-
-        Returns True if override is active, False otherwise.
+        Returns True if the native switch OR the legacy entity is ON.
+        Both are checked independently – either being ON is sufficient.
         """
         slug = dev["slug"]
-        # 1. Native switch (auto-created by AURUM)
-        native_state = self.hass.get_state(override_entity_id(slug))
-        if native_state not in (None, "unavailable", "unknown"):
-            return native_state == "on"
-        # 2. Legacy fallback (user-configured input_boolean)
+        # Native switch (auto-created by AURUM)
+        if self.hass.get_state(override_entity_id(slug)) == "on":
+            return True
+        # Legacy fallback (user-configured input_boolean)
         legacy = dev.get("manual_override_entity")
         if legacy:
             try:
                 return self.hass.get_state(legacy) == "on"
             except Exception:
-                return False
+                pass
         return False
 
     def _is_muss_heute(self, dev):
         """Check if 'must run today' is active for this device.
 
-        Priority:
-        1. Native auto-created switch (switch.aurum_{slug}_muss_heute)
-        2. Legacy user-configured muss_heute_entity (fallback)
+        Returns True if the native switch OR the legacy entity is ON.
+        Both are checked independently – either being ON is sufficient.
         """
         slug = dev["slug"]
-        # 1. Native switch (auto-created by AURUM)
-        native_state = self.hass.get_state(muss_heute_entity_id(slug))
-        if native_state not in (None, "unavailable", "unknown"):
-            return native_state == "on"
-        # 2. Legacy fallback
+        # Native switch (auto-created by AURUM)
+        if self.hass.get_state(muss_heute_entity_id(slug)) == "on":
+            return True
+        # Legacy fallback (user-configured input_boolean)
         legacy = dev.get("muss_heute_entity")
         if legacy:
             try:
                 return self.hass.get_state(legacy) == "on"
             except Exception:
-                return False
+                pass
         return False
 
     def _reset_muss_heute(self, dev):

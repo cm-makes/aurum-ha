@@ -30,7 +30,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up AURUM override switches for each configured device."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     entities: list = []
     for dev in coordinator.devices.devices:
         slug = dev["slug"]
@@ -75,6 +75,8 @@ class _AurumBaseSwitch(CoordinatorEntity, RestoreEntity, SwitchEntity):
                 self.entity_id,
                 "on" if self._attr_is_on else "off",
             )
+        # Always write state so HA sees the correct value immediately
+        self.async_write_ha_state()
 
     def _handle_coordinator_update(self) -> None:
         """No-op: switch state is self-managed, not derived from coordinator."""
