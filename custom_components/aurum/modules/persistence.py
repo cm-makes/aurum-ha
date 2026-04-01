@@ -138,10 +138,31 @@ class PersistenceManager:
                     "AURUM: %s was 'detected' at restart, "
                     "resetting to standby", name)
 
-        # Fix runtime_tick for devices that were on at save time
-        # Without this, the entire on_since→now period gets added again
+        # ── HELIOS pattern: verify against actual HA switch state ────
+        # Saved state may be stale — always cross-check with real switch.
+        # If switch is ON  → managed_on=True, restore on_since
+        # If switch is OFF → managed_on=False, clear on_since
         now = datetime.now()
         for dev in devices.devices:
+            is_on = devices._is_device_on(dev)
+
+            if is_on:
+                dev["managed_on"] = True
+                # Only restore on_since for SD devices if in running state
+                sd_ok = (
+                    not dev.get("startup_detection")
+                    or dev.get("sd_state") == "running")
+                if not sd_ok:
+                    dev["on_since"] = None
+                elif not dev.get("on_since"):
+                    # Device is on but no timestamp saved → use now
+                    dev["on_since"] = now
+            else:
+                # Device is off → clear managed state
+                dev["managed_on"] = False
+                dev["on_since"] = None
+
+            # Set runtime tick for all devices that have on_since
             if dev.get("on_since"):
                 dev["_runtime_tick"] = now
 

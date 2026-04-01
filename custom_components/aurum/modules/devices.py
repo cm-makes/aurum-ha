@@ -165,7 +165,7 @@ class DeviceManager:
                 if (dev["startup_detection"]
                         and dev["sd_state"] == SD_STATE_RUNNING):
                     continue
-                if self._is_device_on(dev) and dev["managed_on"]:
+                if self._is_device_on(dev):
                     self._turn_off(dev, now, excess, battery_soc,
                                    "battery_charging")
             self._publish_device_states(shared, battery_soc)
