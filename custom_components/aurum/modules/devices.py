@@ -35,6 +35,8 @@ from ..const import (
     DEFAULT_DEV_RESIDUAL_POWER,
     DEFAULT_EXCESS_DEFICIT_TOLERANCE,
     DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
+    override_entity_id,
+    muss_heute_entity_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -761,47 +763,77 @@ class DeviceManager:
         shared["device_power_total"] = round(total_power, 1)
 
     def _is_manual_override(self, dev):
-        """Check if manual override entity is active.
+        """Check if manual override is active for this device.
 
-        Returns True if override entity exists and is 'on'.
-        Graceful: returns False if entity is None or unavailable.
+        Priority:
+        1. Native auto-created switch (switch.aurum_{slug}_override)
+        2. Legacy user-configured manual_override_entity (fallback)
+
+        Returns True if override is active, False otherwise.
         """
-        entity = dev.get("manual_override_entity")
-        if not entity:
-            return False
-        try:
-            state = self.hass.get_state(entity)
-            return state == "on"
-        except Exception:
-            return False
+        slug = dev["slug"]
+        # 1. Native switch (auto-created by AURUM)
+        native_state = self.hass.get_state(override_entity_id(slug))
+        if native_state not in (None, "unavailable", "unknown"):
+            return native_state == "on"
+        # 2. Legacy fallback (user-configured input_boolean)
+        legacy = dev.get("manual_override_entity")
+        if legacy:
+            try:
+                return self.hass.get_state(legacy) == "on"
+            except Exception:
+                return False
+        return False
 
     def _is_muss_heute(self, dev):
-        """Check if muss_heute entity is ON for a device."""
-        entity = dev.get("muss_heute_entity")
-        if not entity:
-            return False
-        try:
-            return self.hass.get_state(entity) == "on"
-        except Exception:
-            return False
+        """Check if 'must run today' is active for this device.
+
+        Priority:
+        1. Native auto-created switch (switch.aurum_{slug}_muss_heute)
+        2. Legacy user-configured muss_heute_entity (fallback)
+        """
+        slug = dev["slug"]
+        # 1. Native switch (auto-created by AURUM)
+        native_state = self.hass.get_state(muss_heute_entity_id(slug))
+        if native_state not in (None, "unavailable", "unknown"):
+            return native_state == "on"
+        # 2. Legacy fallback
+        legacy = dev.get("muss_heute_entity")
+        if legacy:
+            try:
+                return self.hass.get_state(legacy) == "on"
+            except Exception:
+                return False
+        return False
 
     def _reset_muss_heute(self, dev):
-        """Auto-reset muss_heute to OFF after program completion."""
-        entity = dev.get("muss_heute_entity")
-        if not entity:
-            return
+        """Auto-reset muss_heute to OFF after program completion.
+
+        Turns off both the native switch and any legacy entity.
+        """
+        slug = dev["slug"]
+        # 1. Reset native switch
         try:
-            state = self.hass.get_state(entity)
-            if state == "on":
-                self.hass.call_service(
-                    "homeassistant/turn_off", entity_id=entity)
-                self.hass.log(
-                    f"AURUM: {dev['name']} muss_heute -> OFF "
-                    f"(program complete)")
+            native_id = muss_heute_entity_id(slug)
+            if self.hass.get_state(native_id) == "on":
+                self.hass.turn_off(native_id)
+                _LOGGER.debug(
+                    "AURUM: %s muss_heute -> OFF (program complete)",
+                    dev["name"])
         except Exception as e:
-            self.hass.log(
-                f"Error resetting muss_heute for "
-                f"{dev['name']}: {e}", level="WARNING")
+            _LOGGER.warning(
+                "Error resetting native muss_heute for %s: %s",
+                dev["name"], e)
+        # 2. Reset legacy entity if configured
+        legacy = dev.get("muss_heute_entity")
+        if legacy:
+            try:
+                if self.hass.get_state(legacy) == "on":
+                    self.hass.turn_off(legacy)
+            except Exception as e:
+                _LOGGER.warning(
+                    "Error resetting legacy muss_heute for %s: %s",
+                    dev["name"], e)
 
     def _notify(self, message, tag=None, throttle_key=None, importance=None):
         """Send notification via HA persistent_notification.

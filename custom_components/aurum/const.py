@@ -1,9 +1,9 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.2.0"
+VERSION = "1.5.0"
 
-PLATFORMS = ["sensor", "binary_sensor", "number"]
+PLATFORMS = ["sensor", "binary_sensor", "number", "switch"]
 
 # ── Config keys: Energy sources (Step 1) ─────────────────────────
 CONF_GRID_POWER_ENTITY = "grid_power_entity"
@@ -78,3 +78,14 @@ SD_STATE_DONE = "done"
 # ── Deficit tolerance timers ────────────────────────────────────
 DEFAULT_EXCESS_DEFICIT_TOLERANCE = 60   # seconds
 DEFAULT_SOC_GRID_DEFICIT_TOLERANCE = 90  # seconds
+
+
+# ── Auto-switch entity ID helpers ────────────────────────────────
+def override_entity_id(slug: str) -> str:
+    """Return the deterministic entity_id for the manual override switch."""
+    return f"switch.aurum_{slug}_override"
+
+
+def muss_heute_entity_id(slug: str) -> str:
+    """Return the deterministic entity_id for the 'must run today' switch."""
+    return f"switch.aurum_{slug}_muss_heute"

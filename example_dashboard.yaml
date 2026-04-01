@@ -234,13 +234,20 @@ views:
           action: more-info
           entity: sensor.aurum_washing_machine
 
-      # --- Manual Override Toggle: Washing Machine ---
-      # Uncomment when input_boolean is configured
-      # - type: custom:mushroom-entity-card
-      #   entity: input_boolean.aurum_override_washing_machine
-      #   name: Manual Override
-      #   icon: mdi:account-lock-open
-      #   icon_color: blue
+      # --- Manual Override & Muss-heute Toggles: Washing Machine ---
+      # These switches are auto-created by AURUM. Uncomment to add to dashboard.
+      # - type: horizontal-stack
+      #   cards:
+      #     - type: custom:mushroom-entity-card
+      #       entity: switch.aurum_washing_machine_override
+      #       name: Manual Override
+      #       icon: mdi:account-lock-open
+      #       icon_color: blue
+      #     - type: custom:mushroom-entity-card
+      #       entity: switch.aurum_washing_machine_muss_heute
+      #       name: Muss heute
+      #       icon: mdi:calendar-check
+      #       icon_color: orange
 
       # --- Device 2: Dishwasher ---
       - type: custom:mushroom-template-card
@@ -269,6 +276,20 @@ views:
           action: more-info
           entity: sensor.aurum_dishwasher
 
+      # --- Manual Override & Muss-heute Toggles: Dishwasher ---
+      # - type: horizontal-stack
+      #   cards:
+      #     - type: custom:mushroom-entity-card
+      #       entity: switch.aurum_dishwasher_override
+      #       name: Manual Override
+      #       icon: mdi:account-lock-open
+      #       icon_color: blue
+      #     - type: custom:mushroom-entity-card
+      #       entity: switch.aurum_dishwasher_muss_heute
+      #       name: Muss heute
+      #       icon: mdi:calendar-check
+      #       icon_color: orange
+
       # --- Device 3: EV Charger ---
       - type: custom:mushroom-template-card
         primary: EV Charger
@@ -295,6 +316,20 @@ views:
         tap_action:
           action: more-info
           entity: sensor.aurum_ev_charger
+
+      # --- Manual Override & Muss-heute Toggles: EV Charger ---
+      # - type: horizontal-stack
+      #   cards:
+      #     - type: custom:mushroom-entity-card
+      #       entity: switch.aurum_ev_charger_override
+      #       name: Manual Override
+      #       icon: mdi:account-lock-open
+      #       icon_color: blue
+      #     - type: custom:mushroom-entity-card
+      #       entity: switch.aurum_ev_charger_muss_heute
+      #       name: Muss heute
+      #       icon: mdi:calendar-check
+      #       icon_color: orange
 
       ##############################################################
       # STATISTICS

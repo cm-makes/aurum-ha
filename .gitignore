@@ -15,3 +15,6 @@ secrets*
 *.pem
 *.log
 github-recovery-codes.txt
+
+# Local test helpers (not for distribution)
+aurum_test_helpers.yaml

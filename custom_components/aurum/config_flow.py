@@ -40,8 +40,6 @@ from .const import (
     CONF_DEV_DEADLINE,
     CONF_DEV_ESTIMATED_RUNTIME,
     CONF_DEV_INTERRUPTIBLE,
-    CONF_DEV_MANUAL_OVERRIDE_ENTITY,
-    CONF_DEV_MUSS_HEUTE_ENTITY,
     CONF_DEV_RESIDUAL_POWER,
     DEFAULT_BATTERY_CAPACITY_WH,
     DEFAULT_TARGET_SOC,
@@ -66,8 +64,6 @@ _SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor"))
 _SWITCH = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["switch", "input_boolean"]))
-_INPUT_BOOLEAN = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="input_boolean"))
 
 
 def _schema_energy(defaults: dict | None = None) -> vol.Schema:
@@ -188,14 +184,10 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             CONF_DEV_INTERRUPTIBLE,
             default=d.get(CONF_DEV_INTERRUPTIBLE, True),
         ): selector.BooleanSelector(),
-        vol.Optional(
-            CONF_DEV_MANUAL_OVERRIDE_ENTITY,
-            default=d.get(CONF_DEV_MANUAL_OVERRIDE_ENTITY, vol.UNDEFINED),
-        ): _INPUT_BOOLEAN,
-        vol.Optional(
-            CONF_DEV_MUSS_HEUTE_ENTITY,
-            default=d.get(CONF_DEV_MUSS_HEUTE_ENTITY, vol.UNDEFINED),
-        ): _INPUT_BOOLEAN,
+        # Note: manual_override and muss_heute are now auto-created as
+        # switch entities (switch.aurum_{slug}_override / _muss_heute).
+        # Legacy manual_override_entity / muss_heute_entity configs
+        # remain supported as fallback but no longer shown in the UI.
         vol.Optional(
             CONF_DEV_RESIDUAL_POWER,
             default=d.get(CONF_DEV_RESIDUAL_POWER, DEFAULT_DEV_RESIDUAL_POWER),
