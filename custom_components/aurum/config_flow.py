@@ -446,8 +446,28 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
 
         if user_input is not None:
             name = user_input.get("device_to_remove")
+            # Capture device dict before removing it (needed for slug)
+            removed_dev = next((d for d in self._devices if d["name"] == name), None)
             self._devices = [d for d in self._devices if d["name"] != name]
             self._options[CONF_DEVICES] = self._devices
+
+            # Clean up all HA entity registry entries for the removed device
+            if removed_dev:
+                from homeassistant.helpers import entity_registry as er
+                from .modules.helpers import slugify as _slugify
+                slug = removed_dev.get("slug") or _slugify(name)
+                ent_reg = er.async_get(self.hass)
+                entries = er.async_entries_for_config_entry(
+                    ent_reg, self.config_entry.entry_id
+                )
+                for entry in entries:
+                    if f"aurum_{slug}" in entry.entity_id:
+                        _LOGGER.debug(
+                            "AURUM: removing entity %s (device '%s' deleted)",
+                            entry.entity_id, name,
+                        )
+                        ent_reg.async_remove(entry.entity_id)
+
             return self.async_create_entry(title="", data={
                 **self._current, **self._options,
             })
