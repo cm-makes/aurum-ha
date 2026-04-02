@@ -78,8 +78,8 @@ class DeviceManager:
             "power_entity": cfg.get("power_entity"),
 
             # Parameters
-            "nominal_power": cfg.get(
-                "nominal_power", DEFAULT_DEV_NOMINAL_POWER),
+            "nominal_power": max(1, cfg.get(
+                "nominal_power", DEFAULT_DEV_NOMINAL_POWER)),
             "priority": cfg.get("priority", DEFAULT_DEV_PRIORITY),
             "soc_threshold": cfg.get(
                 "soc_threshold", DEFAULT_DEV_SOC_THRESHOLD),
@@ -302,7 +302,10 @@ class DeviceManager:
             for dev in candidates:
                 self._turn_off(dev, now, excess, battery_soc,
                                dev["_pending_off"])
-                freed += self._get_device_power(dev)
+                # Use nominal_power for freed accounting (consistent with
+                # newly_allocated which also uses nominal). Sensor values
+                # can lag or be unavailable and would cause over-shedding.
+                freed += dev["nominal_power"]
                 devices_on -= 1
                 if freed >= deficit:
                     break
@@ -744,7 +747,11 @@ class DeviceManager:
                 second=0, microsecond=0)
 
             if now >= deadline_today:
-                dev["force_started"] = False
+                # Deadline already passed but device not yet started:
+                # force-start immediately (better late than never).
+                # Once force_started=True this won't re-trigger.
+                if not dev.get("force_started"):
+                    return True
                 return False
 
             time_remaining = (deadline_today - now).total_seconds()

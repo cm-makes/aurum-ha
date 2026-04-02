@@ -70,6 +70,9 @@ class AurumCoordinator(DataUpdateCoordinator):
         self._last_weather_learning_hour: int = -1  # hour for hourly learning
         self._last_consumption_update_day: int = -1  # day for 23:55 profile
 
+        # ── Device state cache (used on odd cycles) ────────────────
+        self._cached_device_states: list[dict] = []
+
         # ── CSV loggers (initialized in async_setup) ───────────────
         self.action_csv = None
 
@@ -219,13 +222,13 @@ class AurumCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.warning("Devices error: %s", e)
             else:
-                shared["device_states"] = getattr(
-                    self, '_cached_device_states', [])
+                shared["device_states"] = self._cached_device_states
                 shared["devices_on"] = sum(
-                    1 for d in shared["device_states"]
-                    if d.get("state") in ("on", "running"))
+                    1 for d in self._cached_device_states
+                    if d.get("state") not in ("off", ""))
                 shared["device_power_total"] = sum(
-                    d.get("power", 0) for d in shared["device_states"])
+                    d.get("power", 0)
+                    for d in self._cached_device_states)
 
             # ── Step 4: Update device_states cache ─────────────────
             self.device_states = shared.get("device_states", [])
