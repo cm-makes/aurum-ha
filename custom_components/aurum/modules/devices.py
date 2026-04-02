@@ -369,6 +369,7 @@ class DeviceManager:
                 return None
 
         # SOC below threshold: turn off if deficit persists
+        # Uses per-device debounce_off as tolerance (same semantics).
         if battery_soc >= 0 and battery_soc < soc_threshold:
             if available_excess < -dev["hysteresis_off"]:
                 if dev["_soc_grid_deficit_since"] is None:
@@ -376,13 +377,14 @@ class DeviceManager:
                     return None
                 elapsed = (
                     now - dev["_soc_grid_deficit_since"]).total_seconds()
-                if elapsed < self.soc_grid_deficit_tolerance:
+                if elapsed < dev["debounce_off"]:
                     return None
                 dev["_soc_grid_deficit_since"] = None
                 return "soc_grid_deficit"
             dev["_soc_grid_deficit_since"] = None
 
-        # Excess deficit: turn off if deficit persists
+        # Excess deficit: turn off if deficit persists for debounce_off seconds.
+        # Switch penalty multiplies the threshold to protect relays.
         if available_excess < -dev["hysteresis_off"]:
             penalty = self._get_switch_penalty(dev, now)
             if dev["_excess_deficit_since"] is None:
@@ -391,7 +393,7 @@ class DeviceManager:
 
             elapsed = (
                 now - dev["_excess_deficit_since"]).total_seconds()
-            if elapsed < self.excess_deficit_tolerance * penalty:
+            if elapsed < dev["debounce_off"] * penalty:
                 return None
 
             dev["_excess_deficit_since"] = None
@@ -732,10 +734,14 @@ class DeviceManager:
         if not deadline_str or not est_runtime:
             return False
 
-        # If muss_heute entity is configured, respect it
-        if dev.get("muss_heute_entity"):
-            if not self._is_muss_heute(dev):
-                return False
+        # Deadline force-start only when muss_heute is active.
+        # _is_muss_heute() checks both the native auto-created switch
+        # (switch.aurum_{slug}_muss_heute) and the optional legacy entity.
+        # This guard always runs so a device with only a deadline set
+        # does NOT get force-started every day without the user enabling
+        # muss_heute explicitly.
+        if not self._is_muss_heute(dev):
+            return False
 
         try:
             parts = deadline_str.split(":")
