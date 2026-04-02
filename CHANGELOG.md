@@ -5,6 +5,12 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-04-02
+
+### Fixed
+- **Weather learning never updated** – `update_weather_learning()` read `pv_actual_hour_kwh` and `pv_forecast_hour_kwh` from shared, but neither key was ever written by any module. Weather learning silently returned on every call and `_weather_learned` was never updated. Fixed: `BudgetManager.update()` now computes and sets both keys each cycle using a per-hour cumulative-PV snapshot for the actual delta and the hourly forecast data for the predicted value.
+- **Safety factor never adapted without `target_soc_entity`** – `adapt_safety_factor()` had an early-return guard `if not self.target_soc_entity` that skipped the entire function when `target_soc` was configured as a direct value (the common case for new installations). Safety factor stayed at its default of 0.7 permanently. Fixed: guard replaced with `_get_target_soc()` call that correctly handles all three config sources (number entity, HA entity, direct value). Battery SOC now read from `shared` first (already available) with entity fallback.
+
 ## [1.5.1] - 2026-04-02
 
 ### Fixed

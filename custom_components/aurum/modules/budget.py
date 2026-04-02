@@ -99,6 +99,12 @@ class BudgetManager:
         # ── PV total midnight snapshot (for daily calc) ─────────────
         self._pv_total_midnight = None
 
+        # ── Hourly PV snapshot (for weather learning) ───────────────
+        # Tracks cumulative pv_actual at the start of each hour so
+        # update_weather_learning() can compute the per-hour delta.
+        self._pv_hour_snapshot_kwh = None
+        self._pv_hour_snapshot_h = None   # hour of last snapshot (0-23)
+
         # ── Weather factor EMA ──────────────────────────────────────
         self._weather_factor_ema = None
 
@@ -173,6 +179,27 @@ class BudgetManager:
         shared["pv_actual_today_kwh"] = pv_actual_kwh
         shared["pv_forecast_remaining_kwh"] = remaining_kwh
         shared["safety_factor"] = round(self.budget_safety_factor, 2)
+
+        # ── Hourly weather-learning keys ────────────────────────────
+        # Compute per-hour actual PV delta (cumulative → incremental).
+        # Snapshot is taken once per hour; at the next hour boundary the
+        # delta since last snapshot becomes pv_actual_hour_kwh.
+        now_h = now.hour
+        if pv_actual_kwh is not None:
+            if self._pv_hour_snapshot_h != now_h:
+                # New hour: publish delta from previous snapshot
+                if self._pv_hour_snapshot_kwh is not None:
+                    shared["pv_actual_hour_kwh"] = max(
+                        0.0, pv_actual_kwh - self._pv_hour_snapshot_kwh)
+                self._pv_hour_snapshot_kwh = pv_actual_kwh
+                self._pv_hour_snapshot_h = now_h
+
+        # Hourly forecast for current hour (W → kWh, for learning ratio)
+        if hourly_forecast:
+            fc_this_hour = next(
+                (w for h, w in hourly_forecast if int(h) == now_h), None)
+            if fc_this_hour is not None:
+                shared["pv_forecast_hour_kwh"] = fc_this_hour / 1000.0
 
         # ── SOC trajectory start detection ─────────────────────────
         excess = shared.get("excess_for_devices", 0)
@@ -652,13 +679,17 @@ class BudgetManager:
         Public method, called daily at 17:00 by coordinator.
         1:1 port of HELIOS BudgetManager.adapt_safety_factor()
         """
-        if not self.target_soc_entity:
+        target_soc = self._get_target_soc()
+        if target_soc is None:
             return
 
-        current_soc = get_float(
-            self.hass, self.battery_soc_entity, default=None)
-        target_soc = self._get_target_soc()
-        if current_soc is None or target_soc is None:
+        # Prefer battery_soc from shared (already read this cycle),
+        # fall back to direct entity read for robustness.
+        current_soc = shared.get("battery_soc")
+        if current_soc is None:
+            current_soc = get_float(
+                self.hass, self.battery_soc_entity, default=None)
+        if current_soc is None:
             return
 
         old_factor = self.budget_safety_factor
@@ -842,6 +873,8 @@ class BudgetManager:
         self._trajectory_start_time = None
         self._pv_total_midnight = None
         self._weather_factor_ema = None
+        self._pv_hour_snapshot_kwh = None
+        self._pv_hour_snapshot_h = None
 
     # ══════════════════════════════════════════════════════════════
     #  STATE PERSISTENCE
