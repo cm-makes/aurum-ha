@@ -5,6 +5,18 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-04-02
+
+### Fixed
+- **SOC threshold blocked turn-on completely** – When battery SOC was below a device's threshold, AURUM blocked the device entirely. Now correctly falls back to grid-only excess (PV export to grid), matching HELIOS behavior. Devices can start when PV is exporting even if the battery isn't fully charged.
+- **PV budget not enforced** – `device_budget_w` was calculated by the budget module but never read in device control. Devices could now exceed the daily PV budget. Budget cap is now checked before each turn-on decision.
+- **SD device stuck in WAITING after deadline** – When a startup-detection device hadn't started by its deadline, `_deadline_urgent()` returned `False` instead of triggering an immediate force-start. Device remained in WAITING state until midnight reset.
+- **Shedding over-shed devices** – Priority shedding used actual sensor power (`_get_device_power()`) to track freed watts, but the deficit was calculated using nominal power. Inconsistency could cause more devices to be shed than necessary. Now uses `nominal_power` consistently.
+- **Orphaned entities on startup** – Ghost entities from previously removed devices are now cleaned up automatically on every HA restart, not only during the remove flow.
+- **Coordinator cache uninitialized** – `_cached_device_states` was not set in `__init__`, causing an `AttributeError` on the first odd update cycle before any even cycle had run.
+- **`manual_override` state not counted in odd cycles** – Device count on cached cycles excluded devices in `manual_override` state.
+- **`nominal_power=0` guard** – Added `max(1, ...)` to prevent zero-power devices from corrupting budget and shedding calculations.
+
 ## [1.5.0] - 2026-04-01
 
 ### Added
