@@ -156,6 +156,16 @@ class DeviceManager:
         battery_soc = shared.get("battery_soc", -1)
         battery_mode = shared.get("battery_mode", MODE_NORMAL)
 
+        # Grid-only excess: how much PV is being exported to grid right now.
+        # Used as fallback when battery SOC is below device threshold —
+        # device is allowed to run on genuine export even without full surplus.
+        # Positive = exporting to grid (= usable), negative = importing.
+        grid_excess = -shared.get("grid_power_ema_asym", 0)
+
+        # PV Budget cap: maximum power AURUM may allocate to devices today.
+        # None when budget module is not active.
+        device_budget_w = shared.get("device_budget_w")
+
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
@@ -235,9 +245,33 @@ class DeviceManager:
             else:
                 # EMA excess for turn-on (stable, prevents flapping)
                 turnon_excess = excess - newly_allocated
+                # Grid-only fallback for SOC-below-threshold case
+                turnon_grid = grid_excess - newly_allocated
 
+                # ── Budget cap: don't allocate beyond today's budget ──
+                # Exception: when SOC < threshold the device runs on
+                # grid export anyway (no battery used), so budget doesn't
+                # apply in that case.
+                in_grid_only_mode = (
+                    battery_soc >= 0 and battery_soc < soc_threshold)
+                budget_cap = (
+                    device_budget_w is not None
+                    and not in_grid_only_mode
+                    and newly_allocated + dev["nominal_power"] > device_budget_w
+                )
+                if budget_cap:
+                    if not dev.get("_budget_cap_logged"):
+                        _LOGGER.debug(
+                            "%s: budget cap reached "
+                            "(allocated=%.0fW budget=%.0fW)",
+                            dev["name"], newly_allocated, device_budget_w)
+                        dev["_budget_cap_logged"] = True
+                    dev["excess_since"] = None
+                    continue
+
+                dev["_budget_cap_logged"] = False
                 should_on = self._should_turn_on(
-                    dev, turnon_excess, battery_soc,
+                    dev, turnon_excess, turnon_grid, battery_soc,
                     soc_threshold, now)
 
                 if should_on:
@@ -279,8 +313,8 @@ class DeviceManager:
     #  SHOULD TURN ON / OFF (HELIOS-compatible)
     # ══════════════════════════════════════════════════════════════
 
-    def _should_turn_on(self, dev, available_excess, battery_soc,
-                        soc_threshold, now):
+    def _should_turn_on(self, dev, available_excess, available_grid_excess,
+                        battery_soc, soc_threshold, now):
         """Check if device should be turned on. Returns True/False."""
         # Min off-time: don't turn back on too quickly
         if (dev["last_off"]
@@ -288,16 +322,18 @@ class DeviceManager:
                 < dev["min_off_time"]):
             return False
 
-        # Select effective excess based on SOC
+        # Select effective excess based on SOC (HELIOS-compatible):
+        # Below threshold: device may only run on genuine grid export
+        # (PV surplus going to grid), not on battery discharge.
         if battery_soc >= 0 and battery_soc < soc_threshold:
-            # SOC below threshold: would need grid-only check
-            # Since AURUM doesn't track grid separately, block turn-on
-            return False
+            eff_excess = available_grid_excess
+        else:
+            eff_excess = available_excess
 
         # Enough excess? (nominal + hysteresis_on + residual_power)
         needed = (dev["nominal_power"] + dev["hysteresis_on"]
                   + dev["residual_power"])
-        if available_excess < needed:
+        if eff_excess < needed:
             return False
 
         # Debounce: excess must persist for debounce_on * penalty seconds
