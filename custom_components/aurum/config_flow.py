@@ -21,6 +21,8 @@ from .const import (
     CONF_BATTERY_DISCHARGE_POWER_ENTITY,
     CONF_PV_FORECAST_ENTITY,
     CONF_PV_FORECAST_TODAY_ENTITY,
+    CONF_PV_ACTUAL_TODAY_ENTITY,
+    CONF_WEATHER_ENTITY,
     CONF_BATTERY_CAPACITY_WH,
     CONF_TARGET_SOC,
     CONF_MIN_SOC,
@@ -64,6 +66,8 @@ _LOGGER = logging.getLogger(__name__)
 # ── Selectors ────────────────────────────────────────────────────
 _SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor"))
+_WEATHER = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="weather"))
 _SWITCH = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["switch", "input_boolean"]))
 
@@ -100,6 +104,14 @@ def _schema_energy(defaults: dict | None = None) -> vol.Schema:
             CONF_PV_FORECAST_TODAY_ENTITY,
             default=d.get(CONF_PV_FORECAST_TODAY_ENTITY, vol.UNDEFINED),
         ): _SENSOR,
+        vol.Optional(
+            CONF_PV_ACTUAL_TODAY_ENTITY,
+            default=d.get(CONF_PV_ACTUAL_TODAY_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
+        vol.Optional(
+            CONF_WEATHER_ENTITY,
+            default=d.get(CONF_WEATHER_ENTITY, vol.UNDEFINED),
+        ): _WEATHER,
     })
 
 

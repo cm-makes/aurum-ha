@@ -53,21 +53,11 @@ class BudgetManager:
 
         # ── Entity IDs ──────────────────────────────────────────────
         self.target_soc_entity = config.get("target_soc_entity")
-        self.battery_soc_entity = config.get(
-            "battery_soc_entity",
-            config.get("combined_soc_entity", "sensor.batterie_soc_gesamt"))
-        self.pv_forecast_entity = config.get(
-            "pv_forecast_entity",
-            "sensor.solcast_pv_forecast_prognose_verbleibende_leistung_heute")
-        self.pv_forecast_today_entity = config.get(
-            "pv_forecast_today_entity",
-            "sensor.solcast_pv_forecast_prognose_heute")
-        self.pv_actual_today_entity = config.get(
-            "pv_actual_today_entity",
-            "sensor.evcc_pv_energy")
-        self.dwd_weather_entity = config.get(
-            "dwd_weather_entity",
-            "weather.openweathermap")
+        self.battery_soc_entity = config.get("battery_soc_entity")
+        self.pv_forecast_entity = config.get("pv_forecast_entity")
+        self.pv_forecast_today_entity = config.get("pv_forecast_today_entity")
+        self.pv_actual_today_entity = config.get("pv_actual_today_entity")
+        self.dwd_weather_entity = config.get("weather_entity")
         self.safety_factor_entity = config.get("safety_factor_entity")
 
         # ── Capacity / consumption ──────────────────────────────────

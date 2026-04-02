@@ -15,6 +15,8 @@ CONF_BATTERY_DISCHARGE_POWER_ENTITY = "battery_discharge_power_entity"
 # ── Config keys: PV Forecast / Budget (optional) ─────────────────
 CONF_PV_FORECAST_ENTITY = "pv_forecast_entity"
 CONF_PV_FORECAST_TODAY_ENTITY = "pv_forecast_today_entity"
+CONF_PV_ACTUAL_TODAY_ENTITY = "pv_actual_today_entity"
+CONF_WEATHER_ENTITY = "weather_entity"
 
 # ── Config keys: Battery settings (Step 2) ───────────────────────
 CONF_BATTERY_CAPACITY_WH = "battery_capacity_wh"
