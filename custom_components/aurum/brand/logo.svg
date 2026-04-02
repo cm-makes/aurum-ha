@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 180" width="600" height="180">
+  <defs>
+    <radialGradient id="goldGradL" cx="38%" cy="35%" r="65%">
+      <stop offset="0%"   stop-color="#FFD740"/>
+      <stop offset="60%"  stop-color="#FFB300"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </radialGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#FFB300"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+    <clipPath id="iconClip">
+      <circle cx="90" cy="90" r="85"/>
+    </clipPath>
+  </defs>
+
+  <!-- Icon badge (scaled to 170×170, centred at 90,90) -->
+  <g clip-path="url(#iconClip)">
+    <circle cx="90" cy="90" r="85" fill="url(#goldGradL)"/>
+
+    <!-- Sun rays scaled ~0.332× of 512px version (r1=71, r2=84) -->
+    <!-- 0° -->
+    <line x1="161" y1="90"  x2="174" y2="90"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 45° -->
+    <line x1="140" y1="140" x2="149" y2="149"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 90° -->
+    <line x1="90"  y1="161" x2="90"  y2="174"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 135° -->
+    <line x1="40"  y1="140" x2="31"  y2="149"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 180° -->
+    <line x1="19"  y1="90"  x2="6"   y2="90"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 225° -->
+    <line x1="40"  y1="40"  x2="31"  y2="31"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 270° -->
+    <line x1="90"  y1="19"  x2="90"  y2="6"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+    <!-- 315° -->
+    <line x1="140" y1="40"  x2="149" y2="31"
+          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+
+    <!-- Inner circle -->
+    <circle cx="90" cy="90" r="69" fill="url(#goldGradL)"/>
+    <circle cx="90" cy="90" r="69" fill="none"
+            stroke="white" stroke-width="1" opacity="0.25"/>
+
+    <!-- Letter A -->
+    <text x="90" y="117"
+          font-size="88"
+          font-weight="700"
+          font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+          fill="white"
+          text-anchor="middle"
+          letter-spacing="-3">A</text>
+  </g>
+
+  <!-- Wordmark: AURUM -->
+  <text x="186" y="127"
+        font-size="82"
+        font-weight="700"
+        font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
+        fill="url(#textGrad)"
+        letter-spacing="10">AURUM</text>
+</svg>
