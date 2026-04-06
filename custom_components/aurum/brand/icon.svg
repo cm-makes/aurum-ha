@@ -1,59 +1,197 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <radialGradient id="goldGrad" cx="38%" cy="35%" r="65%">
-      <stop offset="0%"   stop-color="#FFD740"/>
-      <stop offset="60%"  stop-color="#FFB300"/>
-      <stop offset="100%" stop-color="#E65100"/>
-    </radialGradient>
-    <clipPath id="circleClip">
-      <circle cx="256" cy="256" r="256"/>
-    </clipPath>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0C0F1A"/>
+      <stop offset="100%" stop-color="#1A1F35"/>
+    </linearGradient>
+    <linearGradient id="ancientGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4A94C"/>
+      <stop offset="30%" stop-color="#C8960A"/>
+      <stop offset="60%" stop-color="#B8860B"/>
+      <stop offset="100%" stop-color="#8B6914"/>
+    </linearGradient>
+    <linearGradient id="lightGold" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#FFD700"/>
+    </linearGradient>
+    <linearGradient id="darkGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C8860A"/>
+      <stop offset="100%" stop-color="#8B6914"/>
+    </linearGradient>
+    <filter id="aged">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise"/>
+      <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
+      <feBlend in="SourceGraphic" in2="grayNoise" mode="multiply" result="aged"/>
+      <feComposite in="aged" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <filter id="goldGlow">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
   </defs>
 
-  <g clip-path="url(#circleClip)">
-    <!-- Gold background -->
-    <circle cx="256" cy="256" r="256" fill="url(#goldGrad)"/>
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="100" fill="url(#bg)" filter="url(#aged)" opacity="0.5"/>
 
-    <!-- Sun rays: 8 short lines at r=215→252, evenly spaced 45° -->
-    <!-- 0° -->
-    <line x1="471" y1="256" x2="508" y2="256"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 45° -->
-    <line x1="408" y1="408" x2="434" y2="434"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 90° -->
-    <line x1="256" y1="471" x2="256" y2="508"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 135° -->
-    <line x1="104" y1="408" x2="78"  y2="434"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 180° -->
-    <line x1="41"  y1="256" x2="4"   y2="256"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 225° -->
-    <line x1="104" y1="104" x2="78"  y2="78"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 270° -->
-    <line x1="256" y1="41"  x2="256" y2="4"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
-    <!-- 315° -->
-    <line x1="408" y1="104" x2="434" y2="78"
-          stroke="white" stroke-width="20" stroke-linecap="round" opacity="0.88"/>
+  <!-- Maya border -->
+  <path d="M80 24 L432 24 L488 80 L488 432 L432 488 L80 488 L24 432 L24 80 Z"
+        fill="none" stroke="url(#ancientGold)" stroke-width="2.5" opacity="0.3"/>
 
-    <!-- Inner circle covers ray bases, keeps clean badge body -->
-    <circle cx="256" cy="256" r="208" fill="url(#goldGrad)"/>
+  <!-- Corner glyphs -->
+  <path d="M60 100 L60 60 L100 60" fill="none" stroke="url(#ancientGold)" stroke-width="3" opacity="0.45"/>
+  <path d="M68 92 L68 68 L92 68" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M452 100 L452 60 L412 60" fill="none" stroke="url(#ancientGold)" stroke-width="3" opacity="0.45"/>
+  <path d="M444 92 L444 68 L420 68" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M60 412 L60 452 L100 452" fill="none" stroke="url(#ancientGold)" stroke-width="3" opacity="0.45"/>
+  <path d="M68 420 L68 444 L92 444" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.3"/>
+  <path d="M452 412 L452 452 L412 452" fill="none" stroke="url(#ancientGold)" stroke-width="3" opacity="0.45"/>
+  <path d="M444 420 L444 444 L420 444" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.3"/>
 
-    <!-- Subtle inner ring for depth -->
-    <circle cx="256" cy="256" r="208" fill="none"
-            stroke="white" stroke-width="3" opacity="0.25"/>
+  <!-- ═══ K'IN GLYPH: Maya Sun Sign ═══ -->
+  <g transform="translate(256,235)" filter="url(#goldGlow)">
 
-    <!-- Letter A – white, bold, centred -->
-    <text x="256" y="352"
-          font-size="264"
-          font-weight="700"
-          font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-          fill="white"
-          text-anchor="middle"
-          letter-spacing="-8">A</text>
+    <!-- Outer cartouche (rounded Maya glyph block) -->
+    <rect x="-115" y="-115" width="230" height="230" rx="42"
+          fill="none" stroke="url(#ancientGold)" stroke-width="4" opacity="0.35"/>
+
+    <!-- Inner cartouche ring -->
+    <rect x="-100" y="-100" width="200" height="200" rx="36"
+          fill="none" stroke="url(#ancientGold)" stroke-width="2" opacity="0.2"/>
+
+    <!-- K'in center: sun disc -->
+    <circle cx="0" cy="0" r="28" fill="url(#ancientGold)" opacity="0.7"/>
+    <circle cx="0" cy="0" r="28" fill="none" stroke="url(#lightGold)" stroke-width="2" opacity="0.5"/>
+    <!-- Inner ring on sun disc -->
+    <circle cx="0" cy="0" r="18" fill="none" stroke="url(#darkGold)" stroke-width="1.5" opacity="0.4"/>
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="6" fill="url(#lightGold)" opacity="0.9"/>
+
+    <!-- K'in four petals (cardinal directions) -->
+    <!-- Top petal -->
+    <path d="M-18,-32 Q-20,-65 0,-80 Q20,-65 18,-32"
+          fill="url(#ancientGold)" opacity="0.6" stroke="url(#ancientGold)" stroke-width="1.5"/>
+    <path d="M-8,-36 Q-8,-58 0,-68 Q8,-58 8,-36"
+          fill="url(#darkGold)" opacity="0.25"/>
+
+    <!-- Bottom petal -->
+    <path d="M-18,32 Q-20,65 0,80 Q20,65 18,32"
+          fill="url(#ancientGold)" opacity="0.6" stroke="url(#ancientGold)" stroke-width="1.5"/>
+    <path d="M-8,36 Q-8,58 0,68 Q8,58 8,36"
+          fill="url(#darkGold)" opacity="0.25"/>
+
+    <!-- Left petal -->
+    <path d="M-32,-18 Q-65,-20 -80,0 Q-65,20 -32,18"
+          fill="url(#ancientGold)" opacity="0.6" stroke="url(#ancientGold)" stroke-width="1.5"/>
+    <path d="M-36,-8 Q-58,-8 -68,0 Q-58,8 -36,8"
+          fill="url(#darkGold)" opacity="0.25"/>
+
+    <!-- Right petal -->
+    <path d="M32,-18 Q65,-20 80,0 Q65,20 32,18"
+          fill="url(#ancientGold)" opacity="0.6" stroke="url(#ancientGold)" stroke-width="1.5"/>
+    <path d="M36,-8 Q58,-8 68,0 Q58,8 36,8"
+          fill="url(#darkGold)" opacity="0.25"/>
+
+    <!-- Diagonal accents (between petals) -->
+    <circle cx="-52" cy="-52" r="5" fill="url(#ancientGold)" opacity="0.3"/>
+    <circle cx="52" cy="-52" r="5" fill="url(#ancientGold)" opacity="0.3"/>
+    <circle cx="-52" cy="52" r="5" fill="url(#ancientGold)" opacity="0.3"/>
+    <circle cx="52" cy="52" r="5" fill="url(#ancientGold)" opacity="0.3"/>
+
+    <!-- Small dots on petals (authentic detail) -->
+    <circle cx="0" cy="-60" r="3" fill="url(#lightGold)" opacity="0.5"/>
+    <circle cx="0" cy="60" r="3" fill="url(#lightGold)" opacity="0.5"/>
+    <circle cx="-60" cy="0" r="3" fill="url(#lightGold)" opacity="0.5"/>
+    <circle cx="60" cy="0" r="3" fill="url(#lightGold)" opacity="0.5"/>
+
+    <!-- Corner curls (Maya glyph detail) -->
+    <path d="M-85,-85 Q-78,-75 -72,-82" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.25"/>
+    <path d="M85,-85 Q78,-75 72,-82" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.25"/>
+    <path d="M-85,85 Q-78,75 -72,82" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.25"/>
+    <path d="M85,85 Q78,75 72,82" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.25"/>
+
+  </g>
+
+  <!-- ═══ MAYA SYLLABARY: a-u-ru-u-mu as 5 sun rays (72° apart) ═══ -->
+  <!-- Center=256,235 R=160 / rotate each glyph to point outward from center -->
+
+  <!-- Syllable "a" (T743) – top (0°, rotate 0°) -->
+  <g transform="translate(256,75) rotate(0) scale(1.4)" opacity="0.7">
+    <path d="M-8,-10 Q-10,-2 -8,5 Q-3,10 5,10 Q10,8 10,3 Q12,-3 10,-8 Q5,-12 -3,-12 Z"
+          fill="url(#ancientGold)" opacity="0.85"/>
+    <circle cx="3" cy="-3" r="2.5" fill="url(#lightGold)" opacity="0.9"/>
+    <path d="M5,5 Q7,8 10,5" fill="none" stroke="url(#darkGold)" stroke-width="1.2"/>
+  </g>
+
+  <!-- Syllable "u" (T1) – upper-right (72°, rotate 72°) -->
+  <g transform="translate(408,185) rotate(72) scale(1.4)" opacity="0.7">
+    <path d="M-5,-11 Q-11,-5 -11,3 Q-11,10 -5,13 Q3,10 3,3 Q3,-5 -3,-10 Z"
+          fill="url(#ancientGold)" opacity="0.85"/>
+    <circle cx="-4" cy="1" r="2" fill="url(#lightGold)" opacity="0.9"/>
+    <path d="M5,-5 Q10,-3 8,3 Q5,7 3,5" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.7"/>
+  </g>
+
+  <!-- Syllable "ru" (T609) – lower-right (144°, rotate 144°) -->
+  <g transform="translate(362,388) rotate(144) scale(1.4)" opacity="0.7">
+    <path d="M-8,8 Q-10,-3 -3,-10 Q5,-10 8,-5 Q10,0 5,5 Q0,8 -3,3"
+          fill="none" stroke="url(#ancientGold)" stroke-width="2.5" opacity="0.9"/>
+    <circle cx="0" cy="-3" r="2.5" fill="url(#ancientGold)" opacity="0.8"/>
+    <path d="M-8,8 L-10,13" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="-10" cy="13" r="1.5" fill="url(#lightGold)" opacity="0.7"/>
+  </g>
+
+  <!-- Syllable "u" (T1 variant) – lower-left (216°, rotate 216°) -->
+  <g transform="translate(150,388) rotate(216) scale(1.4)" opacity="0.7">
+    <path d="M5,-11 Q11,-5 11,3 Q11,10 5,13 Q-3,10 -3,3 Q-3,-5 3,-10 Z"
+          fill="url(#ancientGold)" opacity="0.85"/>
+    <circle cx="4" cy="1" r="2" fill="url(#lightGold)" opacity="0.9"/>
+    <path d="M-5,-5 Q-10,-3 -8,3 Q-5,7 -3,5" fill="none" stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.7"/>
+  </g>
+
+  <!-- Syllable "mu" (T19) – upper-left (288°, rotate 288°) -->
+  <g transform="translate(104,185) rotate(288) scale(1.4)" opacity="0.7">
+    <path d="M-5,10 Q-10,5 -10,-3 Q-8,-10 0,-12 Q8,-10 10,-5 Q10,3 5,8 Z"
+          fill="url(#ancientGold)" opacity="0.85"/>
+    <path d="M0,-12 Q-3,-17 3,-17 Q5,-15 3,-12" fill="url(#ancientGold)" opacity="0.65"/>
+    <circle cx="0" cy="-4" r="2.2" fill="url(#lightGold)" opacity="0.9"/>
+    <path d="M-4,5 L4,5" fill="none" stroke="url(#darkGold)" stroke-width="1.2"/>
+  </g>
+
+  <!-- Weathering marks -->
+  <g stroke="url(#darkGold)" stroke-width="0.5" opacity="0.12">
+    <line x1="200" y1="180" x2="208" y2="195"/>
+    <line x1="310" y1="260" x2="316" y2="275"/>
+    <line x1="195" y1="290" x2="200" y2="300"/>
+  </g>
+
+  <!-- Separator -->
+  <line x1="130" y1="390" x2="382" y2="390"
+        stroke="url(#ancientGold)" stroke-width="1.5" opacity="0.2"/>
+  <rect x="248" y="387" width="16" height="6" rx="1" fill="url(#ancientGold)" opacity="0.18"/>
+  <rect x="228" y="388" width="8" height="4" rx="0.5" fill="url(#ancientGold)" opacity="0.1"/>
+  <rect x="276" y="388" width="8" height="4" rx="0.5" fill="url(#ancientGold)" opacity="0.1"/>
+
+  <!-- AURUM text -->
+  <text x="256" y="440"
+        font-size="46"
+        font-weight="400"
+        font-family="'Constantia','Perpetua','Garamond','Georgia',serif"
+        fill="url(#ancientGold)"
+        text-anchor="middle"
+        letter-spacing="22">AURUM</text>
+  <text x="257" y="441"
+        font-size="46"
+        font-weight="400"
+        font-family="'Constantia','Perpetua','Garamond','Georgia',serif"
+        fill="url(#darkGold)"
+        text-anchor="middle"
+        letter-spacing="22"
+        opacity="0.3">AURUM</text>
+
+  <!-- Decorative dots -->
+  <g fill="url(#ancientGold)" opacity="0.18">
+    <circle cx="190" cy="460" r="2"/>
+    <circle cx="256" cy="460" r="2.5"/>
+    <circle cx="322" cy="460" r="2"/>
   </g>
 </svg>

@@ -1,69 +1,133 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 180" width="600" height="180">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 180" width="680" height="180">
   <defs>
-    <radialGradient id="goldGradL" cx="38%" cy="35%" r="65%">
-      <stop offset="0%"   stop-color="#FFD740"/>
-      <stop offset="60%"  stop-color="#FFB300"/>
-      <stop offset="100%" stop-color="#E65100"/>
-    </radialGradient>
-    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%"   stop-color="#FFB300"/>
-      <stop offset="100%" stop-color="#E65100"/>
+    <linearGradient id="bgL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0C0F1A"/>
+      <stop offset="100%" stop-color="#1A1F35"/>
     </linearGradient>
-    <clipPath id="iconClip">
-      <circle cx="90" cy="90" r="85"/>
-    </clipPath>
+    <linearGradient id="goldL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4A94C"/>
+      <stop offset="30%" stop-color="#C8960A"/>
+      <stop offset="60%" stop-color="#B8860B"/>
+      <stop offset="100%" stop-color="#8B6914"/>
+    </linearGradient>
+    <linearGradient id="lightL" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#FFD700"/>
+    </linearGradient>
+    <linearGradient id="darkL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C8860A"/>
+      <stop offset="100%" stop-color="#8B6914"/>
+    </linearGradient>
+    <filter id="agedL">
+      <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" result="noise"/>
+      <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
+      <feBlend in="SourceGraphic" in2="grayNoise" mode="multiply" result="aged"/>
+      <feComposite in="aged" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <filter id="glowL">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
   </defs>
 
-  <!-- Icon badge (scaled to 170×170, centred at 90,90) -->
-  <g clip-path="url(#iconClip)">
-    <circle cx="90" cy="90" r="85" fill="url(#goldGradL)"/>
+  <!-- Icon badge -->
+  <rect x="5" y="5" width="170" height="170" rx="34" fill="url(#bgL)"/>
+  <rect x="5" y="5" width="170" height="170" rx="34" fill="url(#bgL)" filter="url(#agedL)" opacity="0.5"/>
 
-    <!-- Sun rays scaled ~0.332× of 512px version (r1=71, r2=84) -->
-    <!-- 0° -->
-    <line x1="161" y1="90"  x2="174" y2="90"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 45° -->
-    <line x1="140" y1="140" x2="149" y2="149"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 90° -->
-    <line x1="90"  y1="161" x2="90"  y2="174"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 135° -->
-    <line x1="40"  y1="140" x2="31"  y2="149"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 180° -->
-    <line x1="19"  y1="90"  x2="6"   y2="90"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 225° -->
-    <line x1="40"  y1="40"  x2="31"  y2="31"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 270° -->
-    <line x1="90"  y1="19"  x2="90"  y2="6"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
-    <!-- 315° -->
-    <line x1="140" y1="40"  x2="149" y2="31"
-          stroke="white" stroke-width="7" stroke-linecap="round" opacity="0.88"/>
+  <!-- Maya frame -->
+  <path d="M28 12 L152 12 L170 30 L170 152 L152 170 L28 170 L10 152 L10 30 Z"
+        fill="none" stroke="url(#goldL)" stroke-width="1.2" opacity="0.25"/>
+  <path d="M18 36 L18 18 L36 18" fill="none" stroke="url(#goldL)" stroke-width="1.5" opacity="0.4"/>
+  <path d="M162 36 L162 18 L144 18" fill="none" stroke="url(#goldL)" stroke-width="1.5" opacity="0.4"/>
+  <path d="M18 144 L18 162 L36 162" fill="none" stroke="url(#goldL)" stroke-width="1.5" opacity="0.4"/>
+  <path d="M162 144 L162 162 L144 162" fill="none" stroke="url(#goldL)" stroke-width="1.5" opacity="0.4"/>
 
-    <!-- Inner circle -->
-    <circle cx="90" cy="90" r="69" fill="url(#goldGradL)"/>
-    <circle cx="90" cy="90" r="69" fill="none"
-            stroke="white" stroke-width="1" opacity="0.25"/>
+  <!-- K'in glyph (scaled) -->
+  <g transform="translate(90,78)" filter="url(#glowL)">
+    <!-- Cartouche -->
+    <rect x="-42" y="-42" width="84" height="84" rx="16"
+          fill="none" stroke="url(#goldL)" stroke-width="1.5" opacity="0.3"/>
 
-    <!-- Letter A -->
-    <text x="90" y="117"
-          font-size="88"
-          font-weight="700"
-          font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-          fill="white"
-          text-anchor="middle"
-          letter-spacing="-3">A</text>
+    <!-- Sun disc -->
+    <circle cx="0" cy="0" r="10" fill="url(#goldL)" opacity="0.65"/>
+    <circle cx="0" cy="0" r="10" fill="none" stroke="url(#lightL)" stroke-width="0.8" opacity="0.4"/>
+    <circle cx="0" cy="0" r="6.5" fill="none" stroke="url(#darkL)" stroke-width="0.6" opacity="0.35"/>
+    <circle cx="0" cy="0" r="2.2" fill="url(#lightL)" opacity="0.85"/>
+
+    <!-- Four petals -->
+    <path d="M-6.5,-12 Q-7,-24 0,-30 Q7,-24 6.5,-12"
+          fill="url(#goldL)" opacity="0.55" stroke="url(#goldL)" stroke-width="0.6"/>
+    <path d="M-6.5,12 Q-7,24 0,30 Q7,24 6.5,12"
+          fill="url(#goldL)" opacity="0.55" stroke="url(#goldL)" stroke-width="0.6"/>
+    <path d="M-12,-6.5 Q-24,-7 -30,0 Q-24,7 -12,6.5"
+          fill="url(#goldL)" opacity="0.55" stroke="url(#goldL)" stroke-width="0.6"/>
+    <path d="M12,-6.5 Q24,-7 30,0 Q24,7 12,6.5"
+          fill="url(#goldL)" opacity="0.55" stroke="url(#goldL)" stroke-width="0.6"/>
+
+    <!-- Diagonal dots -->
+    <circle cx="-19" cy="-19" r="2" fill="url(#goldL)" opacity="0.25"/>
+    <circle cx="19" cy="-19" r="2" fill="url(#goldL)" opacity="0.25"/>
+    <circle cx="-19" cy="19" r="2" fill="url(#goldL)" opacity="0.25"/>
+    <circle cx="19" cy="19" r="2" fill="url(#goldL)" opacity="0.25"/>
+
+    <!-- Petal dots -->
+    <circle cx="0" cy="-22" r="1.2" fill="url(#lightL)" opacity="0.45"/>
+    <circle cx="0" cy="22" r="1.2" fill="url(#lightL)" opacity="0.45"/>
+    <circle cx="-22" cy="0" r="1.2" fill="url(#lightL)" opacity="0.45"/>
+    <circle cx="22" cy="0" r="1.2" fill="url(#lightL)" opacity="0.45"/>
   </g>
 
-  <!-- Wordmark: AURUM -->
-  <text x="186" y="127"
-        font-size="82"
-        font-weight="700"
-        font-family="system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"
-        fill="url(#textGrad)"
-        letter-spacing="10">AURUM</text>
+  <!-- AURUM under icon -->
+  <text x="90" y="152"
+        font-size="14"
+        font-weight="400"
+        font-family="'Constantia','Perpetua','Garamond','Georgia',serif"
+        fill="url(#goldL)"
+        text-anchor="middle"
+        letter-spacing="6"
+        opacity="0.5">AURUM</text>
+
+  <!-- ═══ WORDMARK ═══ -->
+
+  <!-- Large AURUM -->
+  <text x="210" y="108"
+        font-size="76"
+        font-weight="400"
+        font-family="'Constantia','Perpetua','Garamond','Georgia',serif"
+        fill="url(#goldL)"
+        letter-spacing="14">AURUM</text>
+  <!-- Chiseled shadow -->
+  <text x="211" y="109"
+        font-size="76"
+        font-weight="400"
+        font-family="'Constantia','Perpetua','Garamond','Georgia',serif"
+        fill="url(#darkL)"
+        letter-spacing="14"
+        opacity="0.25">AURUM</text>
+
+  <!-- Maya decorative line -->
+  <line x1="210" y1="120" x2="620" y2="120"
+        stroke="url(#goldL)" stroke-width="1.5" opacity="0.18"/>
+  <g fill="url(#goldL)" opacity="0.12">
+    <rect x="400" y="117" width="12" height="5" rx="1"/>
+    <rect x="388" y="119" width="5" height="3" rx="0.5"/>
+    <rect x="416" y="119" width="5" height="3" rx="0.5"/>
+  </g>
+
+  <!-- Tagline -->
+  <text x="415" y="146"
+        font-size="11"
+        font-weight="400"
+        font-family="'Constantia','Perpetua','Garamond','Georgia',serif"
+        fill="url(#goldL)"
+        text-anchor="middle"
+        letter-spacing="5"
+        opacity="0.3">SOLAR SURPLUS OPTIMIZER</text>
+
+  <!-- Dots -->
+  <g fill="url(#goldL)" opacity="0.12">
+    <circle cx="360" cy="160" r="1.5"/>
+    <circle cx="415" cy="160" r="1.5"/>
+    <circle cx="470" cy="160" r="1.5"/>
+  </g>
 </svg>
