@@ -1,8 +1,14 @@
-## AURUM – Example Dashboard (v1.5.2)
-## Copy this into a new Dashboard via Settings → Dashboards → Add Dashboard → Raw config editor
+## AURUM – Beispiel-Dashboard (v1.6.0)
+## Kopiere den Inhalt in ein neues Dashboard:
+##   Einstellungen → Dashboards → Dashboard hinzufügen → ⋮ → Roher Konfigurations-Editor
 ##
-## Requirements: Mushroom Cards (installable via HACS)
-## https://github.com/piitaya/lovelace-mushroom
+## Voraussetzung: Mushroom Cards (kostenlos über HACS installierbar)
+##   https://github.com/piitaya/lovelace-mushroom
+##
+## Geräte anpassen:
+##   Ersetze "waschmaschine" und "heizen_mobil" durch deine Geräteslugs.
+##   Den Slug findest du unter Einstellungen → AURUM → Konfigurieren → Gerät bearbeiten.
+##   Dupliziere den Gerät-Block (vertical-stack) für jedes weitere Gerät.
 
 title: AURUM Solar
 views:
@@ -11,72 +17,121 @@ views:
     path: aurum
     cards:
 
-      ##############################################################
-      # HEADER
-      ##############################################################
+      # ══════════════════════════════════════════════════════
+      # ÜBERSCHRIFT
+      # ══════════════════════════════════════════════════════
       - type: custom:mushroom-title-card
-        title: AURUM Solar Optimizer
-        subtitle: PV Surplus Distribution
+        title: ☀️ AURUM
+        subtitle: Automatische Solar-Nutzung
 
-      ##############################################################
-      # STATUS CHIPS ROW
-      ##############################################################
+      # ══════════════════════════════════════════════════════
+      # ENERGIE-ÜBERSICHT
+      # Zeigt auf einen Blick: PV · Netz · Akku · Haus
+      # ══════════════════════════════════════════════════════
       - type: custom:mushroom-chips-card
         chips:
-          - type: entity
-            entity: sensor.aurum_battery_mode
-            icon_color: >
-              {{ 'green' if is_state('sensor.aurum_battery_mode', 'normal')
-                 else 'orange' if is_state('sensor.aurum_battery_mode', 'low_soc')
-                 else 'red' }}
-          - type: entity
-            entity: sensor.aurum_excess_power
-            icon: mdi:solar-power-variant
-            icon_color: amber
-          - type: entity
-            entity: sensor.aurum_battery_soc
-            icon: mdi:battery
-            icon_color: >
-              {% set soc = states('sensor.aurum_battery_soc') | float(0) %}
-              {{ 'green' if soc >= 80 else 'orange' if soc >= 30 else 'red' }}
-          - type: entity
-            entity: sensor.aurum_forecast_remaining
-            icon: mdi:solar-power-variant-outline
-            icon_color: >
-              {% set kwh = states('sensor.aurum_forecast_remaining') | float(0) %}
-              {{ 'green' if kwh >= 5 else 'orange' if kwh >= 1 else 'grey' }}
-
-      ##############################################################
-      # ENERGY OVERVIEW (Grid, PV, House, Battery)
-      ##############################################################
-      - type: custom:mushroom-title-card
-        title: Energy Overview
-
-      - type: horizontal-stack
-        cards:
-          - type: custom:mushroom-entity-card
-            entity: sensor.aurum_pv_power
-            name: PV
+          # PV-Produktion
+          - type: template
             icon: mdi:solar-panel-large
             icon_color: amber
+            content: "{{ states('sensor.aurum_pv_power') | int(0) }} W"
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_pv_power
 
-          - type: custom:mushroom-entity-card
-            entity: sensor.aurum_grid_power
-            name: Grid
+          # Netz: grün = Einspeisung ↑, rot = Bezug ↓
+          - type: template
             icon: mdi:transmission-tower
             icon_color: >
-              {% set grid = states('sensor.aurum_grid_power') | float(0) %}
-              {{ 'red' if grid > 0 else 'green' }}
+              {% if states('sensor.aurum_grid_power') | float(0) > 50 %}red
+              {% elif states('sensor.aurum_grid_power') | float(0) < -50 %}green
+              {% else %}grey{% endif %}
+            content: >
+              {% set g = states('sensor.aurum_grid_power') | float(0) %}
+              {% if g > 50 %}↓ {{ g | int }} W
+              {% elif g < -50 %}↑ {{ (g | abs) | int }} W
+              {% else %}≈ 0 W{% endif %}
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_grid_power
 
-          - type: custom:mushroom-entity-card
-            entity: sensor.aurum_house_consumption
-            name: House
+          # Akku-Ladestand
+          - type: template
+            icon: >
+              {% set soc = states('sensor.aurum_battery_soc') | float(-1) %}
+              {% if soc < 0 %}mdi:battery-unknown
+              {% elif soc > 90 %}mdi:battery
+              {% elif soc > 70 %}mdi:battery-80
+              {% elif soc > 50 %}mdi:battery-60
+              {% elif soc > 30 %}mdi:battery-40
+              {% else %}mdi:battery-20{% endif %}
+            icon_color: >
+              {% set soc = states('sensor.aurum_battery_soc') | float(-1) %}
+              {{ 'green' if soc >= 80 else 'orange' if soc >= 30 else 'red' if soc >= 0 else 'grey' }}
+            content: >
+              {% set soc = states('sensor.aurum_battery_soc') | float(-1) %}
+              {{ soc | int ~ ' %' if soc >= 0 else '–' }}
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_battery_soc
+
+          # Hausverbrauch
+          - type: template
             icon: mdi:home-lightning-bolt
             icon_color: blue
+            content: "{{ states('sensor.aurum_house_consumption') | int(0) }} W"
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_house_consumption
 
-      ##############################################################
-      # BATTERY SECTION (only shows when battery is configured)
-      ##############################################################
+      # ══════════════════════════════════════════════════════
+      # AURUM STATUS
+      # Zeigt was AURUM gerade macht und warum
+      # ══════════════════════════════════════════════════════
+      - type: custom:mushroom-template-card
+        primary: >
+          {% set excess = states('sensor.aurum_excess_power') | float(0) %}
+          {% if excess >= 500 %}Guter Überschuss – {{ excess | int }} W für Geräte frei
+          {% elif excess >= 100 %}Wenig Überschuss – {{ excess | int }} W frei
+          {% elif excess >= 0 %}Kaum Überschuss – Geräte warten
+          {% else %}Bezug aus dem Netz – kein Überschuss
+          {% endif %}
+        secondary: >
+          {% set mode = states('sensor.aurum_battery_mode') %}
+          {% if mode == 'normal' %}🔋 Akku OK
+          {% elif mode == 'low_soc' %}⚠️ Akku niedrig – nur Netzüberschuss für Geräte
+          {% elif mode == 'charging' %}⚡ Akku lädt – keine Geräte
+          {% else %}–{% endif %}
+          {% set kwh = states('sensor.aurum_forecast_remaining') | float(-1) %}
+          {% if kwh >= 0 %} · Prognose heute noch: {{ kwh | round(1) }} kWh{% endif %}
+        icon: mdi:sun-wireless
+        icon_color: >
+          {% set excess = states('sensor.aurum_excess_power') | float(0) %}
+          {{ 'amber' if excess >= 200 else 'blue' if excess >= 0 else 'grey' }}
+        fill_container: false
+        tap_action:
+          action: none
+
+      # ══════════════════════════════════════════════════════
+      # AKKU-LADESTAND (nur sichtbar wenn Akku konfiguriert)
+      # ══════════════════════════════════════════════════════
+      - type: conditional
+        conditions:
+          - condition: numeric_state
+            entity: sensor.aurum_battery_soc
+            above: -1
+        card:
+          type: gauge
+          entity: sensor.aurum_battery_soc
+          name: Akku-Ladestand
+          min: 0
+          max: 100
+          needle: true
+          severity:
+            green: 80
+            yellow: 30
+            red: 0
+
       - type: conditional
         conditions:
           - condition: numeric_state
@@ -85,233 +140,161 @@ views:
         card:
           type: horizontal-stack
           cards:
-            - type: gauge
-              entity: sensor.aurum_battery_soc
-              name: Battery SOC
-              min: 0
-              max: 100
-              needle: true
-              severity:
-                green: 60
-                yellow: 30
-                red: 0
+            - type: custom:mushroom-number-card
+              entity: number.aurum_target_soc
+              name: Ziel-Ladestand
+              icon: mdi:battery-charging-80
+              icon_color: green
+              display_mode: slider
+              fill_container: true
+            - type: custom:mushroom-number-card
+              entity: number.aurum_min_soc
+              name: Mindest-Ladestand
+              icon: mdi:battery-alert
+              icon_color: orange
+              display_mode: slider
+              fill_container: true
 
-            - type: entities
-              entities:
-                - entity: sensor.aurum_battery_charge
-                  name: Charging
-                  icon: mdi:battery-charging
-                - entity: sensor.aurum_battery_discharge
-                  name: Discharging
-                  icon: mdi:battery-arrow-down
-              title: Battery Power
-
-      ##############################################################
-      # SOC THRESHOLDS (Target & Min)
-      ##############################################################
-      - type: horizontal-stack
-        cards:
-          - type: custom:mushroom-number-card
-            entity: number.aurum_target_soc
-            name: Target SOC
-            icon: mdi:battery-charging-80
-            icon_color: green
-            display_mode: slider
-            fill_container: true
-
-          - type: custom:mushroom-number-card
-            entity: number.aurum_min_soc
-            name: Min SOC
-            icon: mdi:battery-alert
-            icon_color: orange
-            display_mode: slider
-            fill_container: true
-
-      ##############################################################
-      # EXCESS POWER GAUGE
-      ##############################################################
-      - type: gauge
-        entity: sensor.aurum_excess_power
-        name: Available Surplus
-        unit: W
-        min: -2000
-        max: 5000
-        needle: true
-        severity:
-          green: 200
-          yellow: 0
-          red: -2000
-
-      ##############################################################
-      # PV FORECAST & BUDGET (only shows when forecast is configured)
-      ##############################################################
-      - type: conditional
-        conditions:
-          - condition: state
-            entity: sensor.aurum_forecast_remaining
-            state_not: unavailable
-        card:
-          type: custom:mushroom-title-card
-          title: PV Forecast & Budget
-
-      - type: conditional
-        conditions:
-          - condition: state
-            entity: sensor.aurum_forecast_remaining
-            state_not: unavailable
-        card:
-          type: horizontal-stack
-          cards:
-            - type: custom:mushroom-entity-card
-              entity: sensor.aurum_forecast_remaining
-              name: Forecast Today
-              icon: mdi:solar-power-variant-outline
-              icon_color: >
-                {% set kwh = states('sensor.aurum_forecast_remaining') | float(0) %}
-                {{ 'green' if kwh >= 5 else 'orange' if kwh >= 1 else 'grey' }}
-
-            - type: custom:mushroom-entity-card
-              entity: sensor.aurum_budget
-              name: Device Budget
-              icon: mdi:cash-clock
-              icon_color: >
-                {% set bw = states('sensor.aurum_budget') %}
-                {{ 'green' if bw == 'unavailable' or bw | float(0) > 500
-                   else 'orange' if bw | float(0) > 0
-                   else 'red' }}
-
-            - type: custom:mushroom-entity-card
-              entity: sensor.aurum_safety_factor
-              name: Safety Factor
-              icon: mdi:shield-check
-              icon_color: teal
-
-      ##############################################################
-      # DEVICES SECTION HEADER
-      ##############################################################
-      - type: custom:mushroom-title-card
-        title: Devices
-        subtitle: Managed by AURUM
-
-      ##############################################################
-      # DEVICE CARDS
-      # Duplicate this block for each of your devices.
-      # Replace "washing_machine" with your device slug (lowercase, underscores).
+      # ══════════════════════════════════════════════════════
+      # GERÄTE
+      # Pro Gerät: Status, Leistung, Laufzeit + Steuerung
       #
-      # MANUAL OVERRIDE & MUSS HEUTE:
-      # AURUM auto-creates switch.aurum_{slug}_override and
-      # switch.aurum_{slug}_muss_heute for every device — no YAML needed.
-      # The toggle cards below are included for each device.
-      ##############################################################
-
-      # --- Device 1: Waschmaschine ---
-      - type: custom:mushroom-template-card
-        primary: Waschmaschine
-        secondary: >
-          {% set s = states('sensor.aurum_waschmaschine') %}
-          {% if s == 'running' %}Läuft (PV-Überschuss)
-          {% elif s == 'waiting' %}Wartet auf PV-Überschuss
-          {% elif s == 'standby' %}Bereit
-          {% elif s == 'on' %}Eingeschaltet
-          {% elif s == 'manual_override' %}Manuell
-          {% elif s == 'done' %}Fertig
-          {% else %}Aus
-          {% endif %}
-          — {{ states('sensor.aurum_waschmaschine_power') | int(0) }} W
-          — {{ states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int }} min heute
-        icon: mdi:washing-machine
-        icon_color: >
-          {% set s = states('sensor.aurum_waschmaschine') %}
-          {{ 'green' if s in ('on', 'running')
-             else 'amber' if s == 'waiting'
-             else 'blue' if s == 'manual_override'
-             else 'teal' if s == 'standby'
-             else 'grey' }}
-        badge_icon: >
-          {% set s = states('sensor.aurum_waschmaschine') %}
-          {{ 'mdi:account' if s == 'manual_override'
-             else 'mdi:check-circle' if s in ('on', 'running')
-             else 'mdi:clock-outline' if s == 'waiting'
-             else 'mdi:pause-circle' }}
-        badge_color: >
-          {% set s = states('sensor.aurum_waschmaschine') %}
-          {{ 'blue' if s == 'manual_override'
-             else 'green' if s in ('on', 'running')
-             else 'amber' if s == 'waiting'
-             else 'grey' }}
-        tap_action:
-          action: more-info
-          entity: sensor.aurum_waschmaschine
-
-      # --- Manual Override & Muss-heute Toggles: Waschmaschine ---
-      - type: horizontal-stack
-        cards:
-          - type: custom:mushroom-entity-card
-            entity: switch.aurum_waschmaschine_override
-            name: Manual Override
-            icon: mdi:account-lock-open
-            icon_color: blue
-          - type: custom:mushroom-entity-card
-            entity: switch.aurum_waschmaschine_muss_heute
-            name: Muss heute
-            icon: mdi:calendar-check
-            icon_color: orange
-
-      # --- Device 2: Heizen Mobil ---
-      - type: custom:mushroom-template-card
-        primary: Heizen Mobil
-        secondary: >
-          {% set s = states('sensor.aurum_heizen_mobil') %}
-          {% if s == 'running' %}Läuft (PV-Überschuss)
-          {% elif s == 'waiting' %}Wartet auf PV-Überschuss
-          {% elif s == 'on' %}Eingeschaltet
-          {% elif s == 'manual_override' %}Manuell
-          {% else %}Aus
-          {% endif %}
-          — {{ states('sensor.aurum_heizen_mobil_power') | int(0) }} W
-          — {{ states('sensor.aurum_heizen_mobil_runtime') | float(0) | round(0) | int }} min heute
-        icon: mdi:radiator
-        icon_color: >
-          {% set s = states('sensor.aurum_heizen_mobil') %}
-          {{ 'orange' if s in ('on', 'running')
-             else 'amber' if s == 'waiting'
-             else 'blue' if s == 'manual_override'
-             else 'grey' }}
-        badge_icon: >
-          {% set s = states('sensor.aurum_heizen_mobil') %}
-          {{ 'mdi:account' if s == 'manual_override'
-             else 'mdi:check-circle' if s in ('on', 'running')
-             else 'mdi:clock-outline' if s == 'waiting'
-             else 'mdi:pause-circle' }}
-        badge_color: >
-          {% set s = states('sensor.aurum_heizen_mobil') %}
-          {{ 'blue' if s == 'manual_override'
-             else 'orange' if s in ('on', 'running')
-             else 'amber' if s == 'waiting'
-             else 'grey' }}
-        tap_action:
-          action: more-info
-          entity: sensor.aurum_heizen_mobil
-
-      # --- Manual Override & Muss-heute Toggles: Heizen Mobil ---
-      - type: horizontal-stack
-        cards:
-          - type: custom:mushroom-entity-card
-            entity: switch.aurum_heizen_mobil_override
-            name: Manual Override
-            icon: mdi:account-lock-open
-            icon_color: blue
-          - type: custom:mushroom-entity-card
-            entity: switch.aurum_heizen_mobil_muss_heute
-            name: Muss heute
-            icon: mdi:calendar-check
-            icon_color: orange
-
-      ##############################################################
-      # STATISTICS
-      ##############################################################
+      # Farb-Bedeutung:
+      #   Grün/Orange = läuft mit PV-Strom
+      #   Amber/Gelb  = wartet auf genug Überschuss
+      #   Blau        = manuell eingeschaltet
+      #   Grau        = aus
+      # ══════════════════════════════════════════════════════
       - type: custom:mushroom-title-card
-        title: Statistics
+        title: Geräte
+        subtitle: Automatisch gesteuert von AURUM
+
+      # ──────────────────────────────────────────────────────
+      # Gerät: Waschmaschine
+      # Slug: waschmaschine | Startup Detection aktiv
+      # ──────────────────────────────────────────────────────
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Waschmaschine
+            secondary: >
+              {% set s = states('sensor.aurum_waschmaschine') %}
+              {% set p = states('sensor.aurum_waschmaschine_power') | int(0) %}
+              {% set r = states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int %}
+              {% if s == 'running' %}
+                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min heute
+              {% elif s == 'waiting' %}
+                ⏳ Wartet auf PV-Überschuss · {{ r }} min heute
+              {% elif s == 'standby' %}
+                ◉ Bereit – erkennt automatisch wenn Programm startet
+              {% elif s == 'on' %}
+                ✓ Eingeschaltet · {{ p }} W · {{ r }} min heute
+              {% elif s == 'manual_override' %}
+                ✋ Manuell eingeschaltet · {{ p }} W
+              {% elif s == 'done' %}
+                ✅ Programm fertig · {{ r }} min heute gelaufen
+              {% else %}
+                ✗ Aus · {{ r }} min heute
+              {% endif %}
+            icon: mdi:washing-machine
+            icon_color: >
+              {% set s = states('sensor.aurum_waschmaschine') %}
+              {{ 'green' if s in ('on', 'running')
+                 else 'amber' if s in ('waiting', 'standby')
+                 else 'blue' if s == 'manual_override'
+                 else 'teal' if s == 'done'
+                 else 'grey' }}
+            badge_icon: >
+              {% set s = states('sensor.aurum_waschmaschine') %}
+              {{ 'mdi:check-circle' if s in ('on', 'running')
+                 else 'mdi:clock-outline' if s == 'waiting'
+                 else 'mdi:eye-outline' if s == 'standby'
+                 else 'mdi:account' if s == 'manual_override'
+                 else 'mdi:check-all' if s == 'done'
+                 else 'mdi:pause-circle' }}
+            badge_color: >
+              {% set s = states('sensor.aurum_waschmaschine') %}
+              {{ 'green' if s in ('on', 'running')
+                 else 'amber' if s in ('waiting', 'standby')
+                 else 'blue' if s == 'manual_override'
+                 else 'teal' if s == 'done'
+                 else 'grey' }}
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_waschmaschine
+
+          # Steuerung: Manuell + Muss heute
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: switch.aurum_waschmaschine_override
+                name: Manuell
+                icon: mdi:account-switch
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: switch.aurum_waschmaschine_muss_heute
+                name: Muss heute
+                icon: mdi:calendar-clock
+                icon_color: orange
+
+      # ──────────────────────────────────────────────────────
+      # Gerät: Heizen Mobil
+      # Slug: heizen_mobil | Normales Gerät (unterbrechbar)
+      # ──────────────────────────────────────────────────────
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Heizen Mobil
+            secondary: >
+              {% set s = states('sensor.aurum_heizen_mobil') %}
+              {% set p = states('sensor.aurum_heizen_mobil_power') | int(0) %}
+              {% set r = states('sensor.aurum_heizen_mobil_runtime') | float(0) | round(0) | int %}
+              {% if s in ('on', 'running') %}
+                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min heute
+              {% elif s == 'manual_override' %}
+                ✋ Manuell eingeschaltet · {{ p }} W
+              {% else %}
+                ✗ Aus · {{ r }} min heute
+              {% endif %}
+            icon: mdi:radiator
+            icon_color: >
+              {% set s = states('sensor.aurum_heizen_mobil') %}
+              {{ 'orange' if s in ('on', 'running')
+                 else 'blue' if s == 'manual_override'
+                 else 'grey' }}
+            badge_icon: >
+              {% set s = states('sensor.aurum_heizen_mobil') %}
+              {{ 'mdi:check-circle' if s in ('on', 'running')
+                 else 'mdi:account' if s == 'manual_override'
+                 else 'mdi:pause-circle' }}
+            badge_color: >
+              {% set s = states('sensor.aurum_heizen_mobil') %}
+              {{ 'orange' if s in ('on', 'running')
+                 else 'blue' if s == 'manual_override'
+                 else 'grey' }}
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_heizen_mobil
+
+          # Steuerung: Manuell + Muss heute
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: switch.aurum_heizen_mobil_override
+                name: Manuell
+                icon: mdi:account-switch
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: switch.aurum_heizen_mobil_muss_heute
+                name: Muss heute
+                icon: mdi:calendar-clock
+                icon_color: orange
+
+      # ══════════════════════════════════════════════════════
+      # LAUFZEIT HEUTE
+      # ══════════════════════════════════════════════════════
+      - type: custom:mushroom-title-card
+        title: Laufzeit heute
 
       - type: horizontal-stack
         cards:
@@ -321,30 +304,40 @@ views:
               calendar:
                 period: day
             stat_type: max
-            name: Waschmaschine today
+            name: Waschmaschine
           - type: statistic
             entity: sensor.aurum_heizen_mobil_runtime
             period:
               calendar:
                 period: day
             stat_type: max
-            name: Heizen Mobil today
+            name: Heizen Mobil
 
-      ##############################################################
-      # DIAGNOSTICS (collapsed by default)
-      ##############################################################
+      # ══════════════════════════════════════════════════════
+      # DIAGNOSE
+      # Für Fehlersuche und Feinabstimmung
+      # ══════════════════════════════════════════════════════
       - type: custom:mushroom-title-card
-        title: Diagnostics
+        title: Diagnose
 
       - type: entities
         entities:
-          - entity: sensor.aurum_cycle
-            name: Update Cycle
-            icon: mdi:counter
-          - entity: sensor.aurum_safety_factor
-            name: Safety Factor
-            icon: mdi:shield-check
+          - entity: sensor.aurum_excess_power
+            name: Überschuss für Geräte
+            icon: mdi:lightning-bolt
+          - entity: sensor.aurum_battery_mode
+            name: Akku-Modus
+            icon: mdi:battery-heart
+          - entity: sensor.aurum_forecast_remaining
+            name: PV-Prognose heute noch
+            icon: mdi:solar-power-variant-outline
           - entity: sensor.aurum_budget
-            name: Device Budget
+            name: Geräte-Budget
             icon: mdi:cash-clock
-        title: AURUM Internals
+          - entity: sensor.aurum_safety_factor
+            name: Prognose-Korrekturfaktor
+            icon: mdi:shield-check
+          - entity: sensor.aurum_cycle
+            name: Update-Zyklus
+            icon: mdi:counter
+        show_header_toggle: false
