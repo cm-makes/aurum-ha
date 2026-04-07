@@ -5,6 +5,11 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.7] - 2026-04-07
+
+### Fixed
+- **SD device shows "off" instead of "waiting" when Shelly is off** – `_publish_device_states` only used `sd_state` when the physical switch was ON. In WAITING state the Shelly is intentionally OFF, so the state fell back to "off". SD devices now always use `sd_state` as the authoritative state regardless of physical switch position.
+
 ## [1.5.6] - 2026-04-07
 
 ### Fixed

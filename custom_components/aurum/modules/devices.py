@@ -792,14 +792,19 @@ class DeviceManager:
         for dev in self.devices:
             is_on = self._is_device_on(dev)
             power = self._get_device_power(dev) if is_on else 0
-            state = "off"
-            if is_on:
-                if dev["startup_detection"] and dev["sd_state"]:
-                    state = dev["sd_state"]
-                elif not dev["managed_on"]:
+            # SD devices: always use sd_state as authoritative state.
+            # In WAITING the Shelly is OFF but the state is still "waiting",
+            # not "off". Non-SD devices use the physical switch state.
+            if dev["startup_detection"] and dev["sd_state"]:
+                state = dev["sd_state"]
+            elif is_on:
+                if not dev["managed_on"]:
                     state = "manual_override"
                 else:
                     state = "on"
+            else:
+                state = "off"
+            if is_on:
                 devices_on += 1
                 total_power += power
 
