@@ -369,31 +369,46 @@ class AurumForecastRemainingSensor(CoordinatorEntity, SensorEntity):
 
 
 class AurumBudgetWSensor(CoordinatorEntity, SensorEntity):
-    """Available device budget in W (None = no restriction)."""
+    """Available device budget in W (None = no restriction).
 
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "W"
+    When no budget cap is active the sensor shows '–' instead of
+    'unavailable' / 'unknown'. The numeric value is exposed via the
+    extra state attribute 'budget_w' for automations.
+    """
+
     _attr_icon = "mdi:cash-clock"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_available = True
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_budget_w"
         self._attr_name = "AURUM Budget"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        self._budget_w = None  # numeric value, None = unlimited
+
+    @property
+    def state(self):
+        """Return '–' when unlimited, watt value as string when capped."""
+        if self._budget_w is None:
+            return "–"
+        return str(int(self._budget_w))
+
+    @property
+    def unit_of_measurement(self):
+        """Only show unit when a numeric cap is active."""
+        return "W" if self._budget_w is not None else None
+
+    @property
+    def extra_state_attributes(self):
+        """Expose numeric budget_w for automations (None = unlimited)."""
+        return {"budget_w": self._budget_w}
 
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
         budget = data.get("device_budget_w")
-        if budget is None:
-            # No restriction (SOC above target or no forecast)
-            self._attr_native_value = None
-            self._attr_available = True
-        else:
-            self._attr_native_value = round(float(budget), 0)
-            self._attr_available = True
+        self._budget_w = round(float(budget), 0) if budget is not None else None
         self.async_write_ha_state()
 
 

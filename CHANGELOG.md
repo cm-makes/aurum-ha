@@ -5,6 +5,11 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.5] - 2026-04-07
+
+### Fixed
+- **Device Budget sensor showed "Unbekannt" when no cap active** – When `device_budget_w` is `None` (no restriction), `native_value = None` caused HA to display "unavailable". Sensor now shows `–` when unlimited, the watt value when a cap is active. Numeric value still accessible via `extra_state_attributes.budget_w` for automations.
+
 ## [1.5.4] - 2026-04-07
 
 ### Fixed
