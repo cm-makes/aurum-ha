@@ -5,6 +5,11 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-04-07
+
+### Added
+- **Startup Detection parameters now configurable in UI** – `sd_power_threshold`, `sd_standby_power`, `sd_finish_power`, `sd_finish_time`, `sd_detection_time`, and `sd_max_runtime` are now exposed in the device config form (add & edit). Previously hardcoded to defaults (5W / 3W / 3W / 600s / 5s / 10800s). Recommended values for washing machines: `sd_power_threshold` = 50W, `sd_standby_power` = 3W.
+
 ## [1.5.2] - 2026-04-02
 
 ### Fixed

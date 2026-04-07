@@ -45,6 +45,12 @@ from .const import (
     CONF_DEV_ESTIMATED_RUNTIME,
     CONF_DEV_INTERRUPTIBLE,
     CONF_DEV_RESIDUAL_POWER,
+    CONF_DEV_SD_POWER_THRESHOLD,
+    CONF_DEV_SD_DETECTION_TIME,
+    CONF_DEV_SD_STANDBY_POWER,
+    CONF_DEV_SD_FINISH_POWER,
+    CONF_DEV_SD_FINISH_TIME,
+    CONF_DEV_SD_MAX_RUNTIME,
     DEFAULT_BATTERY_CAPACITY_WH,
     DEFAULT_TARGET_SOC,
     DEFAULT_MIN_SOC,
@@ -59,6 +65,12 @@ from .const import (
     DEFAULT_DEV_MIN_ON_TIME,
     DEFAULT_DEV_MIN_OFF_TIME,
     DEFAULT_DEV_RESIDUAL_POWER,
+    DEFAULT_DEV_SD_POWER_THRESHOLD,
+    DEFAULT_DEV_SD_DETECTION_TIME,
+    DEFAULT_DEV_SD_STANDBY_POWER,
+    DEFAULT_DEV_SD_FINISH_POWER,
+    DEFAULT_DEV_SD_FINISH_TIME,
+    DEFAULT_DEV_SD_MAX_RUNTIME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -190,6 +202,55 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             CONF_DEV_STARTUP_DETECTION,
             default=d.get(CONF_DEV_STARTUP_DETECTION, False),
         ): selector.BooleanSelector(),
+        # ── Startup Detection parameters (visible when SD is enabled) ──
+        vol.Optional(
+            CONF_DEV_SD_POWER_THRESHOLD,
+            default=d.get(CONF_DEV_SD_POWER_THRESHOLD,
+                          DEFAULT_DEV_SD_POWER_THRESHOLD),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=1, max=500, step=1,
+            unit_of_measurement="W",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_SD_STANDBY_POWER,
+            default=d.get(CONF_DEV_SD_STANDBY_POWER,
+                          DEFAULT_DEV_SD_STANDBY_POWER),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=100, step=1,
+            unit_of_measurement="W",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_SD_FINISH_POWER,
+            default=d.get(CONF_DEV_SD_FINISH_POWER,
+                          DEFAULT_DEV_SD_FINISH_POWER),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=100, step=1,
+            unit_of_measurement="W",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_SD_FINISH_TIME,
+            default=d.get(CONF_DEV_SD_FINISH_TIME,
+                          DEFAULT_DEV_SD_FINISH_TIME),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=30, max=1800, step=30,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_SD_DETECTION_TIME,
+            default=d.get(CONF_DEV_SD_DETECTION_TIME,
+                          DEFAULT_DEV_SD_DETECTION_TIME),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=1, max=60, step=1,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_DEV_SD_MAX_RUNTIME,
+            default=d.get(CONF_DEV_SD_MAX_RUNTIME,
+                          DEFAULT_DEV_SD_MAX_RUNTIME),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=600, max=18000, step=600,
+            unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
         vol.Optional(
             CONF_DEV_DEADLINE,
             default=d.get(CONF_DEV_DEADLINE, vol.UNDEFINED),

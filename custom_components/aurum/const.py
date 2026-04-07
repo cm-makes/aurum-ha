@@ -54,6 +54,14 @@ CONF_DEV_MANUAL_OVERRIDE_ENTITY = "manual_override_entity"
 CONF_DEV_MUSS_HEUTE_ENTITY = "muss_heute_entity"
 CONF_DEV_RESIDUAL_POWER = "residual_power"
 
+# ── Device config keys: Startup Detection ────────────────────────
+CONF_DEV_SD_POWER_THRESHOLD = "sd_power_threshold"
+CONF_DEV_SD_DETECTION_TIME = "sd_detection_time"
+CONF_DEV_SD_STANDBY_POWER = "sd_standby_power"
+CONF_DEV_SD_FINISH_POWER = "sd_finish_power"
+CONF_DEV_SD_FINISH_TIME = "sd_finish_time"
+CONF_DEV_SD_MAX_RUNTIME = "sd_max_runtime"
+
 # ── Device defaults ──────────────────────────────────────────────
 DEFAULT_DEV_NOMINAL_POWER = 1000
 DEFAULT_DEV_PRIORITY = 50
@@ -65,6 +73,14 @@ DEFAULT_DEV_DEBOUNCE_OFF = 600
 DEFAULT_DEV_MIN_ON_TIME = 600
 DEFAULT_DEV_MIN_OFF_TIME = 60
 DEFAULT_DEV_RESIDUAL_POWER = 100
+
+# ── Device defaults: Startup Detection ───────────────────────────
+DEFAULT_DEV_SD_POWER_THRESHOLD = 5
+DEFAULT_DEV_SD_DETECTION_TIME = 5
+DEFAULT_DEV_SD_STANDBY_POWER = 3
+DEFAULT_DEV_SD_FINISH_POWER = 3
+DEFAULT_DEV_SD_FINISH_TIME = 600
+DEFAULT_DEV_SD_MAX_RUNTIME = 10800
 
 # ── Battery modes ────────────────────────────────────────────────
 MODE_NORMAL = "normal"
