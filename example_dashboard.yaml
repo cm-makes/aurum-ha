@@ -208,24 +208,36 @@ views:
       - type: custom:mushroom-template-card
         primary: Waschmaschine
         secondary: >
-          {{ states('sensor.aurum_waschmaschine') | title }}
+          {% set s = states('sensor.aurum_waschmaschine') %}
+          {% if s == 'running' %}Läuft (PV-Überschuss)
+          {% elif s == 'waiting' %}Wartet auf PV-Überschuss
+          {% elif s == 'standby' %}Bereit
+          {% elif s == 'on' %}Eingeschaltet
+          {% elif s == 'manual_override' %}Manuell
+          {% elif s == 'done' %}Fertig
+          {% else %}Aus
+          {% endif %}
           — {{ states('sensor.aurum_waschmaschine_power') | int(0) }} W
-          — {{ states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int }} min today
+          — {{ states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int }} min heute
         icon: mdi:washing-machine
         icon_color: >
           {% set s = states('sensor.aurum_waschmaschine') %}
-          {{ 'green' if s == 'on' or s == 'running'
+          {{ 'green' if s in ('on', 'running')
+             else 'amber' if s == 'waiting'
              else 'blue' if s == 'manual_override'
+             else 'teal' if s == 'standby'
              else 'grey' }}
         badge_icon: >
           {% set s = states('sensor.aurum_waschmaschine') %}
           {{ 'mdi:account' if s == 'manual_override'
-             else 'mdi:check-circle' if s in ('on','running')
+             else 'mdi:check-circle' if s in ('on', 'running')
+             else 'mdi:clock-outline' if s == 'waiting'
              else 'mdi:pause-circle' }}
         badge_color: >
           {% set s = states('sensor.aurum_waschmaschine') %}
           {{ 'blue' if s == 'manual_override'
-             else 'green' if s in ('on','running')
+             else 'green' if s in ('on', 'running')
+             else 'amber' if s == 'waiting'
              else 'grey' }}
         tap_action:
           action: more-info
@@ -249,24 +261,33 @@ views:
       - type: custom:mushroom-template-card
         primary: Heizen Mobil
         secondary: >
-          {{ states('sensor.aurum_heizen_mobil') | title }}
+          {% set s = states('sensor.aurum_heizen_mobil') %}
+          {% if s == 'running' %}Läuft (PV-Überschuss)
+          {% elif s == 'waiting' %}Wartet auf PV-Überschuss
+          {% elif s == 'on' %}Eingeschaltet
+          {% elif s == 'manual_override' %}Manuell
+          {% else %}Aus
+          {% endif %}
           — {{ states('sensor.aurum_heizen_mobil_power') | int(0) }} W
-          — {{ states('sensor.aurum_heizen_mobil_runtime') | float(0) | round(0) | int }} min today
+          — {{ states('sensor.aurum_heizen_mobil_runtime') | float(0) | round(0) | int }} min heute
         icon: mdi:radiator
         icon_color: >
           {% set s = states('sensor.aurum_heizen_mobil') %}
-          {{ 'orange' if s == 'on' or s == 'running'
+          {{ 'orange' if s in ('on', 'running')
+             else 'amber' if s == 'waiting'
              else 'blue' if s == 'manual_override'
              else 'grey' }}
         badge_icon: >
           {% set s = states('sensor.aurum_heizen_mobil') %}
           {{ 'mdi:account' if s == 'manual_override'
-             else 'mdi:check-circle' if s in ('on','running')
+             else 'mdi:check-circle' if s in ('on', 'running')
+             else 'mdi:clock-outline' if s == 'waiting'
              else 'mdi:pause-circle' }}
         badge_color: >
           {% set s = states('sensor.aurum_heizen_mobil') %}
           {{ 'blue' if s == 'manual_override'
-             else 'orange' if s in ('on','running')
+             else 'orange' if s in ('on', 'running')
+             else 'amber' if s == 'waiting'
              else 'grey' }}
         tap_action:
           action: more-info
