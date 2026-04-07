@@ -39,9 +39,11 @@ class PersistenceManager:
 
     def save(self, devices, budget=None):
         """Save device state (and optional budget state) to JSON (atomic write)."""
+        now = datetime.now()
         state = {
             "_meta": {
-                "saved_at": datetime.now().isoformat(),
+                "saved_at": now.isoformat(),
+                "saved_date": now.strftime("%Y-%m-%d"),
                 "version": "1.1.0",
             },
         }
@@ -97,6 +99,16 @@ class PersistenceManager:
             _LOGGER.warning("State file corrupt, starting fresh: %s", e)
             return
 
+        # Check if state file is from today — if not, reset daily counters
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        saved_date = state.get("_meta", {}).get("saved_date")
+        is_today = (saved_date == today_str)
+        if not is_today:
+            _LOGGER.info(
+                "AURUM: State file is from %s (today: %s) — "
+                "resetting daily counters",
+                saved_date or "unknown", today_str)
+
         for dev in devices.devices:
             name = dev["name"]
             if name not in state:
@@ -107,7 +119,12 @@ class PersistenceManager:
             # Restore simple value fields
             for field in _VALUE_FIELDS:
                 if field in saved:
-                    dev[field] = saved[field]
+                    # Reset daily counters if state is from a previous day
+                    if not is_today and field in ("runtime_today_s",
+                                                   "total_switches"):
+                        dev[field] = 0
+                    else:
+                        dev[field] = saved[field]
 
             # Restore datetime fields
             for field in _DATETIME_FIELDS:

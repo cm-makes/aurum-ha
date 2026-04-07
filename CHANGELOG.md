@@ -5,6 +5,11 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-04-07
+
+### Fixed
+- **Daily runtime counter not reset after restart** – On startup, `persistence.py` restored `runtime_today_s` and `total_switches` from the state file without checking whether the file was from a previous day. The coordinator skips `daily_reset()` on the very first cycle, so yesterday's runtime appeared as today's. Fixed: state file now stores `saved_date`; on restore, daily counters are zeroed if the date doesn't match today.
+
 ## [1.5.3] - 2026-04-07
 
 ### Added
