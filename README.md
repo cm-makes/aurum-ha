@@ -1,9 +1,25 @@
-# AURUM – Solar Surplus Optimizer
+<p align="center">
+  <img src="custom_components/aurum/brand/logo.png" alt="AURUM – Solar Surplus Optimizer" width="400">
+</p>
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat)](https://github.com/cm-makes/aurum-ha/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
+<p align="center">
+  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS"></a>
+  <a href="https://github.com/cm-makes/aurum-ha/releases"><img src="https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat" alt="Release"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
+  <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg" alt="HA Version"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.buymeacoffee.com/cm-makes" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41">
+  </a>
+  &nbsp;
+  <a href="https://github.com/sponsors/cm-makes">
+    <img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github" alt="GitHub Sponsors" height="41">
+  </a>
+</p>
+
+---
 
 **AURUM** (*Latin: Gold*) automatically distributes your PV surplus power to household devices — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
 
@@ -187,7 +203,15 @@ The file contains: energy values, battery state, budget info, device states, ove
 
 If AURUM saves you energy and money, consider supporting its development:
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=github)](https://github.com/sponsors/cm-makes)
+<p>
+  <a href="https://www.buymeacoffee.com/cm-makes" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50">
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://github.com/sponsors/cm-makes">
+    <img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Sponsors">
+  </a>
+</p>
 
 Your support helps keep this project alive and growing.
 
