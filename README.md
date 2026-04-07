@@ -10,12 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://www.buymeacoffee.com/cm-makes" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41">
-  </a>
-  &nbsp;
   <a href="https://github.com/sponsors/cm-makes">
-    <img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github" alt="GitHub Sponsors" height="41">
+    <img src="https://img.shields.io/badge/Sponsor-GitHub-pink" alt="Sponsor">
   </a>
 </p>
 
@@ -203,15 +199,7 @@ The file contains: energy values, battery state, budget info, device states, ove
 
 If AURUM saves you energy and money, consider supporting its development:
 
-<p>
-  <a href="https://www.buymeacoffee.com/cm-makes" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50">
-  </a>
-  &nbsp;&nbsp;
-  <a href="https://github.com/sponsors/cm-makes">
-    <img src="https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Sponsors">
-  </a>
-</p>
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-pink)](https://github.com/sponsors/cm-makes)
 
 Your support helps keep this project alive and growing.
 
