@@ -486,6 +486,14 @@ class DeviceManager:
         if sd_state == SD_STATE_WAITING:
             nominal = dev["nominal_power"]
 
+            # Enforce switch-off every cycle while waiting.
+            # Shelly may have restored its ON state after an HA restart
+            # ("restore last state" behaviour). Without this guard the
+            # machine keeps running even though AURUM is waiting for surplus.
+            if self._is_device_on(dev):
+                self._turn_off(dev, now, excess, battery_soc,
+                               "sd_waiting_enforce_off")
+
             # Deadline check: force start if past latest_start
             if self._deadline_urgent(dev, now):
                 self.hass.log(
