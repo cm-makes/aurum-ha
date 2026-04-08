@@ -2,19 +2,21 @@
   <img src="custom_components/aurum/brand/logo.png" alt="AURUM – Solar Surplus Optimizer" width="400">
 </p>
 
+<h3 align="center">Automatische Solarüberschuss-Steuerung für Home Assistant</h3>
+
 <p align="center">
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS"></a>
   <a href="https://github.com/cm-makes/aurum-ha/releases"><img src="https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
   <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg" alt="HA Version"></a>
+  <a href="https://github.com/cm-makes/aurum-ha/stargazers"><img src="https://img.shields.io/github/stars/cm-makes/aurum-ha?style=flat" alt="Stars"></a>
 </p>
 
 <p align="center">
   <a href="https://www.buymeacoffee.com/cmmakes">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="180">
   </a>
-</p>
-<p align="center">
+  &nbsp;&nbsp;
   <a href="https://github.com/sponsors/cm-makes">
     <img src="https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F_Sponsor_on_GitHub-pink?style=for-the-badge&logo=github" alt="Sponsor on GitHub">
   </a>
@@ -22,25 +24,33 @@
 
 ---
 
-**AURUM** (*Latin: Gold*) automatically distributes your PV surplus power to household devices — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
+**AURUM** (*Latin: Gold*) turns your solar surplus into gold: it automatically distributes excess PV power to household devices — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
 
 > **No coding required.** Install via HACS, add your grid sensor, configure devices through the UI — done.
 
+<p align="center">
+  <img src="docs/dashboard.png" alt="AURUM Dashboard" width="900">
+  <br>
+  <em>AURUM Dashboard – Live-Übersicht mit Akku-Gauge, Geräte-Status, Laufzeiten und Diagnose</em>
+</p>
+
 ---
 
-## Features
+## Highlights
 
-- **PV Surplus Steering** – Turns devices on/off based on available excess power
-- **Battery-Aware** – Respects battery SOC with configurable target and minimum thresholds
-- **Priority-Based** – Higher priority devices get power first
-- **Per-Device SOC Threshold** – Each device can have its own minimum battery level
-- **Startup Detection** – Smart program management for washing machines and dishwashers: you press Start, AURUM detects the power draw, immediately pauses the device, and waits for sufficient PV surplus. When enough solar power is available, AURUM resumes the program automatically. If a deadline is set and PV never arrives, AURUM starts on grid power as a fallback.
-- **PV Forecast Budget** – Uses Solcast or Open-Meteo forecast to calculate how much power is available for devices for the rest of the day
-- **Manual Override & Muss-heute Switches** – Auto-created per device; override pauses AURUM control, "muss heute" forces the device on regardless of surplus
-- **Hysteresis & Debounce** – Prevents rapid switching with configurable margins
-- **State Persistence** – Device runtimes and budget safety factor survive restarts
-- **HA Diagnostics** – Download a full JSON snapshot of AURUM's internal state for bug reports
-- **No Vendor Lock-In** – Works with any grid meter, any battery, any smart plug
+| | Feature | Beschreibung |
+|---|---|---|
+| **PV Surplus Steering** | Turns devices on/off based on available excess power |
+| **Battery-Aware** | Respects battery SOC with configurable target and minimum thresholds |
+| **Priority-Based** | Higher priority devices get power first |
+| **Startup Detection** | Detects washing machine / dishwasher program start, pauses until PV surplus is available, resumes automatically |
+| **PV Forecast Budget** | Uses Solcast or Open-Meteo forecast to limit device runtime so the battery reliably reaches target SOC |
+| **Per-Device SOC Threshold** | Each device can have its own minimum battery level |
+| **Manual Override & Muss-heute** | Auto-created switches per device for manual control and deadline forcing |
+| **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
+| **State Persistence** | Device runtimes and budget safety factor survive restarts |
+| **HA Diagnostics** | Download a full JSON snapshot for bug reports |
+| **No Vendor Lock-In** | Works with any grid meter, any battery, any smart plug |
 
 ---
 
@@ -57,7 +67,7 @@
 
 ### HACS (recommended)
 
-1. Open HACS → Integrations → ⋮ → Custom repositories
+1. Open HACS > Integrations > Custom repositories
 2. Add `https://github.com/cm-makes/aurum-ha` as **Integration**
 3. Search for "AURUM" and install
 4. Restart Home Assistant
@@ -71,10 +81,10 @@
 
 ## Setup
 
-1. Go to **Settings → Integrations → Add Integration → AURUM**
+1. Go to **Settings > Integrations > Add Integration > AURUM**
 2. **Energy & Battery:** Select your grid power sensor (and optionally PV, battery SOC, battery charge/discharge power, PV forecast)
 3. **Battery settings:** Set capacity, target SOC, minimum SOC, and update interval
-4. After setup: Go to **AURUM → Configure** to add devices
+4. After setup: Go to **AURUM > Configure** to add devices
 
 ### Adding Devices
 
@@ -88,7 +98,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Nominal power** | Expected power draw in watts |
 | **Priority** | 1–100, higher = turned on first |
 | **SOC threshold** | Device only runs when battery is above this level |
-| **Startup detection** | Enable for appliances with programs (washers, dishwashers). AURUM keeps the plug on in standby, detects when you press Start, pauses immediately, and resumes when PV surplus is sufficient. |
+| **Startup detection** | Enable for appliances with programs (washers, dishwashers). AURUM keeps the plug on in standby, detects when you press Start, pauses immediately, and resumes when PV surplus is sufficient. If a deadline is set and PV never arrives, AURUM starts on grid power as a fallback. |
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
 | **Deadline** | Time by which the device must have run (e.g. `18:00`) |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
@@ -97,7 +107,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 
 AURUM can limit device runtimes based on how much PV energy is forecast for the rest of the day, so the battery reliably reaches its target SOC.
 
-In **Configure → Energy & Battery**:
+In **Configure > Energy & Battery**:
 
 | Field | What to enter |
 |-------|---------------|
@@ -112,22 +122,22 @@ In **Configure → Energy & Battery**:
 
 ```
 Every 15 seconds:
-  1. Read grid power → calculate excess (negative grid = export = surplus)
-  2. Check battery SOC → determine mode (normal / low_soc / charging)
+  1. Read grid power -> calculate excess (negative grid = export = surplus)
+  2. Check battery SOC -> determine mode (normal / low_soc / charging)
   3. Optional: Calculate PV budget from forecast
   4. For each device (by priority):
-     - Enough surplus + SOC OK + budget available? → Turn ON
-     - Surplus gone or SOC low? → Turn OFF (respecting min-on-time)
-  5. Startup Detection: If a washing machine starts → protect the cycle
+     - Enough surplus + SOC OK + budget available? -> Turn ON
+     - Surplus gone or SOC low? -> Turn OFF (respecting min-on-time)
+  5. Startup Detection: If a washing machine starts -> protect the cycle
 ```
 
 ### Battery Modes
 
 | Mode | Condition | Effect |
 |------|-----------|--------|
-| **normal** | SOC ≥ target | All devices allowed |
+| **normal** | SOC >= target | All devices allowed |
 | **low_soc** | min < SOC < target | Devices run if surplus is sufficient; per-device SOC thresholds apply |
-| **charging** | SOC ≤ min | All devices off (battery protection) |
+| **charging** | SOC <= min | All devices off (battery protection) |
 
 ### Manual Override vs. Manually-On
 
@@ -164,7 +174,7 @@ Every 15 seconds:
 | `switch.aurum_{slug}_override` | Switch | Manual override (AURUM hands off) |
 | `switch.aurum_{slug}_muss_heute` | Switch | Force device on today |
 
-> `{slug}` is the device name lowercased with spaces replaced by underscores (e.g. "Washing Machine" → `washing_machine`).
+> `{slug}` is the device name lowercased with spaces replaced by underscores (e.g. "Washing Machine" -> `washing_machine`).
 
 ---
 
@@ -172,9 +182,9 @@ Every 15 seconds:
 
 A ready-to-use Mushroom-based dashboard is included:
 
-📄 **[example_dashboard.yaml](example_dashboard.yaml)**
+**[example_dashboard.yaml](example_dashboard.yaml)**
 
-Copy the contents into **Settings → Dashboards → ⋮ → Raw configuration editor**.
+Copy the contents into **Settings > Dashboards > Raw configuration editor**.
 
 > Requires [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) (installable via HACS)
 
@@ -184,7 +194,7 @@ Copy the contents into **Settings → Dashboards → ⋮ → Raw configuration e
 
 Download a full JSON snapshot of AURUM's internal state for troubleshooting:
 
-**Settings → Devices & Services → AURUM → ⋮ → Download Diagnostics**
+**Settings > Devices & Services > AURUM > Download Diagnostics**
 
 The file contains: energy values, battery state, budget info, device states, override switch states, and coordinator health.
 
