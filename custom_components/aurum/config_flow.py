@@ -27,6 +27,7 @@ from .const import (
     CONF_TARGET_SOC,
     CONF_MIN_SOC,
     CONF_UPDATE_INTERVAL,
+    CONF_NOTIFY_SERVICE,
     CONF_DEVICES,
     CONF_DEV_NAME,
     CONF_DEV_SWITCH_ENTITY,
@@ -159,6 +160,11 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
             min=5, max=300, step=5,
             unit_of_measurement="s",
             mode=selector.NumberSelectorMode.BOX)),
+        vol.Optional(
+            CONF_NOTIFY_SERVICE,
+            description={"suggested_value": d.get(CONF_NOTIFY_SERVICE, "")},
+        ): selector.TextSelector(selector.TextSelectorConfig(
+            type=selector.TextSelectorType.TEXT)),
     })
 
 

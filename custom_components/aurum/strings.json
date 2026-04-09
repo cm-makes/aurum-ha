@@ -73,7 +73,8 @@
           "battery_capacity_wh": "Battery size",
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
-          "update_interval": "Update speed"
+          "update_interval": "Update speed",
+          "notify_service": "Mobile push notifications (optional)"
         },
         "data_description": {
           "grid_power_entity": "Your grid meter sensor in watts. Positive = drawing from grid, negative = feeding in.",
@@ -88,7 +89,8 @@
           "battery_capacity_wh": "Battery size in watt-hours (e.g. 10,000 Wh = 10 kWh).",
           "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
-          "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s."
+          "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
+          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable."
         }
       },
       "add_device": {

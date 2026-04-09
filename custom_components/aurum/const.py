@@ -24,6 +24,9 @@ CONF_TARGET_SOC = "target_soc"
 CONF_MIN_SOC = "min_soc"
 CONF_UPDATE_INTERVAL = "update_interval"
 
+# ── Config keys: Notifications ──────────────────────────────────
+CONF_NOTIFY_SERVICE = "notify_service"
+
 # ── Config keys: Devices (Options Flow) ──────────────────────────
 CONF_DEVICES = "devices"
 

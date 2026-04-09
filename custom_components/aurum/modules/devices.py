@@ -896,10 +896,13 @@ class DeviceManager:
                     dev["name"], e)
 
     def _notify(self, message, tag=None, throttle_key=None, importance=None):
-        """Send notification via HA persistent_notification.
+        """Send notification via HA persistent_notification + optional mobile push.
 
         Uses persistent_notification.create for broad compatibility.
+        If notify_service is configured (e.g. 'notify.mobile_app_christian'),
+        also sends a mobile push notification.
         """
+        # ── Persistent notification (always) ──
         try:
             kwargs = {
                 "message": message,
@@ -910,7 +913,24 @@ class DeviceManager:
             self.hass.call_service(
                 "persistent_notification/create", **kwargs)
         except Exception:
-            pass  # notifications are best-effort
+            pass  # best-effort
+
+        # ── Mobile push (if configured) ──
+        notify_svc = self.config.get("notify_service", "")
+        if notify_svc:
+            try:
+                # notify_service can be "notify.mobile_app_christian"
+                # or just "mobile_app_christian"
+                svc = notify_svc if "/" in notify_svc else f"notify/{notify_svc}"
+                push_kwargs = {
+                    "message": message,
+                    "title": "AURUM",
+                }
+                if tag:
+                    push_kwargs["data"] = {"tag": tag}
+                self.hass.call_service(svc, **push_kwargs)
+            except Exception:
+                pass  # best-effort
 
     def _log_action(self, dev, action, excess, soc, reason):
         """Log a device action to CSV."""
