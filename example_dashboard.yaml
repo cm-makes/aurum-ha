@@ -302,20 +302,24 @@ views:
 
       - type: horizontal-stack
         cards:
-          - type: statistic
-            entity: sensor.aurum_waschmaschine_runtime
-            period:
-              calendar:
-                period: day
-            stat_type: max
-            name: Waschmaschine
-          - type: statistic
-            entity: sensor.aurum_heizen_mobil_runtime
-            period:
-              calendar:
-                period: day
-            stat_type: max
-            name: Heizen Mobil
+          - type: custom:mushroom-template-card
+            primary: Waschmaschine
+            secondary: >
+              {{ states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int }} min
+            icon: mdi:washing-machine
+            icon_color: amber
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_waschmaschine_runtime
+          - type: custom:mushroom-template-card
+            primary: Heizen Mobil
+            secondary: >
+              {{ states('sensor.aurum_heizen_mobil_runtime') | float(0) | round(0) | int }} min
+            icon: mdi:radiator
+            icon_color: orange
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_heizen_mobil_runtime
 
       # ══════════════════════════════════════════════════════
       # ENERGIE HEUTE (kWh pro Gerät + Gesamt)
@@ -337,20 +341,26 @@ views:
 
       - type: horizontal-stack
         cards:
-          - type: statistic
-            entity: sensor.aurum_waschmaschine_energy_today
-            period:
-              calendar:
-                period: day
-            stat_type: max
-            name: Waschmaschine
-          - type: statistic
-            entity: sensor.aurum_heizen_mobil_energy_today
-            period:
-              calendar:
-                period: day
-            stat_type: max
-            name: Heizen Mobil
+          - type: custom:mushroom-template-card
+            primary: Waschmaschine
+            secondary: >
+              {% set wh = states('sensor.aurum_waschmaschine_energy_today') | float(0) %}
+              {{ (wh / 1000) | round(2) }} kWh
+            icon: mdi:washing-machine
+            icon_color: amber
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_waschmaschine_energy_today
+          - type: custom:mushroom-template-card
+            primary: Heizen Mobil
+            secondary: >
+              {% set wh = states('sensor.aurum_heizen_mobil_energy_today') | float(0) %}
+              {{ (wh / 1000) | round(2) }} kWh
+            icon: mdi:radiator
+            icon_color: orange
+            tap_action:
+              action: more-info
+              entity: sensor.aurum_heizen_mobil_energy_today
 
       # ══════════════════════════════════════════════════════
       # DIAGNOSE
