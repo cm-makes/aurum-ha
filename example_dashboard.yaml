@@ -1,4 +1,4 @@
-## AURUM – Beispiel-Dashboard (v1.6.0)
+## AURUM – Beispiel-Dashboard (v1.6.0+)
 ## Kopiere den Inhalt in ein neues Dashboard:
 ##   Einstellungen → Dashboards → Dashboard hinzufügen → ⋮ → Roher Konfigurations-Editor
 ##
@@ -181,20 +181,22 @@ views:
               {% set s = states('sensor.aurum_waschmaschine') %}
               {% set p = states('sensor.aurum_waschmaschine_power') | int(0) %}
               {% set r = states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int %}
+              {% set wh = states('sensor.aurum_waschmaschine_energy_today') | float(0) %}
+              {% set e = (wh / 1000) | round(2) if wh > 0 else 0 %}
               {% if s == 'running' %}
-                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min heute
+                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min · {{ e }} kWh
               {% elif s == 'waiting' %}
-                ⏳ Wartet auf PV-Überschuss · {{ r }} min heute
+                ⏳ Wartet auf PV-Überschuss · {{ r }} min · {{ e }} kWh
               {% elif s == 'standby' %}
                 ◉ Bereit – erkennt automatisch wenn Programm startet
               {% elif s == 'on' %}
-                ✓ Eingeschaltet · {{ p }} W · {{ r }} min heute
+                ✓ Eingeschaltet · {{ p }} W · {{ r }} min · {{ e }} kWh
               {% elif s == 'manual_override' %}
-                ✋ Manuell eingeschaltet · {{ p }} W
+                ✋ Manuell eingeschaltet · {{ p }} W · {{ e }} kWh
               {% elif s == 'done' %}
-                ✅ Programm fertig · {{ r }} min heute gelaufen
+                ✅ Programm fertig · {{ r }} min · {{ e }} kWh
               {% else %}
-                ✗ Aus · {{ r }} min heute
+                ✗ Aus · {{ r }} min · {{ e }} kWh heute
               {% endif %}
             icon: mdi:washing-machine
             icon_color: >
@@ -249,12 +251,14 @@ views:
               {% set s = states('sensor.aurum_heizen_mobil') %}
               {% set p = states('sensor.aurum_heizen_mobil_power') | int(0) %}
               {% set r = states('sensor.aurum_heizen_mobil_runtime') | float(0) | round(0) | int %}
+              {% set wh = states('sensor.aurum_heizen_mobil_energy_today') | float(0) %}
+              {% set e = (wh / 1000) | round(2) if wh > 0 else 0 %}
               {% if s in ('on', 'running') %}
-                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min heute
+                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min · {{ e }} kWh
               {% elif s == 'manual_override' %}
-                ✋ Manuell eingeschaltet · {{ p }} W
+                ✋ Manuell eingeschaltet · {{ p }} W · {{ e }} kWh
               {% else %}
-                ✗ Aus · {{ r }} min heute
+                ✗ Aus · {{ r }} min · {{ e }} kWh heute
               {% endif %}
             icon: mdi:radiator
             icon_color: >
@@ -307,6 +311,41 @@ views:
             name: Waschmaschine
           - type: statistic
             entity: sensor.aurum_heizen_mobil_runtime
+            period:
+              calendar:
+                period: day
+            stat_type: max
+            name: Heizen Mobil
+
+      # ══════════════════════════════════════════════════════
+      # ENERGIE HEUTE (kWh pro Gerät + Gesamt)
+      # ══════════════════════════════════════════════════════
+      - type: custom:mushroom-title-card
+        title: Energie heute
+
+      - type: custom:mushroom-template-card
+        primary: >
+          {% set wh = states('sensor.aurum_energy_today') | float(0) %}
+          Gesamt: {{ (wh / 1000) | round(2) }} kWh
+        secondary: >
+          Verbrauch aller AURUM-Geräte heute
+        icon: mdi:sigma
+        icon_color: amber
+        tap_action:
+          action: more-info
+          entity: sensor.aurum_energy_today
+
+      - type: horizontal-stack
+        cards:
+          - type: statistic
+            entity: sensor.aurum_waschmaschine_energy_today
+            period:
+              calendar:
+                period: day
+            stat_type: max
+            name: Waschmaschine
+          - type: statistic
+            entity: sensor.aurum_heizen_mobil_energy_today
             period:
               calendar:
                 period: day
