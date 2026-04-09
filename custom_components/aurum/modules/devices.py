@@ -124,11 +124,12 @@ class DeviceManager:
             "sd_power_below_since": None,
             "sd_power_samples": [],
 
-            # Runtime state
+            # Runtime & energy state
             "on_since": None,
             "last_on": None,
             "last_off": None,
             "runtime_today_s": 0,
+            "energy_today_wh": 0.0,
             "total_switches": 0,
             "_runtime_tick": None,
 
@@ -191,14 +192,13 @@ class DeviceManager:
         for dev in self.devices:
             was_on = self._is_device_on(dev)
             dev["_cached_on"] = was_on
+            actual_power = self._get_device_power(dev) if was_on else 0
 
-            # Accumulate runtime (SD: only count RUNNING state)
+            # Accumulate runtime + energy (SD: only count RUNNING state)
             if was_on:
                 if (not dev["startup_detection"]
                         or dev["sd_state"] == SD_STATE_RUNNING):
-                    self._accumulate_runtime(dev, now)
-
-            actual_power = self._get_device_power(dev) if was_on else 0
+                    self._accumulate_runtime(dev, now, actual_power)
 
             # ── 1. Manual override → skip device ────────────────
             if self._is_manual_override(dev):
@@ -776,12 +776,13 @@ class DeviceManager:
         except (ValueError, IndexError, AttributeError, TypeError):
             return False
 
-    def _accumulate_runtime(self, dev, now):
-        """Accumulate runtime for device."""
+    def _accumulate_runtime(self, dev, now, power_w=0):
+        """Accumulate runtime and energy for device."""
         tick = dev.get("_runtime_tick") or dev.get("on_since")
         if tick:
-            elapsed = (now - tick).total_seconds()
-            dev["runtime_today_s"] += max(0, elapsed)
+            elapsed = max(0, (now - tick).total_seconds())
+            dev["runtime_today_s"] += elapsed
+            dev["energy_today_wh"] += power_w * elapsed / 3600
         dev["_runtime_tick"] = now
 
     def _publish_device_states(self, shared, battery_soc):
@@ -814,6 +815,7 @@ class DeviceManager:
                 "state": state,
                 "power": round(power, 1),
                 "runtime_today_s": round(dev["runtime_today_s"]),
+                "energy_today_wh": round(dev["energy_today_wh"], 1),
                 "sd_state": dev.get("sd_state", ""),
                 "soc_threshold": dev["soc_threshold"],
                 "priority": dev["priority"],
@@ -926,9 +928,11 @@ class DeviceManager:
         """Reset daily counters (call at midnight)."""
         for dev in self.devices:
             self.hass.log(
-                f"AURUM daily runtime {dev['name']}: "
-                f"{dev['runtime_today_s'] / 60:.1f} min")
+                f"AURUM daily {dev['name']}: "
+                f"{dev['runtime_today_s'] / 60:.1f} min, "
+                f"{dev['energy_today_wh'] / 1000:.3f} kWh")
             dev["runtime_today_s"] = 0
+            dev["energy_today_wh"] = 0.0
             dev["total_switches"] = 0
             dev["_switch_times"] = []
             dev["_scheduling_reason"] = None

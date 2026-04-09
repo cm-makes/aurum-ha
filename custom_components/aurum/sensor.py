@@ -2,8 +2,8 @@
 AURUM – Sensor Platform
 ========================
 Creates sensors for:
-- Global: excess power, battery mode, cycle counter
-- Per device: status, power, runtime
+- Global: excess power, battery mode, cycle counter, energy total
+- Per device: status, power, runtime, energy today
 """
 
 from homeassistant.components.sensor import (
@@ -81,6 +81,10 @@ async def async_setup_entry(
             AurumDevicePowerSensor(coordinator, entry, dev_state))
         entities.append(
             AurumDeviceRuntimeSensor(coordinator, entry, dev_state))
+        entities.append(
+            AurumDeviceEnergySensor(coordinator, entry, dev_state))
+
+    entities.append(AurumDeviceEnergyTotalSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -216,6 +220,59 @@ class AurumDeviceRuntimeSensor(CoordinatorEntity, SensorEntity):
                 self.async_write_ha_state()
                 return
         self._attr_native_value = 0
+        self.async_write_ha_state()
+
+
+class AurumDeviceEnergySensor(CoordinatorEntity, SensorEntity):
+    """Per-device energy consumed today (Wh)."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "Wh"
+    _attr_icon = "mdi:lightning-bolt"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator, entry, dev_state):
+        super().__init__(coordinator)
+        slug = dev_state["slug"]
+        self._dev_name = dev_state["name"]
+        self._attr_unique_id = f"{entry.entry_id}_{slug}_energy"
+        self._attr_name = f"AURUM {self._dev_name} Energy Today"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        for ds in (self.coordinator.device_states or []):
+            if ds["name"] == self._dev_name:
+                self._attr_native_value = round(
+                    ds.get("energy_today_wh", 0), 1)
+                self.async_write_ha_state()
+                return
+        self._attr_native_value = 0
+        self.async_write_ha_state()
+
+
+class AurumDeviceEnergyTotalSensor(CoordinatorEntity, SensorEntity):
+    """Total energy consumed by all AURUM-managed devices today (Wh)."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "Wh"
+    _attr_icon = "mdi:sigma"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_energy_total"
+        self._attr_name = "AURUM Energy Today"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        total = sum(
+            ds.get("energy_today_wh", 0)
+            for ds in (self.coordinator.device_states or []))
+        self._attr_native_value = round(total, 1)
         self.async_write_ha_state()
 
 

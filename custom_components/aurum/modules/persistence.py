@@ -22,7 +22,7 @@ _DATETIME_FIELDS = (
 
 # Fields that are simple values (save/restore as-is)
 _VALUE_FIELDS = (
-    "runtime_today_s", "total_switches",
+    "runtime_today_s", "energy_today_wh", "total_switches",
     "sd_state", "managed_on", "force_started",
 )
 
@@ -121,6 +121,7 @@ class PersistenceManager:
                 if field in saved:
                     # Reset daily counters if state is from a previous day
                     if not is_today and field in ("runtime_today_s",
+                                                   "energy_today_wh",
                                                    "total_switches"):
                         dev[field] = 0
                     else:
