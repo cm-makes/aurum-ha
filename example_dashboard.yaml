@@ -398,6 +398,13 @@ views:
                 name: Muss heute
                 icon: mdi:calendar-clock
                 icon_color: orange
+          - type: custom:mushroom-number-card
+            entity: number.aurum_heizen_mobil_max_price
+            name: Maximalpreis
+            icon: mdi:cash-lock
+            icon_color: cyan
+            display_mode: buttons
+            fill_container: true
 
       # ══════════════════════════════════════════════════════
       # LAUFZEIT HEUTE
