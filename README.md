@@ -45,12 +45,15 @@
 | **Priority-Based** | Higher priority devices get power first |
 | **Startup Detection** | Detects washing machine / dishwasher program start, pauses until PV surplus is available, resumes automatically |
 | **PV Forecast Budget** | Uses Solcast or Open-Meteo forecast to limit device runtime so the battery reliably reaches target SOC |
+| **Price-Aware Scheduling** | Devices can run on cheap grid power (Tibber, Nordpool, aWATTar, EPEX Spot) — even without PV surplus |
 | **Per-Device SOC Threshold** | Each device can have its own minimum battery level |
+| **Energy Tracking** | Per-device kWh/day tracking, compatible with HA Energy Dashboard |
+| **Push Notifications** | Optional mobile push when devices are turned on/off |
 | **Manual Override & Muss-heute** | Auto-created switches per device for manual control and deadline forcing |
 | **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
-| **State Persistence** | Device runtimes and budget safety factor survive restarts |
+| **State Persistence** | Device runtimes, energy counters and budget safety factor survive restarts |
 | **HA Diagnostics** | Download a full JSON snapshot for bug reports |
-| **No Vendor Lock-In** | Works with any grid meter, any battery, any smart plug |
+| **No Vendor Lock-In** | Works with any grid meter, any battery, any smart plug, any price sensor |
 
 ---
 
@@ -116,6 +119,49 @@ In **Configure > Energy & Battery**:
 
 > If your forecast entity only provides a daily total without hourly data, AURUM uses a fallback sunset estimate (19:00) for budget calculations.
 
+### Price-Aware Scheduling (optional)
+
+AURUM can run devices on **cheap grid power** — even without PV surplus. Works with any electricity price sensor (Tibber, Nordpool, aWATTar, EPEX Spot, etc.).
+
+**Step 1: Connect price sensors**
+
+In **Configure > Energy & Battery**, set one or more of these:
+
+| Field | What to enter | Example |
+|-------|---------------|---------|
+| `price_entity` | Current electricity price in ct/kWh | `sensor.tibber_aktueller_strompreis` |
+| `price_level_entity` | Price level enum (very_cheap/cheap/normal/expensive/very_expensive) | `sensor.tibber_aktuelles_preisniveau` |
+| `cheap_period_entity` | Binary sensor ON during cheap periods | `binary_sensor.tibber_bestpreis_zeitraum` |
+| `cheap_period_starts_in_entity` | Minutes until next cheap period (for dashboard countdown) | `sensor.tibber_bestpreis_startet_in` |
+
+> All fields are optional. You only need one price source — AURUM checks them in order: max_price threshold → cheap period → price level.
+
+**Step 2: Configure devices**
+
+Edit a device and set:
+
+| Setting | Description |
+|---------|-------------|
+| **Price mode** | *Solar only* (default) or *Solar + cheap grid* |
+| **Maximum price** | Grid power only below this price (ct/kWh). Set to 0 to use price level / cheap period instead. |
+
+**How it works:**
+
+A device with `cheap_grid` mode turns on when **any** of these is true:
+1. PV surplus is sufficient (normal solar logic)
+2. `max_price` is set and current price ≤ threshold
+3. `cheap_period_entity` is ON (best price window active)
+4. `price_level_entity` is `very_cheap` or `cheap`
+
+Debounce timers still apply to prevent flapping on price edges.
+
+**Works with:**
+- [Tibber Prices](https://github.com/jpawlowski/hass.tibber_prices) — provides best price periods, countdown, price levels
+- [Nordpool](https://github.com/custom-components/nordpool) — price sensor + price level
+- [aWATTar](https://github.com/home-assistant-libs/awattar) — hourly price data
+- [EPEX Spot](https://github.com/mampfes/hacs_epex_spot) — day-ahead prices
+- Any sensor providing ct/kWh or price levels
+
 ---
 
 ## How It Works
@@ -125,10 +171,13 @@ Every 15 seconds:
   1. Read grid power -> calculate excess (negative grid = export = surplus)
   2. Check battery SOC -> determine mode (normal / low_soc / charging)
   3. Optional: Calculate PV budget from forecast
-  4. For each device (by priority):
+  4. Optional: Read electricity price -> determine if cheap period active
+  5. For each device (by priority):
+     - Cheap grid mode + price OK? -> Turn ON (even without surplus)
      - Enough surplus + SOC OK + budget available? -> Turn ON
      - Surplus gone or SOC low? -> Turn OFF (respecting min-on-time)
-  5. Startup Detection: If a washing machine starts -> protect the cycle
+  6. Startup Detection: If a washing machine starts -> protect the cycle
+  7. Track energy (Wh) and runtime per device
 ```
 
 ### Battery Modes
@@ -155,20 +204,29 @@ Every 15 seconds:
 | Entity | Type | Description |
 |--------|------|-------------|
 | `sensor.aurum_excess_power` | Sensor | Available surplus (W) |
+| `sensor.aurum_grid_power` | Sensor | Grid power (W, positive = import) |
+| `sensor.aurum_pv_power` | Sensor | PV production (W) |
+| `sensor.aurum_house_consumption` | Sensor | House consumption (W) |
 | `sensor.aurum_battery_soc` | Sensor | Battery SOC (%) |
 | `sensor.aurum_battery_mode` | Sensor | Current mode (normal/low_soc/charging) |
+| `sensor.aurum_battery_charge` | Sensor | Battery charge power (W) |
+| `sensor.aurum_battery_discharge` | Sensor | Battery discharge power (W) |
+| `sensor.aurum_electricity_price` | Sensor | Current electricity price (ct/kWh) with price_level, cheap_period, cheap_period_starts_in_min attributes |
 | `sensor.aurum_forecast_remaining` | Sensor | PV forecast remaining today (kWh) |
 | `sensor.aurum_budget` | Sensor | Device power budget (W) |
-| `sensor.aurum_safety_factor` | Sensor | Budget safety factor (0–1) |
+| `sensor.aurum_safety_factor` | Sensor | Budget safety factor (%) |
+| `sensor.aurum_energy_today` | Sensor | Total energy all devices today (Wh) |
+| `sensor.aurum_cycle` | Sensor | Update cycle counter (diagnostic) |
 | `number.aurum_target_soc` | Number | Target SOC slider |
 | `number.aurum_min_soc` | Number | Minimum SOC slider |
 
 ### Per Device
 | Entity | Type | Description |
 |--------|------|-------------|
-| `sensor.aurum_{slug}` | Sensor | Device state (on/off/manual_override/running/standby) |
+| `sensor.aurum_{slug}` | Sensor | Device state (on/off/manual_override/running/standby/waiting/done). For cheap_grid devices: includes scheduling_reason, cheap_period, starts_in attributes |
 | `sensor.aurum_{slug}_power` | Sensor | Current power draw (W) |
 | `sensor.aurum_{slug}_runtime` | Sensor | Runtime today (min) |
+| `sensor.aurum_{slug}_energy_today` | Sensor | Energy consumed today (Wh, TOTAL_INCREASING — HA Energy Dashboard compatible) |
 | `binary_sensor.aurum_{slug}_active` | Binary | Is device active? |
 | `number.aurum_{slug}_soc_threshold` | Number | SOC threshold slider |
 | `switch.aurum_{slug}_override` | Switch | Manual override (AURUM hands off) |
@@ -202,11 +260,12 @@ The file contains: energy values, battery state, budget info, device states, ove
 
 ## Roadmap
 
-- [ ] Price-aware scheduling (dynamic electricity tariffs)
-- [ ] Cost tracking (import/export/autarky)
+- [x] Price-aware scheduling (Tibber, Nordpool, aWATTar, EPEX Spot)
+- [x] Per-device energy tracking (kWh/day)
+- [x] Push notifications (mobile app)
+- [ ] Cost tracking (import/export/autarky per device)
 - [ ] Multi-battery support
-- [ ] Push notifications
-- [ ] Dashboard cards
+- [ ] Lovelace custom card for AURUM device overview
 
 ---
 
