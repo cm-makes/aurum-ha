@@ -72,6 +72,7 @@ async def async_setup_entry(
         AurumForecastRemainingSensor(coordinator, entry),
         AurumBudgetWSensor(coordinator, entry),
         AurumSafetyFactorSensor(coordinator, entry),
+        AurumElectricityPriceSensor(coordinator, entry),
     ]
 
     for dev_state in coordinator.device_states:
@@ -493,6 +494,41 @@ class AurumSafetyFactorSensor(CoordinatorEntity, SensorEntity):
         else:
             self._attr_available = False
             self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class AurumElectricityPriceSensor(CoordinatorEntity, SensorEntity):
+    """Current electricity price from configured price entity."""
+
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "ct/kWh"
+    _attr_icon = "mdi:cash"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_electricity_price"
+        self._attr_name = "AURUM Electricity Price"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
+        if not data.get("price_active"):
+            self._attr_available = False
+            self._attr_native_value = None
+        else:
+            price = data.get("current_price")
+            if price is not None:
+                self._attr_available = True
+                self._attr_native_value = round(float(price), 2)
+            else:
+                self._attr_available = False
+                self._attr_native_value = None
+        self._attr_extra_state_attributes = {
+            "price_level": data.get("price_level"),
+            "cheap_period": data.get("cheap_period", False),
+        }
         self.async_write_ha_state()
 
 

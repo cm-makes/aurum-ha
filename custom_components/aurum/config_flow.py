@@ -28,6 +28,9 @@ from .const import (
     CONF_MIN_SOC,
     CONF_UPDATE_INTERVAL,
     CONF_NOTIFY_SERVICE,
+    CONF_PRICE_ENTITY,
+    CONF_PRICE_LEVEL_ENTITY,
+    CONF_CHEAP_PERIOD_ENTITY,
     CONF_DEVICES,
     CONF_DEV_NAME,
     CONF_DEV_SWITCH_ENTITY,
@@ -46,6 +49,10 @@ from .const import (
     CONF_DEV_ESTIMATED_RUNTIME,
     CONF_DEV_INTERRUPTIBLE,
     CONF_DEV_RESIDUAL_POWER,
+    CONF_DEV_PRICE_MODE,
+    CONF_DEV_MAX_PRICE,
+    PRICE_MODE_SOLAR_ONLY,
+    PRICE_MODE_CHEAP_GRID,
     CONF_DEV_SD_POWER_THRESHOLD,
     CONF_DEV_SD_DETECTION_TIME,
     CONF_DEV_SD_STANDBY_POWER,
@@ -83,6 +90,8 @@ _WEATHER = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="weather"))
 _SWITCH = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["switch", "input_boolean"]))
+_BINARY_SENSOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="binary_sensor"))
 
 
 def _schema_energy(defaults: dict | None = None) -> vol.Schema:
@@ -165,6 +174,18 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
             description={"suggested_value": d.get(CONF_NOTIFY_SERVICE, "")},
         ): selector.TextSelector(selector.TextSelectorConfig(
             type=selector.TextSelectorType.TEXT)),
+        vol.Optional(
+            CONF_PRICE_ENTITY,
+            default=d.get(CONF_PRICE_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
+        vol.Optional(
+            CONF_PRICE_LEVEL_ENTITY,
+            default=d.get(CONF_PRICE_LEVEL_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
+        vol.Optional(
+            CONF_CHEAP_PERIOD_ENTITY,
+            default=d.get(CONF_CHEAP_PERIOD_ENTITY, vol.UNDEFINED),
+        ): _BINARY_SENSOR,
     })
 
 
@@ -277,6 +298,29 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
         # switch entities (switch.aurum_{slug}_override / _muss_heute).
         # Legacy manual_override_entity / muss_heute_entity configs
         # remain supported as fallback but no longer shown in the UI.
+        # ── Price-aware scheduling ───────────────────────────
+        vol.Optional(
+            CONF_DEV_PRICE_MODE,
+            default=d.get(CONF_DEV_PRICE_MODE, PRICE_MODE_SOLAR_ONLY),
+        ): selector.SelectSelector(selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(
+                    value=PRICE_MODE_SOLAR_ONLY,
+                    label="price_mode_solar_only"),
+                selector.SelectOptionDict(
+                    value=PRICE_MODE_CHEAP_GRID,
+                    label="price_mode_cheap_grid"),
+            ],
+            translation_key="price_mode",
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )),
+        vol.Optional(
+            CONF_DEV_MAX_PRICE,
+            default=d.get(CONF_DEV_MAX_PRICE, 0),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=100, step=1,
+            unit_of_measurement="ct/kWh",
+            mode=selector.NumberSelectorMode.BOX)),
         vol.Optional(
             CONF_DEV_RESIDUAL_POWER,
             default=d.get(CONF_DEV_RESIDUAL_POWER, DEFAULT_DEV_RESIDUAL_POWER),

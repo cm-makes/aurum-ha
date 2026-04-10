@@ -74,7 +74,10 @@
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
           "update_interval": "Update speed",
-          "notify_service": "Mobile push notifications (optional)"
+          "notify_service": "Mobile push notifications (optional)",
+          "price_entity": "Electricity price sensor (optional)",
+          "price_level_entity": "Price level sensor (optional)",
+          "cheap_period_entity": "Cheap price period sensor (optional)"
         },
         "data_description": {
           "grid_power_entity": "Your grid meter sensor in watts. Positive = drawing from grid, negative = feeding in.",
@@ -90,7 +93,10 @@
           "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
           "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
-          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable."
+          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
+          "price_entity": "Current electricity price in ct/kWh. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
+          "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
+          "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty."
         }
       },
       "add_device": {
@@ -113,6 +119,8 @@
           "deadline": "Must finish by (optional)",
           "estimated_runtime": "Program duration (minutes)",
           "interruptible": "Interruptible",
+          "price_mode": "Price mode",
+          "max_price": "Maximum price (ct/kWh)",
           "residual_power": "Power reserve",
           "hysteresis_on": "Hysteresis ON",
           "hysteresis_off": "Hysteresis OFF",
@@ -138,6 +146,8 @@
           "deadline": "When does this device need to be finished? Example: 18:00 if laundry needs to be done by dinner time. AURUM will start the device in time — even without solar surplus. Leave empty if there's no time requirement.",
           "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start.",
           "interruptible": "Can AURUM turn this device off when surplus drops? Disable for devices that must not be interrupted (e.g. 3D printer, aquarium heater). Default: on.",
+          "price_mode": "Solar only: device runs only on PV surplus (default). Cheap grid: device also runs when electricity is cheap — even without solar. Requires a price sensor in settings.",
+          "max_price": "Maximum electricity price in ct/kWh at which this device may use grid power. Set to 0 to use price level / cheap period detection instead. Only applies in 'Cheap grid' mode.",
           "residual_power": "Extra safety margin added to the surplus requirement. Prevents the device from consuming power that's needed for grid stability. Default: 100W.",
           "hysteresis_on": "Extra surplus required beyond nominal power before turning on. Prevents flapping when surplus barely covers the device. Default: 200W.",
           "hysteresis_off": "How far surplus can drop below zero before turning off. Higher = more tolerant of short cloud cover. Default: 100W.",
@@ -174,6 +184,8 @@
           "deadline": "Must finish by (optional)",
           "estimated_runtime": "Program duration (minutes)",
           "interruptible": "Interruptible",
+          "price_mode": "Price mode",
+          "max_price": "Maximum price (ct/kWh)",
           "residual_power": "Power reserve",
           "hysteresis_on": "Hysteresis ON",
           "hysteresis_off": "Hysteresis OFF",
@@ -224,6 +236,12 @@
         "menu_add_device": "Add a device",
         "menu_edit_device": "Edit a device",
         "menu_remove_device": "Remove a device"
+      }
+    },
+    "price_mode": {
+      "options": {
+        "price_mode_solar_only": "Solar only (default)",
+        "price_mode_cheap_grid": "Solar + cheap grid power"
       }
     }
   }

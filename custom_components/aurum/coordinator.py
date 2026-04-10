@@ -22,6 +22,7 @@ from .modules.energy import EnergyManager
 from .modules.battery import BatteryManager
 from .modules.budget import BudgetManager
 from .modules.devices import DeviceManager
+from .modules.pricing import PricingManager
 from .modules.helpers import CSVLogger
 from .modules.persistence import PersistenceManager
 
@@ -63,6 +64,8 @@ class AurumCoordinator(DataUpdateCoordinator):
             BudgetManager(self.bridge, self.config)
             if self.config.get("pv_forecast_entity") else None)
         self.devices = DeviceManager(self.bridge, self.config)
+        self.pricing = PricingManager(self.bridge, self.config)
+        self.devices.pricing = self.pricing  # expose to device manager
         self.persistence = PersistenceManager(self.bridge, self.config)
 
         # ── Daily adaptation tracking ──────────────────────────────
@@ -211,6 +214,14 @@ class AurumCoordinator(DataUpdateCoordinator):
                         self.budget.daily_reset()
                     _LOGGER.info("AURUM: Daily counters reset")
                 self._last_daily_reset = today
+
+            # ── Step 2c: Pricing (optional) ───────────────────────
+            if self.pricing.active:
+                try:
+                    self.pricing.update(shared)
+                    self.pricing.snapshot(shared)
+                except Exception as e:
+                    _LOGGER.warning("Pricing error: %s", e)
 
             # ── Step 3: Device control (every 2nd cycle) ───────────
             if self.cycle % 2 == 0:

@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch"]
 
@@ -26,6 +26,11 @@ CONF_UPDATE_INTERVAL = "update_interval"
 
 # ── Config keys: Notifications ──────────────────────────────────
 CONF_NOTIFY_SERVICE = "notify_service"
+
+# ── Config keys: Price-aware scheduling (optional) ──────────────
+CONF_PRICE_ENTITY = "price_entity"
+CONF_PRICE_LEVEL_ENTITY = "price_level_entity"
+CONF_CHEAP_PERIOD_ENTITY = "cheap_period_entity"
 
 # ── Config keys: Devices (Options Flow) ──────────────────────────
 CONF_DEVICES = "devices"
@@ -56,6 +61,14 @@ CONF_DEV_INTERRUPTIBLE = "interruptible"
 CONF_DEV_MANUAL_OVERRIDE_ENTITY = "manual_override_entity"
 CONF_DEV_MUSS_HEUTE_ENTITY = "muss_heute_entity"
 CONF_DEV_RESIDUAL_POWER = "residual_power"
+
+# ── Device config keys: Price-aware scheduling ──────────────────
+CONF_DEV_PRICE_MODE = "price_mode"
+CONF_DEV_MAX_PRICE = "max_price"
+
+# ── Price modes ─────────────────────────────────────────────────
+PRICE_MODE_SOLAR_ONLY = "solar_only"
+PRICE_MODE_CHEAP_GRID = "cheap_grid"
 
 # ── Device config keys: Startup Detection ────────────────────────
 CONF_DEV_SD_POWER_THRESHOLD = "sd_power_threshold"

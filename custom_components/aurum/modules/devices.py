@@ -50,6 +50,7 @@ class DeviceManager:
         self.config = config
         self.action_csv = None
         self.notifications = None  # Set by coordinator if available
+        self.pricing = None  # Set by coordinator if pricing module active
 
         # Global settings
         self.excess_deficit_tolerance = config.get(
@@ -98,6 +99,10 @@ class DeviceManager:
             "muss_heute_entity": cfg.get("muss_heute_entity"),
             "residual_power": cfg.get(
                 "residual_power", DEFAULT_DEV_RESIDUAL_POWER),
+
+            # Price-aware scheduling
+            "price_mode": cfg.get("price_mode", "solar_only"),
+            "max_price": cfg.get("max_price", 0),
 
             # Deadline scheduling
             "deadline": cfg.get("deadline"),           # "HH:MM" or None
@@ -332,6 +337,20 @@ class DeviceManager:
             eff_excess = available_grid_excess
         else:
             eff_excess = available_excess
+
+        # ── Price-aware: cheap grid power allows immediate turn-on ──
+        if (dev.get("price_mode") == "cheap_grid"
+                and self.pricing
+                and self.pricing.is_price_ok(dev)):
+            # Debounce still applies (prevents flapping on price edges)
+            if dev["excess_since"] is None:
+                dev["excess_since"] = now
+                return False
+            elapsed = (now - dev["excess_since"]).total_seconds()
+            if elapsed < dev["debounce_on"]:
+                return False
+            dev["_scheduling_reason"] = "cheap_grid"
+            return True
 
         # Enough excess? (nominal + hysteresis_on + residual_power)
         needed = (dev["nominal_power"] + dev["hysteresis_on"]
@@ -822,6 +841,7 @@ class DeviceManager:
                 "force_started": dev.get("force_started", False),
                 "interruptible": dev["interruptible"],
                 "scheduling_reason": dev.get("_scheduling_reason"),
+                "price_mode": dev.get("price_mode", "solar_only"),
             })
 
         shared["device_states"] = device_states
