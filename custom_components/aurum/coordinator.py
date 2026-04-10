@@ -116,6 +116,7 @@ class AurumCoordinator(DataUpdateCoordinator):
                 "power": 0,
                 "runtime_today_s": 0,
                 "sd_state": dev.get("sd_state", ""),
+                "price_mode": dev.get("price_mode", "solar_only"),
             })
 
     async def async_shutdown(self):

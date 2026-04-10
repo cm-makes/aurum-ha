@@ -314,7 +314,7 @@ views:
               action: more-info
               entity: sensor.aurum_waschmaschine
 
-          # Steuerung: Manuell + Muss heute
+          # Steuerung: Manuell + Muss heute + Maximalpreis
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
@@ -327,6 +327,13 @@ views:
                 name: Muss heute
                 icon: mdi:calendar-clock
                 icon_color: orange
+          - type: custom:mushroom-number-card
+            entity: number.aurum_waschmaschine_max_price
+            name: Maximalpreis
+            icon: mdi:cash-lock
+            icon_color: cyan
+            display_mode: buttons
+            fill_container: true
 
       # ──────────────────────────────────────────────────────
       # Gerät: Heizen Mobil

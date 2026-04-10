@@ -3,7 +3,7 @@ AURUM – Number Platform
 ========================
 Creates number entities for:
 - Global: target SOC, min SOC
-- Per device: SOC threshold
+- Per device: SOC threshold, max price
 """
 
 from homeassistant.components.number import NumberEntity, NumberMode
@@ -32,6 +32,10 @@ async def async_setup_entry(
     for dev_state in coordinator.device_states:
         entities.append(
             AurumDeviceSOCThreshold(coordinator, entry, dev_state))
+        # Max price slider only for cheap_grid devices
+        if dev_state.get("price_mode") == "cheap_grid":
+            entities.append(
+                AurumDeviceMaxPrice(coordinator, entry, dev_state))
 
     async_add_entities(entities)
 
@@ -115,4 +119,43 @@ class AurumDeviceSOCThreshold(CoordinatorEntity, NumberEntity):
                 dev["soc_threshold"] = int(value)
                 break
         self._attr_native_value = int(value)
+        self.async_write_ha_state()
+
+
+class AurumDeviceMaxPrice(CoordinatorEntity, NumberEntity):
+    """Number entity: per-device maximum electricity price (ct/kWh).
+
+    Only created for devices with price_mode = cheap_grid.
+    Setting to 0 disables the price threshold (uses price level / cheap
+    period instead).
+    """
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = "ct/kWh"
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:cash-lock"
+
+    def __init__(self, coordinator, entry, dev_state):
+        super().__init__(coordinator)
+        slug = dev_state["slug"]
+        self._dev_name = dev_state["name"]
+        self._attr_unique_id = f"{entry.entry_id}_{slug}_max_price"
+        self._attr_name = f"AURUM {self._dev_name} Max Price"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+
+        # Get initial value from device config
+        for dev in coordinator.devices.devices:
+            if dev["name"] == self._dev_name:
+                self._attr_native_value = dev.get("max_price", 0)
+                break
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update device max price."""
+        for dev in self.coordinator.devices.devices:
+            if dev["name"] == self._dev_name:
+                dev["max_price"] = round(value, 1)
+                break
+        self._attr_native_value = round(value, 1)
         self.async_write_ha_state()
