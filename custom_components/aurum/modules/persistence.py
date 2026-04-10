@@ -186,6 +186,7 @@ class PersistenceManager:
                 # Device is off → clear managed state
                 dev["managed_on"] = False
                 dev["on_since"] = None
+                dev["_runtime_tick"] = None
 
             # Set runtime tick for all devices that have on_since
             if dev.get("on_since"):
