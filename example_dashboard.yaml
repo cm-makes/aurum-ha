@@ -398,12 +398,6 @@ views:
                 name: Muss heute
                 icon: mdi:calendar-clock
                 icon_color: orange
-          # Deadline
-          - type: custom:mushroom-entity-card
-            entity: time.aurum_heizen_mobil_deadline
-            name: Deadline
-            icon: mdi:clock-alert-outline
-            icon_color: orange
 
       # ══════════════════════════════════════════════════════
       # LAUFZEIT HEUTE
