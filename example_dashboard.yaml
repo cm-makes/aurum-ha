@@ -1,4 +1,4 @@
-## AURUM – Beispiel-Dashboard (v1.6.0+)
+## AURUM – Beispiel-Dashboard (v1.7.0+)
 ## Kopiere den Inhalt in ein neues Dashboard:
 ##   Einstellungen → Dashboards → Dashboard hinzufügen → ⋮ → Roher Konfigurations-Editor
 ##
@@ -9,6 +9,10 @@
 ##   Ersetze "waschmaschine" und "heizen_mobil" durch deine Geräteslugs.
 ##   Den Slug findest du unter Einstellungen → AURUM → Konfigurieren → Gerät bearbeiten.
 ##   Dupliziere den Gerät-Block (vertical-stack) für jedes weitere Gerät.
+##
+## Strompreis-Sensoren anpassen:
+##   Die Preis-Entitäten im Abschnitt "STROMPREIS" stammen von tibber_prices.
+##   Ersetze "alte_landstrasse_6" durch deinen tibber_prices Präfix.
 
 title: AURUM Solar
 views:
@@ -113,6 +117,76 @@ views:
           action: none
 
       # ══════════════════════════════════════════════════════
+      # STROMPREIS (nur sichtbar wenn Preis-Sensor konfiguriert)
+      # Zeigt aktuellen Preis, Niveau und Bestpreis-Countdown
+      # ══════════════════════════════════════════════════════
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: sensor.aurum_electricity_price
+            state_not: unavailable
+        card:
+          type: vertical-stack
+          cards:
+            - type: custom:mushroom-title-card
+              title: Strompreis
+
+            - type: custom:mushroom-template-card
+              primary: >
+                {% set p = states('sensor.aurum_electricity_price') | float(0) %}
+                {{ p | round(1) }} ct/kWh
+              secondary: >
+                {% set level = state_attr('sensor.aurum_electricity_price', 'price_level') %}
+                {% set cheap = state_attr('sensor.aurum_electricity_price', 'cheap_period') %}
+                {% set starts = state_attr('sensor.aurum_electricity_price', 'cheap_period_starts_in_min') %}
+                {% if cheap %}⚡ Bestpreis aktiv
+                {% elif starts is not none and starts | int(0) > 0 %}⏳ Bestpreis in {{ starts }} min
+                {% elif level == 'very_cheap' %}💚 Sehr günstig
+                {% elif level == 'cheap' %}🟢 Günstig
+                {% elif level == 'normal' %}🟡 Normal
+                {% elif level == 'expensive' %}🟠 Teuer
+                {% elif level == 'very_expensive' %}🔴 Sehr teuer
+                {% else %}–{% endif %}
+              icon: mdi:cash
+              icon_color: >
+                {% set level = state_attr('sensor.aurum_electricity_price', 'price_level') %}
+                {% set cheap = state_attr('sensor.aurum_electricity_price', 'cheap_period') %}
+                {% if cheap %}green
+                {% elif level in ('very_cheap', 'cheap') %}green
+                {% elif level == 'normal' %}amber
+                {% elif level in ('expensive', 'very_expensive') %}red
+                {% else %}grey{% endif %}
+              tap_action:
+                action: more-info
+                entity: sensor.aurum_electricity_price
+
+            # Preis-Chips: Min/Max/Bestpreis Zeitraum
+            # Passe "alte_landstrasse_6" an deinen tibber_prices Präfix an
+            - type: custom:mushroom-chips-card
+              chips:
+                - type: template
+                  icon: mdi:arrow-down-bold
+                  icon_color: green
+                  content: >
+                    Min: {{ states('sensor.alte_landstrasse_6_mindestpreis_heute') | float(0) | round(1) }} ct
+                - type: template
+                  icon: mdi:arrow-up-bold
+                  icon_color: red
+                  content: >
+                    Max: {{ states('sensor.alte_landstrasse_6_hochstpreis_heute') | float(0) | round(1) }} ct
+                - type: template
+                  icon: mdi:clock-fast
+                  icon_color: >
+                    {% set cheap = state_attr('sensor.aurum_electricity_price', 'cheap_period') %}
+                    {{ 'green' if cheap else 'grey' }}
+                  content: >
+                    {% set cheap = state_attr('sensor.aurum_electricity_price', 'cheap_period') %}
+                    {% set starts = state_attr('sensor.aurum_electricity_price', 'cheap_period_starts_in_min') %}
+                    {% if cheap %}Bestpreis läuft
+                    {% elif starts is not none and starts | int(0) > 0 %}Bestpreis in {{ starts }} min
+                    {% else %}kein Bestpreis{% endif %}
+
+      # ══════════════════════════════════════════════════════
       # AKKU-LADESTAND (nur sichtbar wenn Akku konfiguriert)
       # ══════════════════════════════════════════════════════
       - type: conditional
@@ -161,6 +235,7 @@ views:
       #
       # Farb-Bedeutung:
       #   Grün/Orange = läuft mit PV-Strom
+      #   Cyan        = läuft mit günstigem Netzstrom
       #   Amber/Gelb  = wartet auf genug Überschuss
       #   Blau        = manuell eingeschaltet
       #   Grau        = aus
@@ -172,6 +247,7 @@ views:
       # ──────────────────────────────────────────────────────
       # Gerät: Waschmaschine
       # Slug: waschmaschine | Startup Detection aktiv
+      # price_mode: cheap_grid (Beispiel für Strompreis-Steuerung)
       # ──────────────────────────────────────────────────────
       - type: vertical-stack
         cards:
@@ -183,44 +259,57 @@ views:
               {% set r = states('sensor.aurum_waschmaschine_runtime') | float(0) | round(0) | int %}
               {% set wh = states('sensor.aurum_waschmaschine_energy_today') | float(0) %}
               {% set e = (wh / 1000) | round(2) if wh > 0 else 0 %}
+              {% set reason = state_attr('sensor.aurum_waschmaschine', 'scheduling_reason') %}
+              {% set cheap = state_attr('sensor.aurum_waschmaschine', 'cheap_period') %}
+              {% set starts = state_attr('sensor.aurum_waschmaschine', 'cheap_period_starts_in_min') %}
               {% if s == 'running' %}
-                ▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min · {{ e }} kWh
+                {% if reason == 'cheap_grid' %}⚡ Läuft – günstiger Strom · {{ p }} W · {{ r }} min · {{ e }} kWh
+                {% else %}▶ Läuft mit PV-Strom · {{ p }} W · {{ r }} min · {{ e }} kWh{% endif %}
               {% elif s == 'waiting' %}
                 ⏳ Wartet auf PV-Überschuss · {{ r }} min · {{ e }} kWh
               {% elif s == 'standby' %}
                 ◉ Bereit – erkennt automatisch wenn Programm startet
               {% elif s == 'on' %}
-                ✓ Eingeschaltet · {{ p }} W · {{ r }} min · {{ e }} kWh
+                {% if reason == 'cheap_grid' %}⚡ Eingeschaltet – günstiger Strom · {{ p }} W · {{ r }} min · {{ e }} kWh
+                {% else %}✓ Eingeschaltet · {{ p }} W · {{ r }} min · {{ e }} kWh{% endif %}
               {% elif s == 'manual_override' %}
                 ✋ Manuell eingeschaltet · {{ p }} W · {{ e }} kWh
               {% elif s == 'done' %}
                 ✅ Programm fertig · {{ r }} min · {{ e }} kWh
               {% else %}
-                ✗ Aus · {{ r }} min · {{ e }} kWh heute
+                {% if cheap %}⚡ Bestpreis aktiv – wartet auf Debounce
+                {% elif starts is not none and starts | int(0) > 0 %}⏳ Bestpreis in {{ starts }} min
+                {% else %}✗ Aus · {{ r }} min · {{ e }} kWh heute{% endif %}
               {% endif %}
             icon: mdi:washing-machine
             icon_color: >
               {% set s = states('sensor.aurum_waschmaschine') %}
-              {{ 'green' if s in ('on', 'running')
-                 else 'amber' if s in ('waiting', 'standby')
-                 else 'blue' if s == 'manual_override'
-                 else 'teal' if s == 'done'
-                 else 'grey' }}
+              {% set reason = state_attr('sensor.aurum_waschmaschine', 'scheduling_reason') %}
+              {% if s in ('on', 'running') and reason == 'cheap_grid' %}cyan
+              {% elif s in ('on', 'running') %}green
+              {% elif s in ('waiting', 'standby') %}amber
+              {% elif s == 'manual_override' %}blue
+              {% elif s == 'done' %}teal
+              {% else %}grey{% endif %}
             badge_icon: >
               {% set s = states('sensor.aurum_waschmaschine') %}
-              {{ 'mdi:check-circle' if s in ('on', 'running')
-                 else 'mdi:clock-outline' if s == 'waiting'
-                 else 'mdi:eye-outline' if s == 'standby'
-                 else 'mdi:account' if s == 'manual_override'
-                 else 'mdi:check-all' if s == 'done'
-                 else 'mdi:pause-circle' }}
+              {% set reason = state_attr('sensor.aurum_waschmaschine', 'scheduling_reason') %}
+              {% if s in ('on', 'running') and reason == 'cheap_grid' %}mdi:flash
+              {% elif s in ('on', 'running') %}mdi:check-circle
+              {% elif s == 'waiting' %}mdi:clock-outline
+              {% elif s == 'standby' %}mdi:eye-outline
+              {% elif s == 'manual_override' %}mdi:account
+              {% elif s == 'done' %}mdi:check-all
+              {% else %}mdi:pause-circle{% endif %}
             badge_color: >
               {% set s = states('sensor.aurum_waschmaschine') %}
-              {{ 'green' if s in ('on', 'running')
-                 else 'amber' if s in ('waiting', 'standby')
-                 else 'blue' if s == 'manual_override'
-                 else 'teal' if s == 'done'
-                 else 'grey' }}
+              {% set reason = state_attr('sensor.aurum_waschmaschine', 'scheduling_reason') %}
+              {% if s in ('on', 'running') and reason == 'cheap_grid' %}cyan
+              {% elif s in ('on', 'running') %}green
+              {% elif s in ('waiting', 'standby') %}amber
+              {% elif s == 'manual_override' %}blue
+              {% elif s == 'done' %}teal
+              {% else %}grey{% endif %}
             tap_action:
               action: more-info
               entity: sensor.aurum_waschmaschine
@@ -242,6 +331,7 @@ views:
       # ──────────────────────────────────────────────────────
       # Gerät: Heizen Mobil
       # Slug: heizen_mobil | Normales Gerät (unterbrechbar)
+      # price_mode: solar_only (Standard – kein Netzstrom)
       # ──────────────────────────────────────────────────────
       - type: vertical-stack
         cards:
@@ -377,6 +467,9 @@ views:
           - entity: sensor.aurum_battery_mode
             name: Akku-Modus
             icon: mdi:battery-heart
+          - entity: sensor.aurum_electricity_price
+            name: Strompreis
+            icon: mdi:cash
           - entity: sensor.aurum_forecast_remaining
             name: PV-Prognose heute noch
             icon: mdi:solar-power-variant-outline

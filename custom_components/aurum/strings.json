@@ -77,7 +77,8 @@
           "notify_service": "Mobile push notifications (optional)",
           "price_entity": "Electricity price sensor (optional)",
           "price_level_entity": "Price level sensor (optional)",
-          "cheap_period_entity": "Cheap price period sensor (optional)"
+          "cheap_period_entity": "Cheap price period sensor (optional)",
+          "cheap_period_starts_in_entity": "Cheap period countdown (optional)"
         },
         "data_description": {
           "grid_power_entity": "Your grid meter sensor in watts. Positive = drawing from grid, negative = feeding in.",
@@ -96,7 +97,8 @@
           "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
           "price_entity": "Current electricity price in ct/kWh. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
           "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
-          "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty."
+          "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty.",
+          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Can be left empty."
         }
       },
       "add_device": {

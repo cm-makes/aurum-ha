@@ -36,6 +36,8 @@ class PricingManager:
         self.price_entity = config.get("price_entity")
         self.price_level_entity = config.get("price_level_entity")
         self.cheap_period_entity = config.get("cheap_period_entity")
+        self.cheap_period_starts_in_entity = config.get(
+            "cheap_period_starts_in_entity")
 
         self._active = bool(
             self.price_entity
@@ -45,10 +47,12 @@ class PricingManager:
 
         if self._active:
             _LOGGER.info(
-                "AURUM Pricing active: price=%s, level=%s, cheap=%s",
+                "AURUM Pricing active: price=%s, level=%s, cheap=%s, "
+                "starts_in=%s",
                 self.price_entity or "-",
                 self.price_level_entity or "-",
                 self.cheap_period_entity or "-",
+                self.cheap_period_starts_in_entity or "-",
             )
 
     @property
@@ -90,6 +94,14 @@ class PricingManager:
             cheap_period = raw == "on"
         shared["cheap_period"] = cheap_period
 
+        # ── Cheap period starts in (minutes) ──
+        cheap_starts_in = None
+        if self.cheap_period_starts_in_entity:
+            raw = get_float(self.hass, self.cheap_period_starts_in_entity, None)
+            if raw is not None:
+                cheap_starts_in = round(raw)
+        shared["cheap_period_starts_in_min"] = cheap_starts_in
+
     def is_price_ok(self, dev):
         """Check if current price allows grid power for this device.
 
@@ -124,3 +136,4 @@ class PricingManager:
         self._last_price = shared.get("current_price")
         self._last_level_value = shared.get("price_level_value")
         self._last_cheap_period = shared.get("cheap_period", False)
+        self._last_cheap_starts_in = shared.get("cheap_period_starts_in_min")

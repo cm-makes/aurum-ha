@@ -31,6 +31,7 @@ from .const import (
     CONF_PRICE_ENTITY,
     CONF_PRICE_LEVEL_ENTITY,
     CONF_CHEAP_PERIOD_ENTITY,
+    CONF_CHEAP_PERIOD_STARTS_IN_ENTITY,
     CONF_DEVICES,
     CONF_DEV_NAME,
     CONF_DEV_SWITCH_ENTITY,
@@ -186,6 +187,10 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
             CONF_CHEAP_PERIOD_ENTITY,
             default=d.get(CONF_CHEAP_PERIOD_ENTITY, vol.UNDEFINED),
         ): _BINARY_SENSOR,
+        vol.Optional(
+            CONF_CHEAP_PERIOD_STARTS_IN_ENTITY,
+            default=d.get(CONF_CHEAP_PERIOD_STARTS_IN_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
     })
 
 

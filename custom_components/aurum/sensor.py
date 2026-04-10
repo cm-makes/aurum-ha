@@ -162,9 +162,22 @@ class AurumDeviceStatusSensor(CoordinatorEntity, SensorEntity):
 
     @callback
     def _handle_coordinator_update(self):
+        data = self.coordinator.data or {}
         for ds in (self.coordinator.device_states or []):
             if ds["name"] == self._dev_name:
                 self._attr_native_value = ds.get("state", "off")
+                attrs = {
+                    "scheduling_reason": ds.get("scheduling_reason"),
+                }
+                # Add pricing info for cheap_grid devices
+                if ds.get("price_mode") == "cheap_grid":
+                    attrs["price_mode"] = "cheap_grid"
+                    attrs["cheap_period"] = data.get("cheap_period", False)
+                    starts_in = data.get("cheap_period_starts_in_min")
+                    attrs["cheap_period_starts_in_min"] = starts_in
+                    attrs["current_price"] = data.get("current_price")
+                    attrs["max_price"] = ds.get("max_price", 0)
+                self._attr_extra_state_attributes = attrs
                 self.async_write_ha_state()
                 return
         self._attr_native_value = "unknown"
@@ -528,6 +541,8 @@ class AurumElectricityPriceSensor(CoordinatorEntity, SensorEntity):
         self._attr_extra_state_attributes = {
             "price_level": data.get("price_level"),
             "cheap_period": data.get("cheap_period", False),
+            "cheap_period_starts_in_min": data.get(
+                "cheap_period_starts_in_min"),
         }
         self.async_write_ha_state()
 

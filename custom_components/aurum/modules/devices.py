@@ -842,6 +842,7 @@ class DeviceManager:
                 "interruptible": dev["interruptible"],
                 "scheduling_reason": dev.get("_scheduling_reason"),
                 "price_mode": dev.get("price_mode", "solar_only"),
+                "max_price": dev.get("max_price", 0),
             })
 
         shared["device_states"] = device_states

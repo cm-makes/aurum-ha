@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch"]
 
@@ -31,6 +31,7 @@ CONF_NOTIFY_SERVICE = "notify_service"
 CONF_PRICE_ENTITY = "price_entity"
 CONF_PRICE_LEVEL_ENTITY = "price_level_entity"
 CONF_CHEAP_PERIOD_ENTITY = "cheap_period_entity"
+CONF_CHEAP_PERIOD_STARTS_IN_ENTITY = "cheap_period_starts_in_entity"
 
 # ── Config keys: Devices (Options Flow) ──────────────────────────
 CONF_DEVICES = "devices"
