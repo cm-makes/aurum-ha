@@ -1,9 +1,9 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.7.2"
+VERSION = "1.7.3"
 
-PLATFORMS = ["sensor", "binary_sensor", "number", "switch"]
+PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
 # ── Config keys: Energy sources (Step 1) ─────────────────────────
 CONF_GRID_POWER_ENTITY = "grid_power_entity"
