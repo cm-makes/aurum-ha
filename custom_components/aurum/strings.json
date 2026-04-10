@@ -148,7 +148,7 @@
           "deadline": "When does this device need to be finished? Example: 18:00 if laundry needs to be done by dinner time. AURUM will start the device in time — even without solar surplus. Leave empty if there's no time requirement.",
           "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start.",
           "interruptible": "Can AURUM turn this device off when surplus drops? Disable for devices that must not be interrupted (e.g. 3D printer, aquarium heater). Default: on.",
-          "price_mode": "Solar only: device runs only on PV surplus (default). Cheap grid: device also runs when electricity is cheap — even without solar. Requires a price sensor in settings.",
+          "price_mode": "Solar only: device runs exclusively on PV surplus — never uses grid power. Cheap grid: device primarily runs on PV surplus, but ALSO turns on when electricity is cheap (below your max price or during best-price periods) — even at night or on cloudy days. Both modes always prefer solar when available. Requires a price sensor in settings.",
           "max_price": "Maximum electricity price in ct/kWh at which this device may use grid power. Set to 0 to use price level / cheap period detection instead. Only applies in 'Cheap grid' mode.",
           "residual_power": "Extra safety margin added to the surplus requirement. Prevents the device from consuming power that's needed for grid stability. Default: 100W.",
           "hysteresis_on": "Extra surplus required beyond nominal power before turning on. Prevents flapping when surplus barely covers the device. Default: 200W.",
@@ -242,8 +242,8 @@
     },
     "price_mode": {
       "options": {
-        "price_mode_solar_only": "Solar only (default)",
-        "price_mode_cheap_grid": "Solar + cheap grid power"
+        "price_mode_solar_only": "Solar only – runs only on PV surplus (default)",
+        "price_mode_cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar"
       }
     }
   }
