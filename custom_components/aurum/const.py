@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.7.4"
+VERSION = "1.7.5"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
