@@ -339,16 +339,11 @@ class DeviceManager:
             eff_excess = available_excess
 
         # ── Price-aware: cheap grid power allows immediate turn-on ──
+        # No debounce needed: electricity prices change on 15-min/hourly
+        # intervals, not per-second like PV surplus. React immediately.
         if (dev.get("price_mode") == "cheap_grid"
                 and self.pricing
                 and self.pricing.is_price_ok(dev)):
-            # Debounce still applies (prevents flapping on price edges)
-            if dev["excess_since"] is None:
-                dev["excess_since"] = now
-                return False
-            elapsed = (now - dev["excess_since"]).total_seconds()
-            if elapsed < dev["debounce_on"]:
-                return False
             dev["_scheduling_reason"] = "cheap_grid"
             return True
 
