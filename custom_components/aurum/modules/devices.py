@@ -382,6 +382,15 @@ class DeviceManager:
             if on_duration < dev["min_on_time"]:
                 return None
 
+        # ── Price-aware: turn off when price is no longer cheap ──
+        # If device was started because of cheap grid power and the price
+        # has since risen above the threshold, turn off immediately.
+        # This prevents running on expensive grid power after a price jump.
+        if (dev.get("_scheduling_reason") == "cheap_grid"
+                and self.pricing
+                and not self.pricing.is_price_ok(dev)):
+            return "price_no_longer_cheap"
+
         # SOC below threshold: turn off if deficit persists
         # Uses per-device debounce_off as tolerance (same semantics).
         if battery_soc >= 0 and battery_soc < soc_threshold:
@@ -396,6 +405,15 @@ class DeviceManager:
                 dev["_soc_grid_deficit_since"] = None
                 return "soc_grid_deficit"
             dev["_soc_grid_deficit_since"] = None
+
+        # ── Price-aware: keep running on cheap grid even without surplus ──
+        # If the device is running on cheap grid power, don't turn it off
+        # just because there's an excess deficit. We intentionally use grid.
+        if (dev.get("_scheduling_reason") == "cheap_grid"
+                and self.pricing
+                and self.pricing.is_price_ok(dev)):
+            dev["_excess_deficit_since"] = None
+            return None
 
         # Excess deficit: turn off if deficit persists for debounce_off seconds.
         # Switch penalty multiplies the threshold to protect relays.
