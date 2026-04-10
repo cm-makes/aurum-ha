@@ -2,7 +2,7 @@
   <img src="custom_components/aurum/brand/logo.png" alt="AURUM – Solar Surplus Optimizer" width="400">
 </p>
 
-<h3 align="center">Automatische Solarüberschuss-Steuerung für Home Assistant</h3>
+<h3 align="center">Automatically route your PV surplus to household devices.<br>Zero YAML. Battery-aware. Forecast-smart. Price-aware.</h3>
 
 <p align="center">
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS"></a>
@@ -31,15 +31,15 @@
 <p align="center">
   <img src="docs/dashboard.png" alt="AURUM Dashboard" width="900">
   <br>
-  <em>AURUM Dashboard – Live-Übersicht mit Akku-Gauge, Geräte-Status, Laufzeiten und Diagnose</em>
+  <em>Live dashboard with battery gauge, device states, runtimes, and diagnostics</em>
 </p>
 
 ---
 
 ## Highlights
 
-| | Feature | Beschreibung |
-|---|---|---|
+| Feature | Description |
+|---|---|
 | **PV Surplus Steering** | Turns devices on/off based on available excess power |
 | **Battery-Aware** | Respects battery SOC with configurable target and minimum thresholds |
 | **Priority-Based** | Higher priority devices get power first |
@@ -49,7 +49,7 @@
 | **Per-Device SOC Threshold** | Each device can have its own minimum battery level |
 | **Energy Tracking** | Per-device kWh/day tracking, compatible with HA Energy Dashboard |
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
-| **Manual Override & Muss-heute** | Auto-created switches per device for manual control and deadline forcing |
+| **Manual Override & Must-run-today** | Auto-created switches per device for manual control and deadline forcing |
 | **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
 | **State Persistence** | Device runtimes, energy counters and budget safety factor survive restarts |
 | **HA Diagnostics** | Download a full JSON snapshot for bug reports |
@@ -89,6 +89,12 @@
 3. **Battery settings:** Set capacity, target SOC, minimum SOC, and update interval
 4. After setup: Go to **AURUM > Configure** to add devices
 
+<p align="center">
+  <img src="docs/config-flow.png" alt="AURUM Config Flow" width="400">
+  <br>
+  <em>Setup wizard — connect your energy sensors in two steps</em>
+</p>
+
 ### Adding Devices
 
 In the integration options (Configure), click **Add a device** and fill in:
@@ -105,6 +111,12 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
 | **Deadline** | Time by which the device must have run (e.g. `18:00`) |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
+
+<p align="center">
+  <img src="docs/device-config.png" alt="AURUM Device Configuration" width="400">
+  <br>
+  <em>Device configuration — all settings via UI, no YAML needed</em>
+</p>
 
 ### PV Forecast Budget (optional)
 
@@ -161,6 +173,12 @@ Debounce timers still apply to prevent flapping on price edges.
 - [aWATTar](https://github.com/home-assistant-libs/awattar) — hourly price data
 - [EPEX Spot](https://github.com/mampfes/hacs_epex_spot) — day-ahead prices
 - Any sensor providing ct/kWh or price levels
+
+---
+
+## Real-World Results
+
+Running on a 10 kWp system with 5 kWh battery, managing IR heaters, a washing machine, and a dishwasher — with typical spring sun, AURUM achieves **near-100% self-consumption** and **minimal grid import** during daylight hours. On cheap-tariff nights (Tibber), the heaters pre-heat rooms using low-cost grid power.
 
 ---
 
