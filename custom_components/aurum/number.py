@@ -32,10 +32,8 @@ async def async_setup_entry(
     for dev_state in coordinator.device_states:
         entities.append(
             AurumDeviceSOCThreshold(coordinator, entry, dev_state))
-        # Max price slider only for cheap_grid devices
-        if dev_state.get("price_mode") == "cheap_grid":
-            entities.append(
-                AurumDeviceMaxPrice(coordinator, entry, dev_state))
+        entities.append(
+            AurumDeviceMaxPrice(coordinator, entry, dev_state))
 
     async_add_entities(entities)
 
