@@ -12,7 +12,7 @@
 ##
 ## Strompreis-Sensoren anpassen:
 ##   Die Preis-Entitäten im Abschnitt "STROMPREIS" stammen von tibber_prices.
-##   Ersetze "alte_landstrasse_6" durch deinen tibber_prices Präfix.
+##   Ersetze "DEIN_TIBBER_PRAEFIX" durch deinen tibber_prices Präfix.
 
 title: AURUM Solar
 views:
@@ -161,19 +161,19 @@ views:
                 entity: sensor.aurum_electricity_price
 
             # Preis-Chips: Min/Max/Bestpreis Zeitraum
-            # Passe "alte_landstrasse_6" an deinen tibber_prices Präfix an
+            # Passe "DEIN_TIBBER_PRAEFIX" an deinen tibber_prices Präfix an
             - type: custom:mushroom-chips-card
               chips:
                 - type: template
                   icon: mdi:arrow-down-bold
                   icon_color: green
                   content: >
-                    Min: {{ states('sensor.alte_landstrasse_6_mindestpreis_heute') | float(0) | round(1) }} ct
+                    Min: {{ states('sensor.DEIN_TIBBER_PRAEFIX_mindestpreis_heute') | float(0) | round(1) }} ct
                 - type: template
                   icon: mdi:arrow-up-bold
                   icon_color: red
                   content: >
-                    Max: {{ states('sensor.alte_landstrasse_6_hochstpreis_heute') | float(0) | round(1) }} ct
+                    Max: {{ states('sensor.DEIN_TIBBER_PRAEFIX_hochstpreis_heute') | float(0) | round(1) }} ct
                 - type: template
                   icon: mdi:clock-fast
                   icon_color: >
