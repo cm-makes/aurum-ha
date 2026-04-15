@@ -241,6 +241,12 @@ class AurumCoordinator(DataUpdateCoordinator):
                 shared["device_power_total"] = sum(
                     d.get("power", 0)
                     for d in self._cached_device_states)
+                # Derive cheap_grid_active from cached states so the
+                # binary sensor doesn't flap to off on odd cycles.
+                shared["cheap_grid_active"] = any(
+                    d.get("scheduling_reason") == "cheap_grid"
+                    and d.get("state") not in ("off", "standby", "done", "")
+                    for d in self._cached_device_states)
 
             # ── Step 4: Update device_states cache ─────────────────
             self.device_states = shared.get("device_states", [])

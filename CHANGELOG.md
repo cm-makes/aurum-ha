@@ -5,6 +5,17 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.7] - 2026-04-15
+
+### Fixed
+- **Stale `scheduling_reason` after turn-off** – `_turn_off()` cleared most per-device state but left `_scheduling_reason` untouched. A device previously started for `cheap_grid` that was later turned off (e.g. price rose) kept its `cheap_grid` reason even while off. If the user then manually started the device, `_should_turn_off()` treated it as a cheap-grid device and applied price-based turn-off logic against the user's intent. Reason is now cleared on every turn-off.
+
+### Changed
+- **Preemption & priority shedding over-shed** – Both the SD preemption loop (`_preempt_for_sd`) and the priority-based shedding loop used a strictly greedy algorithm that could turn off more devices than necessary (e.g. shed a 500W + 800W device for a 1000W deficit even though the 800W device alone would suffice after the 500W one is shed). Added a second pass that drops redundant victims (smallest power first) while preserving deterministic shed order by priority ascending. No change to behaviour when the greedy result already matches the deficit exactly.
+
+### Added
+- **`binary_sensor.aurum_cheap_grid_active`** – Global flag that turns ON while any AURUM-managed device is running because of cheap grid power. Useful for external automations (block battery discharge, switch inverter mode) during a cheap-grid window. Also exposed via `coordinator.data["cheap_grid_active"]`.
+
 ## [1.5.7] - 2026-04-07
 
 ### Fixed

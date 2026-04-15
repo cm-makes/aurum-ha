@@ -303,17 +303,37 @@ class DeviceManager:
             candidates.sort(key=lambda d: d["priority"])
 
             deficit = -(excess_raw - newly_allocated)
+
+            # Stage 1: greedy pick until deficit is covered.
+            planned = []
             freed = 0.0
             for dev in candidates:
-                self._turn_off(dev, now, excess, battery_soc,
-                               dev["_pending_off"])
-                # Use nominal_power for freed accounting (consistent with
-                # newly_allocated which also uses nominal). Sensor values
-                # can lag or be unavailable and would cause over-shedding.
-                freed += dev["nominal_power"]
-                devices_on -= 1
                 if freed >= deficit:
                     break
+                planned.append(dev)
+                freed += dev["nominal_power"]
+
+            # Stage 2: drop redundant victims (smallest-power first) so
+            # we don't over-shed when a larger victim alone covers the
+            # deficit. Consistent accounting with nominal_power above.
+            if len(planned) > 1 and freed > deficit:
+                planned.sort(key=lambda d: d["nominal_power"])
+                i = 0
+                while i < len(planned):
+                    p = planned[i]["nominal_power"]
+                    if freed - p >= deficit:
+                        planned.pop(i)
+                        freed -= p
+                    else:
+                        i += 1
+                # Re-sort by priority ascending for deterministic shed order.
+                planned.sort(key=lambda d: d["priority"])
+
+            # Stage 3: actually turn off the selected devices.
+            for dev in planned:
+                self._turn_off(dev, now, excess, battery_soc,
+                               dev["_pending_off"])
+                devices_on -= 1
 
         self._publish_device_states(shared, battery_soc)
 
@@ -694,14 +714,41 @@ class DeviceManager:
 
         candidates.sort(key=lambda x: x[0]["priority"])
 
+        # ── Stage 1: greedy shed in priority-ascending order ─────
+        # Build a victim list until the accumulated freed power meets
+        # the deficit. This mirrors HELIOS behaviour.
+        planned = []
         freed = 0
-        victims = []
         for dev, power_w in candidates:
             if freed >= deficit:
                 break
+            planned.append((dev, power_w))
+            freed += power_w
+
+        # ── Stage 2: remove redundant victims to minimise over-shed ──
+        # If the greedy pass over-shot the deficit (e.g. shed A=500W
+        # + B=800W for a 1000W deficit → 1300W freed, over by 300W),
+        # try to drop victims that are now redundant. Iterate smallest
+        # power first so we keep the biggest useful contribution and
+        # unshed the most granular ones.
+        if len(planned) > 1 and freed > deficit:
+            planned.sort(key=lambda x: x[1])  # smallest power first
+            i = 0
+            while i < len(planned):
+                _dev, p = planned[i]
+                if freed - p >= deficit:
+                    planned.pop(i)
+                    freed -= p
+                else:
+                    i += 1
+            # Re-sort by priority ascending for deterministic shed order.
+            planned.sort(key=lambda x: x[0]["priority"])
+
+        # ── Stage 3: actually turn off the selected victims ──────
+        victims = []
+        for dev, power_w in planned:
             self._turn_off(dev, now, excess, battery_soc,
                            f"preempt_for_{sd_device['name']}")
-            freed += power_w
             victims.append(f"{dev['name']}({power_w:.0f}W)")
 
         if victims:
@@ -758,6 +805,11 @@ class DeviceManager:
         dev["excess_since"] = None
         dev["_excess_deficit_since"] = None
         dev["_soc_grid_deficit_since"] = None
+        # Clear scheduling reason so the next turn-on decision starts fresh.
+        # Without this, a stale "cheap_grid" reason can cause AURUM to treat
+        # a later manually-started device as a cheap-grid device and apply
+        # price-based turn-off logic against the user's wishes.
+        dev["_scheduling_reason"] = None
         dev["_switch_times"].append(now)
         self._log_action(dev, "OFF", excess, soc, reason)
 
@@ -861,6 +913,16 @@ class DeviceManager:
         shared["device_states"] = device_states
         shared["devices_on"] = devices_on
         shared["device_power_total"] = round(total_power, 1)
+
+        # Expose a global "cheap grid active" flag so external automations
+        # (e.g. battery discharge block, inverter mode switch) can react
+        # when AURUM is intentionally consuming grid power at low prices.
+        # True if any device is currently ON with scheduling_reason=cheap_grid.
+        shared["cheap_grid_active"] = any(
+            d.get("_scheduling_reason") == "cheap_grid"
+            and self._is_device_on(d)
+            for d in self.devices
+        )
 
     def _is_manual_override(self, dev):
         """Check if manual override is active for this device.
