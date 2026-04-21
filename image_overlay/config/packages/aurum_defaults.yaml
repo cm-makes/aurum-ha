@@ -1,0 +1,77 @@
+# ══════════════════════════════════════════════════════════════
+#  AURUM Defaults – sensible HA helpers and automations
+#  Loaded automatically via `packages: !include_dir_named packages`.
+# ══════════════════════════════════════════════════════════════
+
+# ── Input helpers for manual overrides and household preferences ──
+input_boolean:
+  aurum_vacation_mode:
+    name: AURUM – Urlaubsmodus
+    icon: mdi:beach
+    # When ON, all devices are blocked regardless of surplus.
+
+  aurum_night_quiet:
+    name: AURUM – Nachtruhe
+    icon: mdi:weather-night
+    # When ON, noisy devices (washer, dishwasher) are blocked 22:00–06:00.
+
+input_number:
+  aurum_min_surplus_override:
+    name: AURUM – Minimaler Überschuss
+    min: 0
+    max: 3000
+    step: 50
+    unit_of_measurement: W
+    icon: mdi:solar-power
+    # Per-session override. 0 = use per-device threshold from AURUM config.
+
+# ── Pre-defined Schedules ──
+# Users can enable these via the UI; quiet by default.
+schedule:
+  aurum_night_quiet_schedule:
+    name: Nachtruhe Standard
+    monday:
+      - from: "22:00"
+        to: "06:00"
+    tuesday:
+      - from: "22:00"
+        to: "06:00"
+    wednesday:
+      - from: "22:00"
+        to: "06:00"
+    thursday:
+      - from: "22:00"
+        to: "06:00"
+    friday:
+      - from: "23:00"
+        to: "07:00"
+    saturday:
+      - from: "23:00"
+        to: "08:00"
+    sunday:
+      - from: "22:00"
+        to: "07:00"
+
+# ── Auto-follow the schedule into night_quiet mode ──
+automation:
+  - id: aurum_night_quiet_on
+    alias: "AURUM: Nachtruhe aktivieren"
+    trigger:
+      - platform: state
+        entity_id: schedule.aurum_night_quiet_schedule
+        to: "on"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.aurum_night_quiet
+
+  - id: aurum_night_quiet_off
+    alias: "AURUM: Nachtruhe deaktivieren"
+    trigger:
+      - platform: state
+        entity_id: schedule.aurum_night_quiet_schedule
+        to: "off"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.aurum_night_quiet

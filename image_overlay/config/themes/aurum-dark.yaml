@@ -1,0 +1,52 @@
+# ══════════════════════════════════════════════════════════════
+#  AURUM Dark – Home Assistant theme
+#  Gold / amber accents on near-black background, echo AURUM branding.
+# ══════════════════════════════════════════════════════════════
+
+AURUM Dark:
+  # Primary palette
+  primary-color: "#f5b400"
+  accent-color: "#f5b400"
+  dark-primary-color: "#d89a00"
+  light-primary-color: "#ffd152"
+
+  # Backgrounds
+  primary-background-color: "#0d1117"
+  secondary-background-color: "#161b22"
+  card-background-color: "#161b22"
+  app-header-background-color: "#0d1117"
+
+  # Text
+  primary-text-color: "#e6edf3"
+  secondary-text-color: "#8b949e"
+  text-primary-color: "#0d1117"
+  disabled-text-color: "#484f58"
+
+  # State
+  state-icon-color: "#8b949e"
+  state-icon-active-color: "#f5b400"
+  state-icon-unavailable-color: "#484f58"
+
+  # Dividers / borders
+  divider-color: "rgba(255,255,255,0.07)"
+  outline-color: "rgba(255,255,255,0.07)"
+
+  # Mushroom Cards
+  mush-rgb-amber: "245, 180, 0"
+  mush-rgb-green: "34, 197, 94"
+  mush-rgb-red: "239, 68, 68"
+  mush-rgb-blue: "59, 130, 246"
+  mush-rgb-purple: "139, 92, 246"
+  mush-title-font-weight: "700"
+
+  # Charts (energy dashboard etc.)
+  paper-item-icon-color: "#e6edf3"
+  paper-listbox-background-color: "#1c2333"
+
+  # Solar / return / consumption accent colors for the energy view
+  energy-solar-color: "#f5b400"
+  energy-grid-return-color: "#22c55e"
+  energy-grid-consumption-color: "#ef4444"
+  energy-battery-in-color: "#3b82f6"
+  energy-battery-out-color: "#00d2a0"
+  energy-non-fossil-color: "#f5b400"

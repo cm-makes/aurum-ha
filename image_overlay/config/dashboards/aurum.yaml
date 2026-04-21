@@ -1,0 +1,203 @@
+# ══════════════════════════════════════════════════════════════
+#  AURUM Dashboard – Plug & Play default
+#  Uses only `sensor.aurum_*` entities that AURUM creates itself,
+#  so it renders immediately after first AURUM setup with any
+#  inverter/battery combination.
+#  Requires: Mushroom Cards (HACS).
+# ══════════════════════════════════════════════════════════════
+
+title: AURUM
+views:
+  # ═══════════════════════════════════════════════════════════
+  #  View 1: Live – Power flow + devices at a glance
+  # ═══════════════════════════════════════════════════════════
+  - title: Live
+    path: live
+    icon: mdi:solar-power
+    type: sections
+    max_columns: 2
+    sections:
+
+      # ── Header chips: PV · Grid · Battery · Surplus ──────────
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: ☀️ AURUM
+            subtitle: Solar Surplus Optimizer
+
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              # PV production
+              - type: template
+                icon: mdi:solar-panel-large
+                icon_color: amber
+                content: "{{ states('sensor.aurum_pv_power') | int(0) }} W"
+                tap_action: { action: more-info, entity: sensor.aurum_pv_power }
+
+              # Grid: red = import, green = export
+              - type: template
+                icon: mdi:transmission-tower
+                icon_color: >
+                  {% set g = states('sensor.aurum_grid_power') | float(0) %}
+                  {{ 'red' if g > 50 else 'green' if g < -50 else 'grey' }}
+                content: >
+                  {% set g = states('sensor.aurum_grid_power') | float(0) %}
+                  {% if g > 50 %}↓ {{ g | int }} W
+                  {%- elif g < -50 %}↑ {{ (g | abs) | int }} W
+                  {%- else %}≈ 0 W{% endif %}
+                tap_action: { action: more-info, entity: sensor.aurum_grid_power }
+
+              # Battery SOC
+              - type: template
+                icon: >
+                  {% set s = states('sensor.aurum_battery_soc') | float(-1) %}
+                  {% if s < 0 %}mdi:battery-unknown
+                  {%- elif s > 90 %}mdi:battery
+                  {%- elif s > 60 %}mdi:battery-70
+                  {%- elif s > 30 %}mdi:battery-40
+                  {%- else %}mdi:battery-20{% endif %}
+                icon_color: >
+                  {% set s = states('sensor.aurum_battery_soc') | float(-1) %}
+                  {{ 'green' if s >= 60 else 'amber' if s >= 30 else 'red' if s >= 0 else 'grey' }}
+                content: >
+                  {% set s = states('sensor.aurum_battery_soc') | float(-1) %}
+                  {{ s | int ~ ' %' if s >= 0 else '–' }}
+                tap_action: { action: more-info, entity: sensor.aurum_battery_soc }
+
+              # Surplus available to devices
+              - type: template
+                icon: mdi:flash
+                icon_color: >
+                  {% set e = states('sensor.aurum_available_surplus') | float(0) %}
+                  {{ 'green' if e > 500 else 'amber' if e > 100 else 'grey' }}
+                content: "{{ states('sensor.aurum_available_surplus') | int(0) }} W"
+                tap_action: { action: more-info, entity: sensor.aurum_available_surplus }
+
+              # Cheap-grid flag
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.aurum_cheap_grid_active
+                    state: "on"
+                chip:
+                  type: template
+                  icon: mdi:cash-clock
+                  icon_color: amber
+                  content: Günstig
+
+      # ── Power flow card (using Mushroom chips as simple fallback) ──
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Energiefluss
+
+          - type: entities
+            entities:
+              - entity: sensor.aurum_pv_power
+                name: Solar
+                icon: mdi:solar-panel
+              - entity: sensor.aurum_grid_power
+                name: Netz
+                icon: mdi:transmission-tower
+              - entity: sensor.aurum_battery_power
+                name: Akku
+                icon: mdi:battery-charging
+              - entity: sensor.aurum_available_surplus
+                name: Überschuss
+                icon: mdi:flash
+              - entity: sensor.aurum_total_device_power
+                name: Geräte
+                icon: mdi:power-plug
+
+      # ── Quick controls ──────────────────────────────────────
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Steuerung
+
+          - type: custom:mushroom-entity-card
+            entity: input_boolean.aurum_vacation_mode
+            name: Urlaubsmodus
+            icon: mdi:beach
+            icon_color: amber
+            tap_action: { action: toggle }
+
+          - type: custom:mushroom-entity-card
+            entity: input_boolean.aurum_night_quiet
+            name: Nachtruhe
+            icon: mdi:weather-night
+            icon_color: blue
+            tap_action: { action: toggle }
+
+          - type: custom:mushroom-number-card
+            entity: input_number.aurum_min_surplus_override
+            name: Min. Überschuss
+            icon: mdi:solar-power
+            display_mode: slider
+
+      # ── Device list (shows all sensor.aurum_device_* automatically) ──
+      - type: grid
+        cards:
+          - type: custom:mushroom-title-card
+            title: Geräte
+
+          # Auto-discover all AURUM device sensors at render time
+          - type: custom:auto-entities
+            card:
+              type: entities
+              title: Aktive Geräte
+              show_header_toggle: false
+            filter:
+              include:
+                - entity_id: "switch.aurum_*"
+                  options:
+                    secondary_info: last-changed
+              exclude:
+                - state: "unavailable"
+            sort:
+              method: friendly_name
+
+  # ═══════════════════════════════════════════════════════════
+  #  View 2: Energy – HA native energy dashboard, deep-linked
+  # ═══════════════════════════════════════════════════════════
+  - title: Energie
+    path: energy
+    icon: mdi:chart-bar
+    panel: true
+    cards:
+      - type: iframe
+        url: /energy
+        aspect_ratio: 100%
+
+  # ═══════════════════════════════════════════════════════════
+  #  View 3: Setup – shortcuts to AURUM config + HACS
+  # ═══════════════════════════════════════════════════════════
+  - title: Setup
+    path: setup
+    icon: mdi:cog
+    cards:
+      - type: custom:mushroom-title-card
+        title: ⚙️ AURUM Setup
+        subtitle: Ersteinrichtung und Verwaltung
+
+      - type: markdown
+        content: |
+          ## Schnellstart
+
+          1. **Inverter verbinden** – Einstellungen → Integrationen → Hinzufügen
+             (Fronius, SMA, Kostal, SolarEdge werden per mDNS gefunden)
+          2. **Smart Plugs verbinden** – Einstellungen → Integrationen
+             (Shelly / Tasmota werden per mDNS gefunden)
+          3. **AURUM konfigurieren** – Einstellungen → Integrationen → AURUM
+             → Netz-, PV-, Akku-Sensoren auswählen
+          4. **Geräte hinzufügen** – AURUM → Konfigurieren → Gerät hinzufügen
+
+          📖 **Ausführliche Anleitung:**
+          [github.com/cm-makes/aurum-ha/blob/main/docs/QUICKSTART.md](https://github.com/cm-makes/aurum-ha/blob/main/docs/QUICKSTART.md)
+
+      - type: entities
+        title: Systemzustand
+        entities:
+          - sensor.aurum_cycle
+          - binary_sensor.aurum_cheap_grid_active
+          - sensor.aurum_managed_devices

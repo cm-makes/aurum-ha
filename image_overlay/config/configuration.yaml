@@ -1,0 +1,38 @@
+# ══════════════════════════════════════════════════════════════
+#  AURUM Plug & Play – Home Assistant configuration
+# ══════════════════════════════════════════════════════════════
+#  This file is intended for fresh HA installations bootstrapped via
+#  `tools/quickstart.sh`. Safe to merge manually with an existing
+#  configuration.yaml: just copy the `frontend:`, `homeassistant:`
+#  (themes:), and `lovelace:` blocks if you already have other content.
+#
+#  Reference: https://www.home-assistant.io/docs/configuration/
+# ══════════════════════════════════════════════════════════════
+
+# Core HA features: history, recorder, logbook, frontend, etc.
+default_config:
+
+homeassistant:
+  # Make the `themes` folder readable
+  customize: !include_dir_merge_named customize/
+  packages: !include_dir_named packages
+
+frontend:
+  themes: !include_dir_merge_named themes
+
+# ── Extra dashboards (in addition to the auto-generated one) ──
+lovelace:
+  mode: storage
+  dashboards:
+    aurum-dashboard:
+      mode: yaml
+      title: AURUM
+      icon: mdi:solar-power-variant
+      show_in_sidebar: true
+      filename: dashboards/aurum.yaml
+
+# ── Optional: sensible logging defaults ──
+logger:
+  default: info
+  logs:
+    custom_components.aurum: info
