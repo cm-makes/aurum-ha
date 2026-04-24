@@ -307,6 +307,19 @@ Your support helps keep this project alive and growing.
 
 ---
 
+## Support & Community
+
+Got a question, an idea, or want to show off your setup? Use GitHub Discussions — it's the fastest way to get help and talk to other users.
+
+| | |
+|---|---|
+| [Ask a question](https://github.com/cm-makes/aurum-ha/discussions/categories/q-a) | Setup help, configuration, troubleshooting |
+| [Share an idea](https://github.com/cm-makes/aurum-ha/discussions/categories/ideas) | Feature ideas — discuss before opening a formal request |
+| [Show and tell](https://github.com/cm-makes/aurum-ha/discussions/categories/show-and-tell) | Dashboards, setups, energy results |
+| [Report a bug](https://github.com/cm-makes/aurum-ha/issues/new?template=bug_report.yml) | Something broken? Open an issue |
+
+---
+
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

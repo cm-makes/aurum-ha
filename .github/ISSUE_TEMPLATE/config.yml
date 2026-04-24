@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / Help
+    url: https://github.com/cm-makes/aurum-ha/discussions/categories/q-a
+    about: Ask the community for help with setup, configuration, or usage.
+  - name: Feature Idea
+    url: https://github.com/cm-makes/aurum-ha/discussions/categories/ideas
+    about: Share an idea and get feedback before opening a formal feature request.
+  - name: Show and Tell
+    url: https://github.com/cm-makes/aurum-ha/discussions/categories/show-and-tell
+    about: Share your AURUM dashboard, setup, or results with the community.
+  - name: Home Assistant Community Forum
+    url: https://community.home-assistant.io/
+    about: General Home Assistant questions unrelated to AURUM.
