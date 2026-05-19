@@ -95,6 +95,82 @@ _BINARY_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="binary_sensor"))
 
 
+# ── Validation ───────────────────────────────────────────────────
+_VALID_POWER_UNITS = {"W", "kW", "mW", "MW"}
+_VALID_ENERGY_UNITS = {"Wh", "kWh", "MWh"}
+_VALID_PERCENT_UNITS = {"%", ""}
+
+
+def _is_numeric(value) -> bool | None:
+    """Return True if numeric, False if clearly not, None if unverifiable."""
+    if value is None or value in ("unknown", "unavailable", ""):
+        return None
+    try:
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _validate_energy_sources(hass, data: dict) -> dict[str, str]:
+    """Catch the most common config mistakes before they cause silent runtime bugs.
+
+    Returns a dict of field_name -> error_key. Empty dict = OK.
+    Only flags clear errors (wrong unit, fraction-vs-percent SOC); tolerates
+    transient unknown/unavailable states.
+    """
+    errors: dict[str, str] = {}
+
+    def _check_power(key: str) -> None:
+        ent = data.get(key)
+        if not ent:
+            return
+        st = hass.states.get(ent)
+        if st is None:
+            errors[key] = "entity_not_found"
+            return
+        unit = (st.attributes.get("unit_of_measurement") or "").strip()
+        if unit and unit not in _VALID_POWER_UNITS:
+            errors[key] = "invalid_power_unit"
+        elif _is_numeric(st.state) is False:
+            errors[key] = "not_numeric"
+
+    def _check_energy(key: str) -> None:
+        ent = data.get(key)
+        if not ent:
+            return
+        st = hass.states.get(ent)
+        if st is None:
+            errors[key] = "entity_not_found"
+            return
+        unit = (st.attributes.get("unit_of_measurement") or "").strip()
+        if unit and unit not in _VALID_ENERGY_UNITS:
+            errors[key] = "invalid_energy_unit"
+
+    _check_power(CONF_GRID_POWER_ENTITY)
+    _check_power(CONF_PV_POWER_ENTITY)
+    _check_power(CONF_BATTERY_CHARGE_POWER_ENTITY)
+    _check_power(CONF_BATTERY_DISCHARGE_POWER_ENTITY)
+    _check_energy(CONF_PV_FORECAST_ENTITY)
+    _check_energy(CONF_PV_ACTUAL_TODAY_ENTITY)
+
+    soc = data.get(CONF_BATTERY_SOC_ENTITY)
+    if soc:
+        st = hass.states.get(soc)
+        if st is None:
+            errors[CONF_BATTERY_SOC_ENTITY] = "entity_not_found"
+        else:
+            unit = (st.attributes.get("unit_of_measurement") or "").strip()
+            if unit and unit not in _VALID_PERCENT_UNITS:
+                errors[CONF_BATTERY_SOC_ENTITY] = "invalid_soc_unit"
+            elif _is_numeric(st.state):
+                val = float(st.state)
+                if 0 < val <= 1:
+                    errors[CONF_BATTERY_SOC_ENTITY] = "soc_is_fraction"
+
+    return errors
+
+
 def _schema_energy(defaults: dict | None = None) -> vol.Schema:
     """Schema for Step 1: Energy sources."""
     d = defaults or {}
@@ -394,13 +470,17 @@ class AurumConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         """Step 1/2: Energy sources."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_battery()
+            errors = _validate_energy_sources(self.hass, user_input)
+            if not errors:
+                self._data.update(user_input)
+                return await self.async_step_battery()
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_schema_energy(),
+            data_schema=_schema_energy(user_input or {}),
+            errors=errors,
         )
 
     async def async_step_battery(self, user_input=None):
@@ -490,12 +570,15 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_settings(self, user_input=None):
         """Edit energy + battery settings."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._options.update(user_input)
-            self._options[CONF_DEVICES] = self._devices
-            return self.async_create_entry(title="", data=self._options)
+            errors = _validate_energy_sources(self.hass, user_input)
+            if not errors:
+                self._options.update(user_input)
+                self._options[CONF_DEVICES] = self._devices
+                return self.async_create_entry(title="", data=self._options)
 
-        combined = {**self._current, **self._options}
+        combined = {**self._current, **self._options, **(user_input or {})}
         all_schema = {}
         for key, val in _schema_energy(combined).schema.items():
             all_schema[key] = val
@@ -505,6 +588,7 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="settings",
             data_schema=vol.Schema(all_schema),
+            errors=errors,
         )
 
     async def async_step_add_device(self, user_input=None):

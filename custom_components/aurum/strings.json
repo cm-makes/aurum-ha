@@ -46,6 +46,14 @@
     },
     "abort": {
       "already_configured": "AURUM is already set up. You can configure it under Settings → Integrations."
+    },
+    "error": {
+      "entity_not_found": "This entity doesn't exist in Home Assistant. Did you remove or rename it?",
+      "invalid_power_unit": "This sensor's unit isn't a power unit (W, kW). Pick a sensor that reports power in watts — not energy (Wh/kWh) or current (A).",
+      "invalid_energy_unit": "This sensor's unit isn't an energy unit (Wh, kWh). Pick a sensor that reports energy, not power.",
+      "invalid_soc_unit": "Battery level sensor must be a percentage. This one reports something else (Wh? V?). Pick the sensor that shows 0–100%.",
+      "soc_is_fraction": "This sensor reports battery level as 0–1 (fraction), but AURUM expects 0–100 (percent). Add a Template sensor that multiplies by 100, or pick a sensor that reports percent.",
+      "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value."
     }
   },
   "options": {
@@ -229,6 +237,14 @@
           "device_to_remove": "Device to remove"
         }
       }
+    },
+    "error": {
+      "entity_not_found": "This entity doesn't exist in Home Assistant. Did you remove or rename it?",
+      "invalid_power_unit": "This sensor's unit isn't a power unit (W, kW). Pick a sensor that reports power in watts — not energy (Wh/kWh) or current (A).",
+      "invalid_energy_unit": "This sensor's unit isn't an energy unit (Wh, kWh). Pick a sensor that reports energy, not power.",
+      "invalid_soc_unit": "Battery level sensor must be a percentage. This one reports something else (Wh? V?). Pick the sensor that shows 0–100%.",
+      "soc_is_fraction": "This sensor reports battery level as 0–1 (fraction), but AURUM expects 0–100 (percent). Add a Template sensor that multiplies by 100, or pick a sensor that reports percent.",
+      "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value."
     }
   },
   "selector": {

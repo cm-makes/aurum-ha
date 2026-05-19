@@ -5,23 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill in the details below.
-
-  - type: input
-    id: version
-    attributes:
-      label: AURUM Version
-      placeholder: "1.0.0"
-    validations:
-      required: true
-
-  - type: input
-    id: ha_version
-    attributes:
-      label: Home Assistant Version
-      placeholder: "2026.3.4"
-    validations:
-      required: true
+        Thanks for reporting a bug! The diagnostics file below contains everything we need (versions, sensor states, device config) — please attach it so we don't have to guess.
 
   - type: textarea
     id: description
@@ -42,19 +26,21 @@ body:
         3.
 
   - type: textarea
-    id: logs
+    id: diagnostics
     attributes:
-      label: Relevant logs
+      label: Diagnostics file
       description: |
-        Paste any relevant log output from Home Assistant.
-        Settings → System → Logs → filter for "aurum"
-      render: shell
+        **Required.** Go to Settings → Devices & Services → AURUM → ⋮ → Download diagnostics, then drag-and-drop the JSON file into this field. Contains AURUM version, HA version, sensor states, battery state and device configuration.
+    validations:
+      required: true
 
   - type: textarea
-    id: config
+    id: logs
     attributes:
-      label: Device configuration
-      description: How many devices do you have configured? What types (washing machine, pool pump, etc.)?
+      label: Relevant logs (optional)
+      description: |
+        If the bug shows up in logs: Settings → System → Logs → filter for "aurum" → paste here.
+      render: shell
 
   - type: dropdown
     id: installation

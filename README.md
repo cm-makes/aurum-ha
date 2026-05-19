@@ -5,7 +5,7 @@
 <h3 align="center">Automatically route your PV surplus to household devices.<br>Zero YAML. Battery-aware. Forecast-smart. Price-aware.</h3>
 
 <p align="center">
-  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS"></a>
+  <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Compatible-41BDF5.svg" alt="HACS"></a>
   <a href="https://github.com/cm-makes/aurum-ha/releases"><img src="https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
   <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg" alt="HA Version"></a>
@@ -70,10 +70,11 @@
 
 ### HACS (recommended)
 
-1. Open HACS > Integrations > Custom repositories
-2. Add `https://github.com/cm-makes/aurum-ha` as **Integration**
-3. Search for "AURUM" and install
-4. Restart Home Assistant
+1. Open HACS in Home Assistant
+2. Search for **AURUM** and click **Download**
+3. Restart Home Assistant
+
+> **Until [HACS PR #6653](https://github.com/hacs/default/pull/6653) is merged**, AURUM isn't in the HACS default store yet. As a fallback: HACS → ⋮ → *Custom repositories* → add `https://github.com/cm-makes/aurum-ha` as **Integration**, then continue with step 2.
 
 ### Manual
 
@@ -304,6 +305,60 @@ If AURUM saves you energy and money, consider supporting its development:
 </p>
 
 Your support helps keep this project alive and growing.
+
+---
+
+## Troubleshooting
+
+Most setup issues fall into one of these patterns. Before opening an issue, check whether your symptom matches.
+
+### `sensor.aurum_excess_power` is always 0 (or always huge) — devices never react
+
+**Grid sign convention is wrong.** AURUM expects: positive grid power = drawing from grid, negative = feeding in. Many inverters report this the other way around (or only positive values).
+
+Quick test: with PV producing more than house consumption, your grid sensor should read **negative**. If it's positive while you're exporting, create a Template sensor that flips the sign:
+
+```yaml
+template:
+  - sensor:
+      - name: "Grid Power Signed"
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: "{{ -1 * states('sensor.your_grid_sensor') | float(0) }}"
+```
+
+Then point AURUM at `sensor.grid_power_signed`.
+
+### Battery mode stuck on `charging`, all devices off
+
+Two possible causes:
+
+1. **Battery SOC sensor below `min_soc`** — check `sensor.aurum_battery_soc` vs. the **Battery reserve** slider. If SOC is reported as e.g. `42` but you expected `42%`, you're fine. If it's `0.42`, your sensor reports a fraction — AURUM's config flow now catches this at setup, but old configs won't be re-validated. Replace with a Template sensor that multiplies by 100.
+2. **No battery configured, but `min_soc` > 0** — without a battery SOC sensor, AURUM treats SOC as 0 and goes straight into charging mode. Leave the battery SOC empty *and* set `min_soc` to 0.
+
+### Surplus seems too low when the sun is bright
+
+You probably have a battery but didn't configure **Battery charge power** and **Battery discharge power**. Without these, AURUM can't tell how much PV power is "hidden" in battery charging, so it underestimates the real surplus available for devices. Both sensors live in your inverter/BMS integration (Solax, SMA, Fronius, Kostal usually expose them).
+
+### Device shows as `waiting` even though there's surplus
+
+Open the device entity and check:
+
+- **Priority** — lower-priority devices wait while higher-priority ones get power first
+- **SOC threshold** — device won't run if battery is below this level (during `low_soc` mode)
+- **Hysteresis ON** — AURUM needs `nominal_power + hysteresis_on` of surplus before turning on, to avoid flapping
+- **Debounce ON** — surplus must stay sufficient for this many seconds before AURUM commits
+
+For diagnostic detail, look at the device entity's `scheduling_reason` attribute.
+
+### Devices keep flapping (on/off/on/off)
+
+Increase `hysteresis_off` (tolerate larger surplus dips before turning off) and `debounce_off` (let the device ride through short clouds). Defaults are 100W / 600s — for shaded sites, try 200W / 900s.
+
+### Still stuck?
+
+Download diagnostics (**Settings → Devices & Services → AURUM → ⋮ → Download diagnostics**) and open an issue with that file attached. It contains every value the maintainer needs to debug.
 
 ---
 

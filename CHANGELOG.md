@@ -5,6 +5,15 @@ All notable changes to AURUM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Config-flow sensor validation** – Sensors picked during setup (and in Options → Settings) are now validated for matching units and numeric state. Power sensors must report `W`/`kW`, energy sensors `Wh`/`kWh`, the battery SOC sensor a percentage. A battery SOC sensor reporting a 0–1 fraction is detected and reported with a clear message, instead of letting the integration silently misbehave at runtime.
+- **Troubleshooting section in README** – Covers the most common first-install issues: grid sign convention, battery mode stuck on charging, missing battery charge/discharge sensors, devices stuck in `waiting`, flapping.
+
+### Changed
+- **Bug report template** – Replaced manual version fields with a required diagnostics-file attachment. The diagnostics JSON already contains the AURUM version, HA version, sensor states and device configuration, so reporters no longer have to copy them by hand (and can't get them wrong).
+
 ## [1.7.7] - 2026-04-15
 
 ### Fixed

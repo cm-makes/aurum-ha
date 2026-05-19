@@ -46,6 +46,14 @@
     },
     "abort": {
       "already_configured": "AURUM ist bereits eingerichtet. Du kannst es unter Einstellungen → Integrationen konfigurieren."
+    },
+    "error": {
+      "entity_not_found": "Diese Entität existiert nicht in Home Assistant. Wurde sie umbenannt oder gelöscht?",
+      "invalid_power_unit": "Die Einheit dieses Sensors ist keine Leistung (W, kW). Wähle einen Sensor, der Leistung in Watt liefert — keine Energie (Wh/kWh) und keinen Strom (A).",
+      "invalid_energy_unit": "Die Einheit dieses Sensors ist keine Energie (Wh, kWh). Wähle einen Sensor, der Energie liefert, keine Leistung.",
+      "invalid_soc_unit": "Der Batterie-SOC-Sensor muss eine Prozentangabe sein. Dieser hier liefert etwas anderes (Wh? V?). Wähle den Sensor, der 0–100% anzeigt.",
+      "soc_is_fraction": "Dieser Sensor liefert den Ladestand als 0–1 (Bruchteil), AURUM erwartet aber 0–100 (Prozent). Lege einen Template-Sensor an, der mit 100 multipliziert, oder wähle einen Sensor in Prozent.",
+      "not_numeric": "Dieser Sensor liefert aktuell keine Zahl. Prüfe, ob der Sensor online ist und einen Wert liefert."
     }
   },
   "options": {
@@ -189,6 +197,14 @@
           "device_to_remove": "Gerät entfernen"
         }
       }
+    },
+    "error": {
+      "entity_not_found": "Diese Entität existiert nicht in Home Assistant. Wurde sie umbenannt oder gelöscht?",
+      "invalid_power_unit": "Die Einheit dieses Sensors ist keine Leistung (W, kW). Wähle einen Sensor, der Leistung in Watt liefert — keine Energie (Wh/kWh) und keinen Strom (A).",
+      "invalid_energy_unit": "Die Einheit dieses Sensors ist keine Energie (Wh, kWh). Wähle einen Sensor, der Energie liefert, keine Leistung.",
+      "invalid_soc_unit": "Der Batterie-SOC-Sensor muss eine Prozentangabe sein. Dieser hier liefert etwas anderes (Wh? V?). Wähle den Sensor, der 0–100% anzeigt.",
+      "soc_is_fraction": "Dieser Sensor liefert den Ladestand als 0–1 (Bruchteil), AURUM erwartet aber 0–100 (Prozent). Lege einen Template-Sensor an, der mit 100 multipliziert, oder wähle einen Sensor in Prozent.",
+      "not_numeric": "Dieser Sensor liefert aktuell keine Zahl. Prüfe, ob der Sensor online ist und einen Wert liefert."
     }
   },
   "selector": {
