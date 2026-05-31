@@ -81,7 +81,12 @@
           "battery_capacity_wh": "Battery size",
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
-          "update_interval": "Update speed"
+          "update_interval": "Update speed",
+          "notify_service": "Mobile push notifications (optional)",
+          "price_entity": "Electricity price sensor (optional)",
+          "price_level_entity": "Price level sensor (optional)",
+          "cheap_period_entity": "Cheap price period sensor (optional)",
+          "cheap_period_starts_in_entity": "Cheap period countdown (optional)"
         },
         "data_description": {
           "grid_power_entity": "Your grid meter sensor in watts. Positive = drawing from grid, negative = feeding in.",
@@ -96,7 +101,12 @@
           "battery_capacity_wh": "Battery size in watt-hours (e.g. 10,000 Wh = 10 kWh).",
           "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
-          "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s."
+          "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
+          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
+          "price_entity": "Current electricity price in ct/kWh. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
+          "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
+          "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty.",
+          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Can be left empty."
         }
       },
       "add_device": {
@@ -110,9 +120,17 @@
           "priority": "Priority",
           "soc_threshold": "Minimum battery level",
           "startup_detection": "Program detection",
+          "sd_power_threshold": "SD: Start threshold (W)",
+          "sd_standby_power": "SD: Standby power (W)",
+          "sd_finish_power": "SD: Finish threshold (W)",
+          "sd_finish_time": "SD: Finish hold time (s)",
+          "sd_detection_time": "SD: Detection time (s)",
+          "sd_max_runtime": "SD: Max runtime (s)",
           "deadline": "Must finish by (optional)",
           "estimated_runtime": "Program duration (minutes)",
           "interruptible": "Interruptible",
+          "price_mode": "Price mode",
+          "max_price": "Maximum price (ct/kWh)",
           "residual_power": "Power reserve",
           "hysteresis_on": "Hysteresis ON",
           "hysteresis_off": "Hysteresis OFF",
@@ -129,9 +147,17 @@
           "priority": "Which devices should get solar power first? Higher number = more important. Recommendation: 80–100 for washing machine/dishwasher, 50–70 for pool pump/water heater, 20–40 for EV charger.",
           "soc_threshold": "When the battery drops below the charge target: at what battery level is this device still allowed to run? Set to 0 if the device should only run with full surplus.",
           "startup_detection": "Enable for appliances that run programs (washing machines, dishwashers, dryers). AURUM automatically detects when a program starts and protects it from being interrupted — even when the sun goes behind clouds.",
+          "sd_power_threshold": "Power above which a program start is detected. Set higher than standby but lower than running load. Example: 50W for a washing machine. Default: 5W.",
+          "sd_standby_power": "Power the device draws when plugged in but idle (Shelly self-consumption ~1–2W + device standby). Default: 3W.",
+          "sd_finish_power": "Power below which the program is considered finished. Usually same as standby. Default: 3W.",
+          "sd_finish_time": "How long power must stay below finish threshold before AURUM marks program as done. Default: 600s (10 min).",
+          "sd_detection_time": "How long power must stay above start threshold before a program start is confirmed. Default: 5s.",
+          "sd_max_runtime": "Safety limit: maximum allowed program runtime in seconds. AURUM marks program as done if exceeded. Default: 10800s (3h).",
           "deadline": "When does this device need to be finished? Example: 18:00 if laundry needs to be done by dinner time. AURUM will start the device in time — even without solar surplus. Leave empty if there's no time requirement.",
           "estimated_runtime": "How long does a typical cycle take? Examples: Washing machine ~ 120 min, Dishwasher ~ 150 min. Used together with the deadline so AURUM knows when to start.",
           "interruptible": "Can AURUM turn this device off when surplus drops? Disable for devices that must not be interrupted (e.g. 3D printer, aquarium heater). Default: on.",
+          "price_mode": "Solar only: device runs exclusively on PV surplus — never uses grid power. Cheap grid: device primarily runs on PV surplus, but ALSO turns on when electricity is cheap (below your max price or during best-price periods) — even at night or on cloudy days. Both modes always prefer solar when available. Requires a price sensor in settings.",
+          "max_price": "Maximum electricity price in ct/kWh at which this device may use grid power. Set to 0 to use price level / cheap period detection instead. Only applies in 'Cheap grid' mode.",
           "residual_power": "Extra safety margin added to the surplus requirement. Prevents the device from consuming power that's needed for grid stability. Default: 100W.",
           "hysteresis_on": "Extra surplus required beyond nominal power before turning on. Prevents flapping when surplus barely covers the device. Default: 200W.",
           "hysteresis_off": "How far surplus can drop below zero before turning off. Higher = more tolerant of short cloud cover. Default: 100W.",
@@ -159,9 +185,17 @@
           "priority": "Priority",
           "soc_threshold": "Minimum battery level",
           "startup_detection": "Program detection",
+          "sd_power_threshold": "SD: Start threshold (W)",
+          "sd_standby_power": "SD: Standby power (W)",
+          "sd_finish_power": "SD: Finish threshold (W)",
+          "sd_finish_time": "SD: Finish hold time (s)",
+          "sd_detection_time": "SD: Detection time (s)",
+          "sd_max_runtime": "SD: Max runtime (s)",
           "deadline": "Must finish by (optional)",
           "estimated_runtime": "Program duration (minutes)",
           "interruptible": "Interruptible",
+          "price_mode": "Price mode",
+          "max_price": "Maximum price (ct/kWh)",
           "residual_power": "Power reserve",
           "hysteresis_on": "Hysteresis ON",
           "hysteresis_off": "Hysteresis OFF",
@@ -178,6 +212,12 @@
           "priority": "Higher number = more important. Gets solar power first.",
           "soc_threshold": "Below charge target: at what battery level is this device still allowed?",
           "startup_detection": "Enable for appliances with programs (washers, dishwashers). Protects running programs.",
+          "sd_power_threshold": "Power above which a program start is detected. Example: 50W for a washing machine. Default: 5W.",
+          "sd_standby_power": "Power the device draws when idle (Shelly + device standby). Default: 3W.",
+          "sd_finish_power": "Power below which the program is considered finished. Default: 3W.",
+          "sd_finish_time": "How long power must stay below finish threshold before marking done. Default: 600s.",
+          "sd_detection_time": "How long power must stay above start threshold to confirm program start. Default: 5s.",
+          "sd_max_runtime": "Safety limit for maximum program runtime in seconds. Default: 10800s (3h).",
           "deadline": "When does this device need to be finished? Leave empty if no time requirement.",
           "estimated_runtime": "How long does a typical cycle take in minutes?",
           "interruptible": "Can AURUM turn this off when surplus drops? Disable for must-not-interrupt devices.",
@@ -204,7 +244,9 @@
       "invalid_energy_unit": "This sensor's unit isn't an energy unit (Wh, kWh). Pick a sensor that reports energy, not power.",
       "invalid_soc_unit": "Battery level sensor must be a percentage. This one reports something else (Wh? V?). Pick the sensor that shows 0–100%.",
       "soc_is_fraction": "This sensor reports battery level as 0–1 (fraction), but AURUM expects 0–100 (percent). Add a Template sensor that multiplies by 100, or pick a sensor that reports percent.",
-      "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value."
+      "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value.",
+      "duplicate_device": "A device with this name already exists. Pick a different name — each device needs a unique name.",
+      "invalid_device_name": "Please enter a device name (letters or numbers)."
     }
   },
   "selector": {
@@ -214,6 +256,12 @@
         "menu_add_device": "Add a device",
         "menu_edit_device": "Edit a device",
         "menu_remove_device": "Remove a device"
+      }
+    },
+    "price_mode": {
+      "options": {
+        "price_mode_solar_only": "Solar only – runs only on PV surplus (default)",
+        "price_mode_cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar"
       }
     }
   }

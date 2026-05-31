@@ -81,7 +81,12 @@
           "battery_capacity_wh": "Batteriegröße",
           "target_soc": "Ladeziel",
           "min_soc": "Batterie-Reserve",
-          "update_interval": "Aktualisierung"
+          "update_interval": "Aktualisierung",
+          "notify_service": "Mobile Push-Benachrichtigungen (optional)",
+          "price_entity": "Strompreis-Sensor (optional)",
+          "price_level_entity": "Preisstufen-Sensor (optional)",
+          "cheap_period_entity": "Sensor für günstige Preisphase (optional)",
+          "cheap_period_starts_in_entity": "Countdown bis zur günstigen Phase (optional)"
         },
         "data_description": {
           "grid_power_entity": "Dein Netzzähler-Sensor in Watt. Positiv = Strombezug, negativ = Einspeisung.",
@@ -96,7 +101,12 @@
           "battery_capacity_wh": "Batteriegröße in Wattstunden (z.B. 10.000 Wh = 10 kWh).",
           "target_soc": "Ab diesem Ladestand dürfen alle Geräte laufen. Darunter gelten die individuellen Schwellen pro Gerät.",
           "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
-          "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s."
+          "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s.",
+          "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_christian'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
+          "price_entity": "Aktueller Strompreis in ct/kWh. Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
+          "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
+          "cheap_period_entity": "Binärsensor, der während günstiger Preisphasen EIN ist (z.B. tibber_prices Bestpreis-Phase). Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Kann leer bleiben.",
+          "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Kann leer bleiben."
         }
       },
       "add_device": {
@@ -110,9 +120,17 @@
           "priority": "Priorität",
           "soc_threshold": "Mindest-Ladestand",
           "startup_detection": "Programmerkennung",
+          "sd_power_threshold": "PE: Start-Schwelle (W)",
+          "sd_standby_power": "PE: Standby-Leistung (W)",
+          "sd_finish_power": "PE: Ende-Schwelle (W)",
+          "sd_finish_time": "PE: Ende-Haltezeit (s)",
+          "sd_detection_time": "PE: Erkennungszeit (s)",
+          "sd_max_runtime": "PE: Max. Laufzeit (s)",
           "deadline": "Fertig bis (optional)",
           "estimated_runtime": "Programmdauer (Minuten)",
           "interruptible": "Unterbrechbar",
+          "price_mode": "Preis-Modus",
+          "max_price": "Maximalpreis (ct/kWh)",
           "residual_power": "Leistungsreserve",
           "hysteresis_on": "Hysterese EIN",
           "hysteresis_off": "Hysterese AUS",
@@ -129,9 +147,17 @@
           "priority": "Welche Geräte sollen zuerst Solarstrom bekommen? Höhere Zahl = wichtiger. Empfehlung: 80–100 für Waschmaschine/Spülmaschine, 50–70 für Poolpumpe/Heizstab, 20–40 für Wallbox.",
           "soc_threshold": "Wenn die Batterie unter das Ladeziel fällt: Ab welchem Ladestand darf dieses Gerät trotzdem noch laufen? Auf 0 setzen wenn das Gerät nur bei vollem Überschuss laufen soll.",
           "startup_detection": "Aktivieren für Geräte die ein Programm durchlaufen (Waschmaschine, Spülmaschine, Trockner). AURUM erkennt den Programmstart automatisch und schützt das laufende Programm vor Unterbrechung — selbst wenn gerade keine Sonne scheint.",
+          "sd_power_threshold": "Leistung, ab der ein Programmstart erkannt wird. Höher als Standby, aber niedriger als die Laufleistung setzen. Beispiel: 50W für eine Waschmaschine. Standard: 5W.",
+          "sd_standby_power": "Leistung, die das Gerät im Leerlauf zieht (Shelly-Eigenverbrauch ≈ 1–2W + Geräte-Standby). Standard: 3W.",
+          "sd_finish_power": "Leistung, unter der das Programm als beendet gilt. Meist gleich dem Standby. Standard: 3W.",
+          "sd_finish_time": "Wie lange die Leistung unter der Ende-Schwelle bleiben muss, bevor AURUM das Programm als fertig markiert. Standard: 600s (10 Min).",
+          "sd_detection_time": "Wie lange die Leistung über der Start-Schwelle bleiben muss, bevor ein Programmstart bestätigt wird. Standard: 5s.",
+          "sd_max_runtime": "Sicherheitsgrenze: maximal erlaubte Programmlaufzeit in Sekunden. AURUM markiert das Programm bei Überschreitung als fertig. Standard: 10800s (3h).",
           "deadline": "Bis wann soll das Gerät fertig sein? Beispiel: 18:00 wenn die Wäsche zum Abendessen fertig sein soll. AURUM startet das Gerät rechtzeitig — auch ohne Solarüberschuss. Leer lassen wenn es keine Zeitvorgabe gibt.",
           "estimated_runtime": "Wie lange dauert ein typischer Durchlauf? Beispiele: Waschmaschine ≈ 120 min, Spülmaschine ≈ 150 min. Wird zusammen mit der Deadline benutzt, damit AURUM rechtzeitig startet.",
           "interruptible": "Darf AURUM dieses Gerät abschalten wenn der Überschuss sinkt? Deaktivieren für Geräte die nicht unterbrochen werden dürfen (z.B. 3D-Drucker, Aquariumheizung). Standard: ein.",
+          "price_mode": "Nur Solar: Das Gerät läuft ausschließlich mit PV-Überschuss — nie mit Netzstrom. Günstiges Netz: Das Gerät läuft vorrangig mit PV-Überschuss, schaltet aber AUCH ein, wenn der Strom günstig ist (unter deinem Maximalpreis oder während Bestpreis-Phasen) — auch nachts oder an bewölkten Tagen. Beide Modi bevorzugen immer Solar, wenn verfügbar. Erfordert einen Preis-Sensor in den Einstellungen.",
+          "max_price": "Maximaler Strompreis in ct/kWh, bis zu dem dieses Gerät Netzstrom nutzen darf. Auf 0 setzen, um stattdessen Preisstufe / günstige Phase zu verwenden. Gilt nur im Modus 'Günstiges Netz'.",
           "residual_power": "Zusätzliche Sicherheitsmarge beim Einschalten. Verhindert dass das Gerät Leistung verbraucht die für die Netzstabilität gebraucht wird. Standard: 100W.",
           "hysteresis_on": "Zusätzlicher Überschuss über dem Nennverbrauch der nötig ist bevor eingeschaltet wird. Verhindert Flattern bei knappem Überschuss. Standard: 200W.",
           "hysteresis_off": "Wie weit der Überschuss unter Null fallen darf bevor abgeschaltet wird. Höherer Wert = toleranter bei kurzen Wolken. Standard: 100W.",
@@ -159,9 +185,17 @@
           "priority": "Priorität",
           "soc_threshold": "Mindest-Ladestand",
           "startup_detection": "Programmerkennung",
+          "sd_power_threshold": "PE: Start-Schwelle (W)",
+          "sd_standby_power": "PE: Standby-Leistung (W)",
+          "sd_finish_power": "PE: Ende-Schwelle (W)",
+          "sd_finish_time": "PE: Ende-Haltezeit (s)",
+          "sd_detection_time": "PE: Erkennungszeit (s)",
+          "sd_max_runtime": "PE: Max. Laufzeit (s)",
           "deadline": "Fertig bis (optional)",
           "estimated_runtime": "Programmdauer (Minuten)",
           "interruptible": "Unterbrechbar",
+          "price_mode": "Preis-Modus",
+          "max_price": "Maximalpreis (ct/kWh)",
           "residual_power": "Leistungsreserve",
           "hysteresis_on": "Hysterese EIN",
           "hysteresis_off": "Hysterese AUS",
@@ -178,6 +212,12 @@
           "priority": "Höhere Zahl = wichtiger. Bekommt zuerst Solarstrom.",
           "soc_threshold": "Unter dem Ladeziel: Ab welchem Ladestand darf dieses Gerät noch laufen?",
           "startup_detection": "Aktivieren für Geräte mit Programm (Waschmaschine, Spülmaschine). Schützt laufende Programme.",
+          "sd_power_threshold": "Leistung, ab der ein Programmstart erkannt wird. Beispiel: 50W für eine Waschmaschine. Standard: 5W.",
+          "sd_standby_power": "Leistung im Leerlauf (Shelly + Geräte-Standby). Standard: 3W.",
+          "sd_finish_power": "Leistung, unter der das Programm als beendet gilt. Standard: 3W.",
+          "sd_finish_time": "Wie lange die Leistung unter der Ende-Schwelle bleiben muss, bevor als fertig markiert wird. Standard: 600s.",
+          "sd_detection_time": "Wie lange die Leistung über der Start-Schwelle bleiben muss, um den Programmstart zu bestätigen. Standard: 5s.",
+          "sd_max_runtime": "Sicherheitsgrenze für die maximale Programmlaufzeit in Sekunden. Standard: 10800s (3h).",
           "deadline": "Bis wann soll das Gerät fertig sein? Leer lassen wenn keine Zeitvorgabe.",
           "estimated_runtime": "Wie lange dauert ein typischer Durchlauf in Minuten?",
           "interruptible": "Darf AURUM dieses Gerät abschalten wenn der Überschuss sinkt?",
@@ -204,7 +244,9 @@
       "invalid_energy_unit": "Die Einheit dieses Sensors ist keine Energie (Wh, kWh). Wähle einen Sensor, der Energie liefert, keine Leistung.",
       "invalid_soc_unit": "Der Batterie-SOC-Sensor muss eine Prozentangabe sein. Dieser hier liefert etwas anderes (Wh? V?). Wähle den Sensor, der 0–100% anzeigt.",
       "soc_is_fraction": "Dieser Sensor liefert den Ladestand als 0–1 (Bruchteil), AURUM erwartet aber 0–100 (Prozent). Lege einen Template-Sensor an, der mit 100 multipliziert, oder wähle einen Sensor in Prozent.",
-      "not_numeric": "Dieser Sensor liefert aktuell keine Zahl. Prüfe, ob der Sensor online ist und einen Wert liefert."
+      "not_numeric": "Dieser Sensor liefert aktuell keine Zahl. Prüfe, ob der Sensor online ist und einen Wert liefert.",
+      "duplicate_device": "Ein Gerät mit diesem Namen existiert bereits. Wähle einen anderen Namen — jedes Gerät braucht einen eindeutigen Namen.",
+      "invalid_device_name": "Bitte gib einen Gerätenamen ein (Buchstaben oder Zahlen)."
     }
   },
   "selector": {
@@ -214,6 +256,12 @@
         "menu_add_device": "Gerät hinzufügen",
         "menu_edit_device": "Gerät bearbeiten",
         "menu_remove_device": "Gerät entfernen"
+      }
+    },
+    "price_mode": {
+      "options": {
+        "price_mode_solar_only": "Nur Solar – läuft ausschließlich mit PV-Überschuss (Standard)",
+        "price_mode_cheap_grid": "Solar + günstiges Netz – läuft auch, wenn der Strom günstig ist, selbst ohne Solar"
       }
     }
   }
