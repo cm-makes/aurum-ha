@@ -12,6 +12,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, PLATFORMS, CONF_DEVICES
@@ -95,9 +96,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator.async_config_entry_first_refresh(),
             timeout=SETUP_TIMEOUT)
 
-    except asyncio.TimeoutError:
-        _LOGGER.error("AURUM setup timed out – integration disabled")
-        return False
+    except asyncio.TimeoutError as err:
+        # Transient: sensors may not be available yet. Let HA retry.
+        raise ConfigEntryNotReady("AURUM setup timed out, will retry") from err
+    except ConfigEntryNotReady:
+        # Raised by async_config_entry_first_refresh on UpdateFailed – let
+        # HA handle the retry instead of swallowing it into a hard failure.
+        raise
     except Exception as e:
         _LOGGER.error("AURUM setup failed: %s", e)
         return False

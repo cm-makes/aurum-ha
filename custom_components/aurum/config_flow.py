@@ -593,16 +593,29 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_add_device(self, user_input=None):
         """Add a new device."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._devices.append(user_input)
-            self._options[CONF_DEVICES] = self._devices
-            return self.async_create_entry(title="", data={
-                **self._current, **self._options,
-            })
+            from .modules.helpers import slugify as _slugify
+            new_slug = _slugify(user_input.get(CONF_DEV_NAME, ""))
+            existing = {
+                _slugify(d.get(CONF_DEV_NAME, "")) for d in self._devices}
+            if not new_slug:
+                errors["base"] = "invalid_device_name"
+            elif new_slug in existing:
+                # Entity unique_ids derive from the slug; a duplicate would
+                # collide/overwrite the existing device's entities.
+                errors["base"] = "duplicate_device"
+            else:
+                self._devices.append(user_input)
+                self._options[CONF_DEVICES] = self._devices
+                return self.async_create_entry(title="", data={
+                    **self._current, **self._options,
+                })
 
         return self.async_show_form(
             step_id="add_device",
-            data_schema=_schema_add_device(),
+            data_schema=_schema_add_device(user_input),
+            errors=errors,
         )
 
     async def async_step_edit_device_select(self, user_input=None):

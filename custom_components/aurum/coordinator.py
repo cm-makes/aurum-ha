@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN, VERSION, CONF_DEVICES
+from .const import DOMAIN
 from .hass_bridge import HassAccess
 from .modules.energy import EnergyManager
 from .modules.battery import BatteryManager

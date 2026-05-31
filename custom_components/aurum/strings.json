@@ -244,7 +244,9 @@
       "invalid_energy_unit": "This sensor's unit isn't an energy unit (Wh, kWh). Pick a sensor that reports energy, not power.",
       "invalid_soc_unit": "Battery level sensor must be a percentage. This one reports something else (Wh? V?). Pick the sensor that shows 0–100%.",
       "soc_is_fraction": "This sensor reports battery level as 0–1 (fraction), but AURUM expects 0–100 (percent). Add a Template sensor that multiplies by 100, or pick a sensor that reports percent.",
-      "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value."
+      "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value.",
+      "duplicate_device": "A device with this name already exists. Pick a different name — each device needs a unique name.",
+      "invalid_device_name": "Please enter a device name (letters or numbers)."
     }
   },
   "selector": {

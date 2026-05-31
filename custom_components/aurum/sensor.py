@@ -354,9 +354,9 @@ class AurumBatterySOCSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        soc = data.get("battery_soc", -1)
-        # -1 means no battery configured or not yet available
-        if soc >= 0:
+        soc = data.get("battery_soc")
+        # None/-1 means no battery configured or not yet available
+        if soc is not None and soc >= 0:
             self._attr_available = True
             self._attr_native_value = round(soc, 1)
         else:
@@ -513,7 +513,8 @@ class AurumSafetyFactorSensor(CoordinatorEntity, SensorEntity):
 class AurumElectricityPriceSensor(CoordinatorEntity, SensorEntity):
     """Current electricity price from configured price entity."""
 
-    _attr_device_class = SensorDeviceClass.MONETARY
+    # No device_class: a price *rate* (ct/kWh) is not SensorDeviceClass.MONETARY,
+    # which expects an ISO currency unit and rejects ct/kWh.
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "ct/kWh"
     _attr_icon = "mdi:cash"

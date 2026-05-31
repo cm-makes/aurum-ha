@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, VERSION
+from .const import DOMAIN
 from .sensor import _hub_device_info, _device_icon
 
 

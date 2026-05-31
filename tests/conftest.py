@@ -20,6 +20,7 @@ _HA_SUBMODULES = [
     "homeassistant",
     "homeassistant.core",
     "homeassistant.config_entries",
+    "homeassistant.exceptions",
     "homeassistant.helpers",
     "homeassistant.helpers.entity_registry",
     "homeassistant.helpers.entity_platform",
@@ -41,6 +42,8 @@ for mod_name in _HA_SUBMODULES:
 sys.modules["homeassistant.core"].HomeAssistant = type("HomeAssistant", (), {})
 sys.modules["homeassistant.core"].callback = lambda f: f
 sys.modules["homeassistant.config_entries"].ConfigEntry = type("ConfigEntry", (), {})
+sys.modules["homeassistant.exceptions"].ConfigEntryNotReady = type(
+    "ConfigEntryNotReady", (Exception,), {})
 
 huc = sys.modules["homeassistant.helpers.update_coordinator"]
 huc.DataUpdateCoordinator = type("DataUpdateCoordinator", (), {})
