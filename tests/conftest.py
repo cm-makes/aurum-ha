@@ -93,14 +93,26 @@ class MockHass:
 
 
 class FakePricing:
-    """Pricing stub with a toggleable ``is_price_ok`` result."""
+    """Pricing stub with a toggleable ``is_price_ok`` result.
 
-    def __init__(self, price_ok=True):
+    ``data_available=False`` simulates an unavailable price sensor so
+    ``should_run_on_grid`` returns the tri-state ``None`` (hold).
+    """
+
+    def __init__(self, price_ok=True, data_available=True):
         self.price_ok = price_ok
+        self.data_available = data_available
         self.calls = 0
 
     def is_price_ok(self, dev):
         self.calls += 1
+        return self.price_ok
+
+    def should_run_on_grid(self, dev):
+        if dev.get("price_mode", "solar_only") == "solar_only":
+            return False
+        if not self.data_available:
+            return None
         return self.price_ok
 
 

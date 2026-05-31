@@ -174,6 +174,33 @@ class TestShouldTurnOff:
         # Deep deficit, but price is still cheap → keep running.
         assert mgr._should_turn_off(dev, -9999, 80, 20, now) is None
 
+    def test_cheap_grid_holds_when_price_data_unavailable(
+            self, make_manager, make_device, now):
+        """#3 oscillation guard: an unavailable price sensor must NOT turn a
+        running cheap_grid device off — neither via the price path nor via
+        excess deficit. State is held until real price data returns."""
+        from tests.conftest import FakePricing
+
+        mgr = make_manager([make_device(price_mode="cheap_grid")])
+        # price would be "not ok", but the sensor is unavailable → tri-state None
+        mgr.pricing = FakePricing(price_ok=False, data_available=False)
+        dev = mgr.devices[0]
+        dev["on_since"] = now - timedelta(hours=1)
+        dev["_scheduling_reason"] = "cheap_grid"
+        # Deep deficit + price "not ok", but data unavailable → hold (None).
+        assert mgr._should_turn_off(dev, -9999, 80, 20, now) is None
+
+    def test_cheap_grid_no_turn_on_when_price_data_unavailable(
+            self, make_manager, make_device, now):
+        """#3: don't *newly* start a cheap_grid device on a missing sensor."""
+        from tests.conftest import FakePricing
+
+        mgr = make_manager([make_device(price_mode="cheap_grid")])
+        mgr.pricing = FakePricing(price_ok=True, data_available=False)
+        dev = mgr.devices[0]
+        # No surplus, price data unavailable → conservative: stay off.
+        assert mgr._should_turn_on(dev, 0, 0, 80, 20, now) is False
+
 
 # ══════════════════════════════════════════════════════════════════
 #  _turn_on / _turn_off   (v1.7.7 regression)
@@ -572,6 +599,43 @@ class TestUpdateLoop:
 
         assert mgr.hass.states["switch.big"] == "off"
         assert mgr.hass.states["switch.small"] == "on"
+
+    def test_priority_shedding_uses_actual_power_not_nominal(
+            self, make_manager, make_device, shared_state, now):
+        """#4: freed power is accounted by the victim's *measured* draw, not
+        nameplate. 'Big' is nominally 800W but modulating at 300W; nominal
+        accounting would shed Big alone (800>=700) yet only free 300W —
+        leaving a 400W deficit. Measured accounting sheds both to cover it."""
+        mgr = make_manager([
+            make_device(name="Small", switch_entity="switch.small",
+                        power_entity="sensor.small_power",
+                        priority=20, nominal_power=500,
+                        interruptible=True, min_on_time=0,
+                        debounce_off=0, hysteresis_off=100),
+            make_device(name="Big", switch_entity="switch.big",
+                        power_entity="sensor.big_power",
+                        priority=10, nominal_power=800,
+                        interruptible=True, min_on_time=0,
+                        debounce_off=0, hysteresis_off=100),
+        ])
+        small, big = mgr.devices[0], mgr.devices[1]
+        for d, eid in [(small, "switch.small"), (big, "switch.big")]:
+            d["managed_on"] = True
+            d["on_since"] = now - timedelta(hours=1)
+            d["_excess_deficit_since"] = now - timedelta(seconds=3600)
+            mgr.hass.states[eid] = "on"
+        # Big modulating at 300W (well below its 800W nameplate); Small at 500W.
+        mgr.hass.states["sensor.big_power"] = "300"
+        mgr.hass.states["sensor.small_power"] = "500"
+
+        shared_state["excess_for_devices"] = -700
+        shared_state["excess_raw_for_devices"] = -700
+
+        mgr.update(shared_state)
+
+        # 300W (Big) alone can't cover the 700W deficit → both shed.
+        assert mgr.hass.states["switch.big"] == "off"
+        assert mgr.hass.states["switch.small"] == "off"
 
     def test_manual_override_is_not_touched_by_update(
             self, make_manager, make_device, shared_state):

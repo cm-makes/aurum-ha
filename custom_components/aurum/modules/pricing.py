@@ -45,6 +45,18 @@ class PricingManager:
             or self.cheap_period_entity
         )
 
+        # Cached snapshot values read by is_price_ok(); populated by
+        # snapshot(). Initialized here so is_price_ok() is safe to call
+        # before the first successful snapshot (e.g. if update() raises).
+        self._last_price = None
+        self._last_level_value = None
+        self._last_cheap_period = False
+        self._last_cheap_starts_in = None
+        # Whether the last snapshot had a usable reading from at least one
+        # configured price source. False means the price sensor(s) are
+        # unavailable/unknown – callers must hold device state, not toggle.
+        self._last_data_available = False
+
         if self._active:
             _LOGGER.info(
                 "AURUM Pricing active: price=%s, level=%s, cheap=%s, "
@@ -68,12 +80,18 @@ class PricingManager:
 
         shared["price_active"] = True
 
+        # Track whether any configured source returned a usable reading.
+        # If every configured source is unavailable, price-based decisions
+        # must hold device state instead of toggling on stale/no data.
+        data_available = False
+
         # ── Current price (ct/kWh) ──
         current_price = None
         if self.price_entity:
             raw = get_float(self.hass, self.price_entity, None)
             if raw is not None:
                 current_price = raw
+                data_available = True
         shared["current_price"] = current_price
 
         # ── Price level (enum string) ──
@@ -82,6 +100,7 @@ class PricingManager:
             raw = get_state_safe(self.hass, self.price_level_entity)
             if raw and raw in _LEVEL_ORDER:
                 price_level = raw
+                data_available = True
         shared["price_level"] = price_level
         shared["price_level_value"] = (
             _LEVEL_ORDER.get(price_level) if price_level else None
@@ -91,8 +110,13 @@ class PricingManager:
         cheap_period = False
         if self.cheap_period_entity:
             raw = get_state_safe(self.hass, self.cheap_period_entity)
+            # "off" is still a valid (available) reading meaning "not cheap";
+            # only unavailable/unknown/None counts as missing data.
+            if raw in ("on", "off"):
+                data_available = True
             cheap_period = raw == "on"
         shared["cheap_period"] = cheap_period
+        shared["price_data_available"] = data_available
 
         # ── Cheap period starts in (minutes) ──
         cheap_starts_in = None
@@ -131,9 +155,27 @@ class PricingManager:
 
         return False
 
+    def should_run_on_grid(self, dev):
+        """Tri-state grid decision for a price-aware device.
+
+        Distinguishes "price is genuinely not cheap" from "price data is
+        unavailable" so callers don't oscillate a device on a flaky sensor.
+
+        Returns:
+            True  – grid power is currently cheap; device may run on grid.
+            False – price data is available and grid is NOT cheap.
+            None  – price data is unavailable; caller should hold state.
+        """
+        if dev.get("price_mode", "solar_only") == "solar_only":
+            return False
+        if not self._last_data_available:
+            return None
+        return self.is_price_ok(dev)
+
     def snapshot(self, shared):
         """Cache shared dict values for is_price_ok() calls."""
         self._last_price = shared.get("current_price")
         self._last_level_value = shared.get("price_level_value")
         self._last_cheap_period = shared.get("cheap_period", False)
         self._last_cheap_starts_in = shared.get("cheap_period_starts_in_min")
+        self._last_data_available = shared.get("price_data_available", False)

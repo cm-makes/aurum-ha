@@ -16,13 +16,11 @@ from .helpers import get_float, get_state_safe, slugify
 from ..const import (
     CONF_DEVICES,
     MODE_NORMAL,
-    MODE_LOW_SOC,
     MODE_CHARGING,
     SD_STATE_STANDBY,
     SD_STATE_DETECTED,
     SD_STATE_WAITING,
     SD_STATE_RUNNING,
-    SD_STATE_DONE,
     DEFAULT_DEV_NOMINAL_POWER,
     DEFAULT_DEV_PRIORITY,
     DEFAULT_DEV_SOC_THRESHOLD,
@@ -304,33 +302,39 @@ class DeviceManager:
 
             deficit = -(excess_raw - newly_allocated)
 
+            # The deficit is measured (excess_raw), so account freed power
+            # by each victim's *actual* draw (falling back to nominal when
+            # no power sensor is configured). This keeps the basis consistent
+            # with the deficit and with _preempt_for_sd — using nominal here
+            # would over-/under-shed for modulating loads (e.g. heat pumps).
             # Stage 1: greedy pick until deficit is covered.
             planned = []
             freed = 0.0
             for dev in candidates:
                 if freed >= deficit:
                     break
-                planned.append(dev)
-                freed += dev["nominal_power"]
+                power_w = self._get_device_power(dev)
+                planned.append((dev, power_w))
+                freed += power_w
 
             # Stage 2: drop redundant victims (smallest-power first) so
             # we don't over-shed when a larger victim alone covers the
-            # deficit. Consistent accounting with nominal_power above.
+            # deficit.
             if len(planned) > 1 and freed > deficit:
-                planned.sort(key=lambda d: d["nominal_power"])
+                planned.sort(key=lambda x: x[1])
                 i = 0
                 while i < len(planned):
-                    p = planned[i]["nominal_power"]
+                    p = planned[i][1]
                     if freed - p >= deficit:
                         planned.pop(i)
                         freed -= p
                     else:
                         i += 1
                 # Re-sort by priority ascending for deterministic shed order.
-                planned.sort(key=lambda d: d["priority"])
+                planned.sort(key=lambda x: x[0]["priority"])
 
             # Stage 3: actually turn off the selected devices.
-            for dev in planned:
+            for dev, _power_w in planned:
                 self._turn_off(dev, now, excess, battery_soc,
                                dev["_pending_off"])
                 devices_on -= 1
@@ -363,7 +367,7 @@ class DeviceManager:
         # intervals, not per-second like PV surplus. React immediately.
         if (dev.get("price_mode") == "cheap_grid"
                 and self.pricing
-                and self.pricing.is_price_ok(dev)):
+                and self.pricing.should_run_on_grid(dev) is True):
             dev["_scheduling_reason"] = "cheap_grid"
             return True
 
@@ -406,9 +410,11 @@ class DeviceManager:
         # If device was started because of cheap grid power and the price
         # has since risen above the threshold, turn off immediately.
         # This prevents running on expensive grid power after a price jump.
+        # Only act when the price is *known* to be expensive (False); when
+        # the sensor is unavailable (None) we hold state to avoid oscillation.
         if (dev.get("_scheduling_reason") == "cheap_grid"
                 and self.pricing
-                and not self.pricing.is_price_ok(dev)):
+                and self.pricing.should_run_on_grid(dev) is False):
             return "price_no_longer_cheap"
 
         # SOC below threshold: turn off if deficit persists
@@ -429,9 +435,12 @@ class DeviceManager:
         # ── Price-aware: keep running on cheap grid even without surplus ──
         # If the device is running on cheap grid power, don't turn it off
         # just because there's an excess deficit. We intentionally use grid.
+        # `should_run_on_grid` is True when cheap and None when the price
+        # sensor is unavailable – in both cases we hold (only a known-
+        # expensive price, handled above, drops the cheap_grid grant).
         if (dev.get("_scheduling_reason") == "cheap_grid"
                 and self.pricing
-                and self.pricing.is_price_ok(dev)):
+                and self.pricing.should_run_on_grid(dev) is not False):
             dev["_excess_deficit_since"] = None
             return None
 
