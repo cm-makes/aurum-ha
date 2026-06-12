@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-06-12
+
 ### Added
+- **Stop when daily runtime is reached (`stop_after_runtime`)** – New per-device option that turns a device off as soon as its accumulated runtime today reaches the configured duration (e.g. pool pump: run 400 minutes, then stop), even at full PV surplus ([#2](https://github.com/cm-makes/aurum-ha/issues/2)). Restarts are blocked for the rest of the day — including cheap-grid grants and deadline force-starts; the counter resets at midnight and survives HA restarts. `min_on_time` is respected before the stop fires. Running programs of startup-detection appliances are never interrupted mid-cycle, and the manual override switch always wins. Off by default — existing setups keep their behaviour. The runtime field now accepts up to 1440 min (was 480) and is labelled "Daily runtime / program duration". Device sensors expose `stop_after_runtime` and `runtime_target_reached` attributes.
 - **Config-flow sensor validation** – Sensors picked during setup (and in Options → Settings) are now validated for matching units and numeric state. Power sensors must report `W`/`kW`, energy sensors `Wh`/`kWh`, the battery SOC sensor a percentage. A battery SOC sensor reporting a 0–1 fraction is detected and reported with a clear message, instead of letting the integration silently misbehave at runtime.
 - **Troubleshooting section in README** – Covers the most common first-install issues: grid sign convention, battery mode stuck on charging, missing battery charge/discharge sensors, devices stuck in `waiting`, flapping.
 
+### Fixed
+- **Cheap-grid scheduling reason lost on turn-on** – `update()` called `_turn_on()` without a reason, overwriting the `cheap_grid` grant from `_should_turn_on()` with `surplus_available`. The cheap-grid hold in `_should_turn_off()` then no longer recognised the device, causing night-time on/off ping-pong on `excess_deficit` (~every 20 min with default debounce). The reason is now preserved; found by the new full-day simulation suite.
+- **Oscillation on unavailable price sensor** – Cheap-grid devices are now only shed when the price is *known* expensive (tri-state `should_run_on_grid()`); an unavailable price sensor holds the current state instead of toggling.
+- **Shedding power basis** – Priority shedding now accounts freed power by each victim's measured draw (falling back to nominal), consistent with the measured deficit and SD preemption; nominal accounting over-/under-shed modulating loads.
+- **Setup retry & config-flow hardening** – Transient setup timeouts raise `ConfigEntryNotReady` so HA retries instead of hard-failing; duplicate/empty device names are rejected in the options flow; the electricity-price sensor no longer claims a monetary device class; battery SOC `None` handled explicitly.
+
 ### Changed
 - **Bug report template** – Replaced manual version fields with a required diagnostics-file attachment. The diagnostics JSON already contains the AURUM version, HA version, sensor states and device configuration, so reporters no longer have to copy them by hand (and can't get them wrong).
+- **Translation parity** – `strings.json`, `en.json` and `de.json` are fully in sync (incl. the new runtime-target strings).
+- **Test coverage** – New pytest suites: DeviceManager unit tests, packaging smoke tests, and a tick-level (15 s) full-day simulation suite covering all device types and situations (114 tests total).
 
 ## [1.7.7] - 2026-04-15
 
