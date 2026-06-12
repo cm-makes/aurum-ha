@@ -105,6 +105,7 @@ class DeviceManager:
             # Deadline scheduling
             "deadline": cfg.get("deadline"),           # "HH:MM" or None
             "estimated_runtime": cfg.get("estimated_runtime", 0),  # minutes
+            "stop_after_runtime": cfg.get("stop_after_runtime", False),
             "force_started": False,
             "_scheduling_reason": None,
 
@@ -222,6 +223,33 @@ class DeviceManager:
                     dev["on_since"] = now
                 # Fall through to step 2/3 for turn-off evaluation
 
+            # ── 1c. Runtime target reached → enforce stop ────────
+            # Direct turn-off, NOT via _pending_off: the shedding stage
+            # only acts when there is a power deficit, but the runtime
+            # stop must also fire at full PV surplus. SD devices are
+            # handled inside the state machine (block new starts, never
+            # interrupt a RUNNING program mid-cycle).
+            if (not dev["startup_detection"]
+                    and self._runtime_target_reached(dev)):
+                if was_on:
+                    on_s = ((now - dev["on_since"]).total_seconds()
+                            if dev["on_since"] else None)
+                    if on_s is not None and on_s < dev["min_on_time"]:
+                        # Respect min_on_time (relay/compressor protection);
+                        # stop on a later tick.
+                        dev["_pending_off"] = None
+                        devices_on += 1
+                        continue
+                    self._turn_off(dev, now, excess, battery_soc,
+                                   "runtime_target_reached")
+                    dev["_pending_off"] = None
+                    target_min = dev.get("estimated_runtime", 0)
+                    self._notify(
+                        f"⏱️ {dev['name']}: Tageslaufzeit "
+                        f"erreicht ({target_min} min) – ausgeschaltet",
+                        tag=f"aurum_runtime_{dev['name']}")
+                continue
+
             # ── 2. Startup detection devices ─────────────────────
             if dev["startup_detection"]:
                 sd_turnon = excess - newly_allocated
@@ -278,7 +306,15 @@ class DeviceManager:
                     soc_threshold, now)
 
                 if should_on:
-                    self._turn_on(dev, now, excess, battery_soc)
+                    # _should_turn_on may have granted the start via
+                    # cheap grid (it sets _scheduling_reason). Preserve
+                    # that reason — otherwise _turn_on overwrites it with
+                    # "surplus_available" and the cheap-grid hold in
+                    # _should_turn_off no longer recognises the device,
+                    # causing night-time on/off ping-pong.
+                    reason = dev.get("_scheduling_reason") or \
+                        "surplus_available"
+                    self._turn_on(dev, now, excess, battery_soc, reason)
                     newly_allocated += dev["nominal_power"]
                     available_excess -= dev["nominal_power"]
                     devices_on += 1
@@ -345,9 +381,23 @@ class DeviceManager:
     #  SHOULD TURN ON / OFF (HELIOS-compatible)
     # ══════════════════════════════════════════════════════════════
 
+    def _runtime_target_reached(self, dev):
+        """True when stop_after_runtime is set and today's runtime
+        has reached the estimated_runtime target."""
+        if not dev.get("stop_after_runtime"):
+            return False
+        target_min = dev.get("estimated_runtime", 0)
+        if not target_min or target_min <= 0:
+            return False
+        return dev["runtime_today_s"] >= target_min * 60
+
     def _should_turn_on(self, dev, available_excess, available_grid_excess,
                         battery_soc, soc_threshold, now):
         """Check if device should be turned on. Returns True/False."""
+        # Runtime target reached: stay off for the rest of the day
+        if self._runtime_target_reached(dev):
+            return False
+
         # Min off-time: don't turn back on too quickly
         if (dev["last_off"]
                 and (now - dev["last_off"]).total_seconds()
@@ -554,6 +604,12 @@ class DeviceManager:
             if self._is_device_on(dev):
                 self._turn_off(dev, now, excess, battery_soc,
                                "sd_waiting_enforce_off")
+
+            # Runtime target reached: stay paused for the rest of the
+            # day — blocks both deadline force-start and excess start.
+            if self._runtime_target_reached(dev):
+                dev["excess_since"] = None
+                return False, 0
 
             # Deadline check: force start if past latest_start
             if self._deadline_urgent(dev, now):
@@ -917,6 +973,8 @@ class DeviceManager:
                 "scheduling_reason": dev.get("_scheduling_reason"),
                 "price_mode": dev.get("price_mode", "solar_only"),
                 "max_price": dev.get("max_price", 0),
+                "stop_after_runtime": dev.get("stop_after_runtime", False),
+                "runtime_target_reached": self._runtime_target_reached(dev),
             })
 
         shared["device_states"] = device_states

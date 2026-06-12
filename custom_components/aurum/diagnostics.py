@@ -127,6 +127,7 @@ async def async_get_config_entry_diagnostics(
             "interruptible": dev.get("interruptible", True),
             "deadline": dev.get("deadline"),
             "estimated_runtime_min": dev.get("estimated_runtime"),
+            "stop_after_runtime": dev.get("stop_after_runtime", False),
         })
 
     # ── Coordinator health ─────────────────────────────────────────
