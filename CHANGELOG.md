@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-06-16
+
+### Fixed
+- **Runtime notifications were hardcoded German** – The push/persistent notifications emitted from the device control loop (program detected, started, finished, deadline start, preemption, daily-runtime stop) were left in German from the original port ([#2](https://github.com/cm-makes/aurum-ha/issues/2)). They are now localized: English by default, German when the Home Assistant UI language is German. Texts live in a small EN/DE table; the UI language is read from `hass.config.language` with an English fallback.
+
 ## [1.8.0] - 2026-06-12
 
 ### Added

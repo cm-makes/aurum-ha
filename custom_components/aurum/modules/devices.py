@@ -39,6 +39,38 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# User-facing push/persistent notification texts. The HA config-flow
+# strings live in strings.json/translations, but these runtime
+# notifications are emitted from control-loop code, so they carry their
+# own small EN/DE table. English is the default/fallback; German is used
+# when the HA UI language is German.
+_NOTIFY_STRINGS = {
+    "runtime_target_reached": {
+        "en": "⏱️ {name}: daily runtime reached ({minutes} min) – switched off",
+        "de": "⏱️ {name}: Tageslaufzeit erreicht ({minutes} min) – ausgeschaltet",
+    },
+    "sd_detected": {
+        "en": "🔍 {name} detected – waiting for PV surplus",
+        "de": "🔍 {name} erkannt – wartet auf PV-Überschuss",
+    },
+    "sd_deadline_start": {
+        "en": "⚠️ {name} started by deadline (grid power)",
+        "de": "⚠️ {name} per Deadline gestartet (Netzstrom)",
+    },
+    "sd_running": {
+        "en": "▶️ {name} is running now (PV surplus)",
+        "de": "▶️ {name} läuft jetzt (PV-Überschuss)",
+    },
+    "sd_finished": {
+        "en": "✅ {name} finished! Runtime: {minutes} min ({reason})",
+        "de": "✅ {name} fertig! Laufzeit: {minutes} min ({reason})",
+    },
+    "preempt": {
+        "en": "⚡ {victims} off → room for {name}",
+        "de": "⚡ {victims} aus → Platz für {name}",
+    },
+}
+
 
 class DeviceManager:
     """Manage priority-based device switching (HELIOS-compatible logic)."""
@@ -49,6 +81,9 @@ class DeviceManager:
         self.action_csv = None
         self.notifications = None  # Set by coordinator if available
         self.pricing = None  # Set by coordinator if pricing module active
+
+        # UI language for runtime notifications ("en" fallback).
+        self.lang = getattr(hass, "language", "en") or "en"
 
         # Global settings
         self.excess_deficit_tolerance = config.get(
@@ -245,8 +280,8 @@ class DeviceManager:
                     dev["_pending_off"] = None
                     target_min = dev.get("estimated_runtime", 0)
                     self._notify(
-                        f"⏱️ {dev['name']}: Tageslaufzeit "
-                        f"erreicht ({target_min} min) – ausgeschaltet",
+                        self._t("runtime_target_reached",
+                                name=dev['name'], minutes=target_min),
                         tag=f"aurum_runtime_{dev['name']}")
                 continue
 
@@ -572,8 +607,7 @@ class DeviceManager:
                     dev["sd_detected_at"] = now
                     sd_state = SD_STATE_DETECTED  # fall through
                     self._notify(
-                        f"\U0001f50d {dev['name']} erkannt "
-                        f"– wartet auf PV-Überschuss",
+                        self._t("sd_detected", name=dev['name']),
                         tag=f"aurum_sd_{dev['name']}")
                 else:
                     return False, 0
@@ -626,8 +660,7 @@ class DeviceManager:
                 dev["excess_since"] = None
                 dev["force_started"] = True
                 self._notify(
-                    f"\u26a0\ufe0f {dev['name']} per Deadline gestartet "
-                    f"(Netzstrom)",
+                    self._t("sd_deadline_start", name=dev['name']),
                     tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
 
@@ -660,8 +693,7 @@ class DeviceManager:
                     f"(excess={turnon_excess:.0f}W >= "
                     f"{needed:.0f}W needed)")
                 self._notify(
-                    f"\u25b6\ufe0f {dev['name']} läuft jetzt "
-                    f"(PV-Überschuss)",
+                    self._t("sd_running", name=dev['name']),
                     tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
             else:
@@ -716,8 +748,8 @@ class DeviceManager:
                 dev["on_since"] = None
                 dev["_runtime_tick"] = None
                 self._notify(
-                    f"\u2705 {dev['name']} fertig! "
-                    f"Laufzeit: {runtime_min}min ({reason})",
+                    self._t("sd_finished", name=dev['name'],
+                            minutes=runtime_min, reason=reason),
                     tag=f"aurum_sd_{dev['name']}")
                 self._reset_muss_heute(dev)
                 return False, 0
@@ -822,8 +854,9 @@ class DeviceManager:
                 f"for {sd_device['name']} "
                 f"(needs {needed_w:.0f}W, freed {freed:.0f}W)")
             self._notify(
-                f"\u26a1 {', '.join(victims)} aus "
-                f"\u2192 Platz für {sd_device['name']}",
+                self._t("preempt",
+                        victims=', '.join(victims),
+                        name=sd_device['name']),
                 tag=f"aurum_preempt_{sd_device['name']}")
         return freed
 
@@ -1057,6 +1090,16 @@ class DeviceManager:
                 _LOGGER.warning(
                     "Error resetting legacy muss_heute for %s: %s",
                     dev["name"], e)
+
+    def _t(self, key, **kwargs):
+        """Localize a runtime-notification string for the HA UI language.
+        Falls back to English when the language or key is missing."""
+        variants = _NOTIFY_STRINGS.get(key, {})
+        template = variants.get(self.lang) or variants.get("en", key)
+        try:
+            return template.format(**kwargs)
+        except (KeyError, IndexError):
+            return template
 
     def _notify(self, message, tag=None, throttle_key=None, importance=None):
         """Send notification via HA persistent_notification + optional mobile push.

@@ -71,3 +71,9 @@ class HassAccess:
     def config_path(self):
         """Return HA config directory path."""
         return self._hass.config.config_dir
+
+    @property
+    def language(self):
+        """Return the HA UI language code (e.g. 'en', 'de'). Falls back
+        to 'en' when unavailable."""
+        return getattr(self._hass.config, "language", "en") or "en"
