@@ -57,6 +57,10 @@ _NOTIFY_STRINGS = {
         "en": "⚠️ {name} started by deadline (grid power)",
         "de": "⚠️ {name} per Deadline gestartet (Netzstrom)",
     },
+    "deadline_start": {
+        "en": "⚠️ {name} started by deadline (grid power)",
+        "de": "⚠️ {name} per Deadline gestartet (Netzstrom)",
+    },
     "sd_running": {
         "en": "▶️ {name} is running now (PV surplus)",
         "de": "▶️ {name} läuft jetzt (PV-Überschuss)",
@@ -283,6 +287,7 @@ class DeviceManager:
                         self._t("runtime_target_reached",
                                 name=dev['name'], minutes=target_min),
                         tag=f"aurum_runtime_{dev['name']}")
+                    self._reset_muss_heute(dev)
                 continue
 
             # ── 2. Startup detection devices ─────────────────────
@@ -313,6 +318,21 @@ class DeviceManager:
                 turnon_excess = excess - newly_allocated
                 # Grid-only fallback for SOC-below-threshold case
                 turnon_grid = grid_excess - newly_allocated
+
+                # ── Deadline force-start: bypass budget cap + surplus ──
+                # When muss_heute is ON and the deadline window is reached,
+                # start the device on grid regardless of PV surplus.
+                if self._deadline_urgent(dev, now):
+                    self._turn_on(dev, now, excess, battery_soc,
+                                  "deadline_forced")
+                    dev["force_started"] = True
+                    newly_allocated += dev["nominal_power"]
+                    available_excess -= dev["nominal_power"]
+                    devices_on += 1
+                    self._notify(
+                        self._t("deadline_start", name=dev['name']),
+                        tag=f"aurum_deadline_{dev['name']}")
+                    continue
 
                 # ── Budget cap: don't allocate beyond today's budget ──
                 # Exception: when SOC < threshold the device runs on
