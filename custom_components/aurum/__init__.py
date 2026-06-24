@@ -17,6 +17,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, PLATFORMS, CONF_DEVICES
 from .coordinator import AurumCoordinator
+from .modules.helpers import slugify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,19 +29,6 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _slugify(name: str) -> str:
-    """Convert device name to slug (mirrors modules/helpers.py slugify)."""
-    import re
-    slug = name.lower().strip()
-    slug = re.sub(r"[äÄ]", "ae", slug)
-    slug = re.sub(r"[öÖ]", "oe", slug)
-    slug = re.sub(r"[üÜ]", "ue", slug)
-    slug = re.sub(r"[ß]", "ss", slug)
-    slug = re.sub(r"[^a-z0-9]+", "_", slug)
-    slug = slug.strip("_")
-    return slug
-
-
 async def _async_cleanup_orphaned_entities(
         hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove entity registry entries for devices no longer in config.
@@ -50,7 +38,7 @@ async def _async_cleanup_orphaned_entities(
     config-flow cleanup fix was deployed.
     """
     devices = entry.options.get(CONF_DEVICES, [])
-    active_slugs = {_slugify(d.get("name", "")) for d in devices}
+    active_slugs = {slugify(d.get("name", "")) for d in devices}
 
     ent_reg = er.async_get(hass)
     entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)

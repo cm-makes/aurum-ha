@@ -53,10 +53,6 @@ _NOTIFY_STRINGS = {
         "en": "🔍 {name} detected – waiting for PV surplus",
         "de": "🔍 {name} erkannt – wartet auf PV-Überschuss",
     },
-    "sd_deadline_start": {
-        "en": "⚠️ {name} started by deadline (grid power)",
-        "de": "⚠️ {name} per Deadline gestartet (Netzstrom)",
-    },
     "deadline_start": {
         "en": "⚠️ {name} started by deadline (grid power)",
         "de": "⚠️ {name} per Deadline gestartet (Netzstrom)",
@@ -612,6 +608,10 @@ class DeviceManager:
                 self.hass.turn_on(dev["switch_entity"])
                 dev["managed_on"] = True
                 dev["on_since"] = now
+            elif dev["on_since"] is None:
+                # Already ON (e.g. restored after HA restart) — anchor
+                # on_since so min_on_time protection works.
+                dev["on_since"] = now
 
             if actual_power > dev["sd_power_threshold"]:
                 if dev["sd_power_above_since"] is None:
@@ -680,7 +680,7 @@ class DeviceManager:
                 dev["excess_since"] = None
                 dev["force_started"] = True
                 self._notify(
-                    self._t("sd_deadline_start", name=dev['name']),
+                    self._t("deadline_start", name=dev['name']),
                     tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
 
