@@ -250,6 +250,7 @@ Every 15 seconds:
 | `number.aurum_{slug}_soc_threshold` | Number | SOC threshold slider |
 | `switch.aurum_{slug}_override` | Switch | Manual override (AURUM hands off) |
 | `switch.aurum_{slug}_muss_heute` | Switch | Force device on today |
+| `switch.aurum_{slug}_disable` | Switch | Force-off: removes the device from control and keeps it off |
 
 > `{slug}` is the device name lowercased with spaces replaced by underscores (e.g. "Washing Machine" -> `washing_machine`).
 

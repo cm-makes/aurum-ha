@@ -654,6 +654,87 @@ class TestUpdateLoop:
 
 
 # ══════════════════════════════════════════════════════════════════
+#  Disable (force-off) kill-switch
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestDisableSwitch:
+    def test_is_disabled_false_by_default(
+            self, make_manager, make_device):
+        mgr = make_manager([make_device()])
+        dev = mgr.devices[0]
+        assert mgr._is_disabled(dev) is False
+
+    def test_is_disabled_true_when_native_switch_on(
+            self, make_manager, make_device):
+        from custom_components.aurum.const import disable_entity_id
+
+        mgr = make_manager([make_device()])
+        dev = mgr.devices[0]
+        mgr.hass.states[disable_entity_id(dev["slug"])] = "on"
+        assert mgr._is_disabled(dev) is True
+
+    def test_is_disabled_true_via_legacy_entity(
+            self, make_manager, make_device):
+        mgr = make_manager([make_device(
+            disable_entity="input_boolean.disable_x")])
+        dev = mgr.devices[0]
+        mgr.hass.states["input_boolean.disable_x"] = "on"
+        assert mgr._is_disabled(dev) is True
+
+    def test_disabled_device_is_forced_off(
+            self, make_manager, make_device, shared_state):
+        from custom_components.aurum.const import disable_entity_id
+
+        mgr = make_manager([make_device(name="X", switch_entity="switch.x")])
+        dev = mgr.devices[0]
+        dev["managed_on"] = True
+        mgr.hass.states["switch.x"] = "on"
+        mgr.hass.states[disable_entity_id(dev["slug"])] = "on"
+
+        # Plenty of surplus — would normally keep it on.
+        shared_state["excess_for_devices"] = 5000
+        shared_state["excess_raw_for_devices"] = 5000
+        mgr.update(shared_state)
+
+        assert mgr.hass.states["switch.x"] == "off"
+        assert dev["managed_on"] is False
+
+    def test_disable_beats_manual_override(
+            self, make_manager, make_device, shared_state):
+        from custom_components.aurum.const import (
+            disable_entity_id, override_entity_id)
+
+        mgr = make_manager([make_device(name="X", switch_entity="switch.x")])
+        dev = mgr.devices[0]
+        mgr.hass.states["switch.x"] = "on"
+        # Both override AND disable ON → disable wins, device goes off.
+        mgr.hass.states[override_entity_id(dev["slug"])] = "on"
+        mgr.hass.states[disable_entity_id(dev["slug"])] = "on"
+
+        mgr.update(shared_state)
+        assert mgr.hass.states["switch.x"] == "off"
+
+    def test_disabled_device_does_not_turn_on_despite_surplus(
+            self, make_manager, make_device, shared_state):
+        from custom_components.aurum.const import disable_entity_id
+
+        mgr = make_manager([make_device(
+            name="X", switch_entity="switch.x",
+            nominal_power=1000, hysteresis_on=200, debounce_on=0)])
+        dev = mgr.devices[0]
+        mgr.hass.states["switch.x"] = "off"
+        mgr.hass.states[disable_entity_id(dev["slug"])] = "on"
+
+        # Big surplus that would otherwise start the device.
+        shared_state["excess_for_devices"] = 5000
+        shared_state["excess_raw_for_devices"] = 5000
+        mgr.update(shared_state)
+
+        assert mgr.hass.states["switch.x"] == "off"
+
+
+# ══════════════════════════════════════════════════════════════════
 #  _deadline_urgent
 # ══════════════════════════════════════════════════════════════════
 

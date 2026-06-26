@@ -1,12 +1,14 @@
 """
 AURUM – Switch Platform
 ========================
-Auto-creates one Manual Override switch and one 'Must Run Today' switch
-per configured device. Both switches are persistent via RestoreEntity.
+Auto-creates a Manual Override, a 'Must Run Today' and a Disable switch
+per configured device. All switches are persistent via RestoreEntity.
 
 Entity IDs are deterministic:
   switch.aurum_{slug}_override    – pauses AURUM control for the device
   switch.aurum_{slug}_muss_heute  – activates the deadline for the device
+  switch.aurum_{slug}_disable     – force-off: removes the device from
+                                    AURUM control and keeps it switched off
 """
 
 import logging
@@ -37,6 +39,7 @@ async def async_setup_entry(
         name = dev["name"]
         entities.append(AurumManualOverrideSwitch(coordinator, slug, name))
         entities.append(AurumMussHeuteSwitch(coordinator, slug, name))
+        entities.append(AurumDisableSwitch(coordinator, slug, name))
     async_add_entities(entities)
 
 
@@ -139,4 +142,28 @@ class AurumMussHeuteSwitch(_AurumBaseSwitch):
             suffix="muss_heute",
             friendly_suffix="Muss heute",
             icon="mdi:calendar-check",
+        )
+
+
+# ══════════════════════════════════════════════════════════════════
+#  DISABLE (FORCE-OFF) SWITCH
+# ══════════════════════════════════════════════════════════════════
+
+class AurumDisableSwitch(_AurumBaseSwitch):
+    """Switch that removes a device from AURUM control and forces it off.
+
+    When ON, AURUM ignores PV surplus, deadline and manual override for
+    this device and keeps it switched off every cycle. Use it to take a
+    device out of automation temporarily without deleting its config.
+    """
+
+    def __init__(self, coordinator, slug: str, device_name: str) -> None:
+        """Initialize disable switch."""
+        super().__init__(
+            coordinator=coordinator,
+            slug=slug,
+            device_name=device_name,
+            suffix="disable",
+            friendly_suffix="Disable",
+            icon="mdi:power-off",
         )

@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.8.3"
+VERSION = "1.9.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -129,3 +129,8 @@ def override_entity_id(slug: str) -> str:
 def muss_heute_entity_id(slug: str) -> str:
     """Return the deterministic entity_id for the 'must run today' switch."""
     return f"switch.aurum_{slug}_muss_heute"
+
+
+def disable_entity_id(slug: str) -> str:
+    """Return the deterministic entity_id for the 'disable' (force-off) switch."""
+    return f"switch.aurum_{slug}_disable"

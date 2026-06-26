@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-26
+
+### Added
+- **Per-device Disable (force-off) switch** – New auto-created `switch.aurum_{slug}_disable` per device. When ON it acts as a hard kill-switch: AURUM ignores PV surplus, deadline and manual override for that device and keeps it switched off every cycle. Use it to take a device out of automation temporarily without deleting its config. Persistent across HA restarts (RestoreEntity); an optional legacy `disable_entity` is also honoured. Unit-tested via the simulation harness (force-off under surplus, precedence over manual override, no turn-on while disabled). Ported from the HELIOS parent project.
+
+## [1.8.3] - 2026-06-24
+
+### Fixed
+- **Orphaned-entity cleanup for accented device names** – The cleanup routine used a separate `slugify` copy that stripped non-umlaut Unicode (é, ñ, …) while the entity slugs kept it, so the two could disagree and risk removing live entities or leaving orphans. Both now use the canonical `slugify`.
+- **Duplicate deadline notification string** – Removed a redundant notify key; the startup-detection and regular-device paths now share one definition.
+- **`min_on_time` after a restart** – A startup-detection device already ON after an HA restart never anchored its run-start timestamp, so minimum-on-time protection didn't apply. It is now set on restore.
+
+## [1.8.2] - 2026-06-24
+
+### Fixed
+- **Deadline / `muss_heute` had no effect on regular (non-SD) devices** ([#3](https://github.com/cm-makes/aurum-ha/issues/3)) – `_deadline_urgent()` was only evaluated inside the startup-detection state machine; devices on a direct smart plug/switch only checked PV surplus. Regular devices now force-start on grid when the deadline window is reached and `muss_heute` is ON, and `muss_heute` auto-resets when the daily runtime target is met.
+
 ## [1.8.1] - 2026-06-16
 
 ### Fixed

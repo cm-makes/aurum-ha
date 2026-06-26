@@ -35,6 +35,7 @@ from ..const import (
     DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
     override_entity_id,
     muss_heute_entity_id,
+    disable_entity_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +57,10 @@ _NOTIFY_STRINGS = {
     "deadline_start": {
         "en": "⚠️ {name} started by deadline (grid power)",
         "de": "⚠️ {name} per Deadline gestartet (Netzstrom)",
+    },
+    "device_disabled": {
+        "en": "🚫 {name} disabled – switched off and removed from control",
+        "de": "🚫 {name} deaktiviert – ausgeschaltet und aus der Steuerung",
     },
     "sd_running": {
         "en": "▶️ {name} is running now (PV surplus)",
@@ -130,6 +135,7 @@ class DeviceManager:
             "interruptible": cfg.get("interruptible", True),
             "manual_override_entity": cfg.get("manual_override_entity"),
             "muss_heute_entity": cfg.get("muss_heute_entity"),
+            "disable_entity": cfg.get("disable_entity"),
             "residual_power": cfg.get(
                 "residual_power", DEFAULT_DEV_RESIDUAL_POWER),
 
@@ -238,6 +244,19 @@ class DeviceManager:
                 if (not dev["startup_detection"]
                         or dev["sd_state"] == SD_STATE_RUNNING):
                     self._accumulate_runtime(dev, now, actual_power)
+
+            # ── 0. Disable (force-off) → hard kill-switch ───────
+            # Beats manual override, deadline and PV logic. Keeps the
+            # device off every cycle until the disable switch is cleared.
+            if self._is_disabled(dev):
+                dev["_pending_off"] = None
+                if was_on:
+                    self._turn_off(dev, now, excess, battery_soc,
+                                   "device_disabled")
+                    self._notify(
+                        self._t("device_disabled", name=dev['name']),
+                        tag=f"aurum_disable_{dev['name']}")
+                continue
 
             # ── 1. Manual override → skip device ────────────────
             if self._is_manual_override(dev):
@@ -1056,6 +1075,26 @@ class DeviceManager:
             return True
         # Legacy fallback (user-configured input_boolean)
         legacy = dev.get("manual_override_entity")
+        if legacy:
+            try:
+                return self.hass.get_state(legacy) == "on"
+            except Exception:
+                pass
+        return False
+
+    def _is_disabled(self, dev):
+        """Check if the per-device disable (force-off) switch is active.
+
+        Returns True if the native switch OR the legacy entity is ON.
+        Used as a hard kill-switch, checked before manual override and
+        PV logic. Graceful: False if the entity is missing/unavailable.
+        """
+        slug = dev["slug"]
+        # Native switch (auto-created by AURUM)
+        if self.hass.get_state(disable_entity_id(slug)) == "on":
+            return True
+        # Legacy fallback (user-configured input_boolean)
+        legacy = dev.get("disable_entity")
         if legacy:
             try:
                 return self.hass.get_state(legacy) == "on"
