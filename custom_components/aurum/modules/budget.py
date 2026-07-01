@@ -185,26 +185,33 @@ class BudgetManager:
         # Snapshot is taken once per hour; at the next hour boundary the
         # delta since last snapshot becomes pv_actual_hour_kwh.
         now_h = now.hour
-        if pv_actual_kwh is not None:
-            if self._pv_hour_snapshot_h != now_h:
-                # New hour: publish delta from previous snapshot
-                if self._pv_hour_snapshot_kwh is not None:
-                    shared["pv_actual_hour_kwh"] = max(
-                        0.0, pv_actual_kwh - self._pv_hour_snapshot_kwh)
-                self._pv_hour_snapshot_kwh = pv_actual_kwh
-                self._pv_hour_snapshot_h = now_h
-
-        # Hourly forecast for current hour (W → kWh, for learning ratio)
-        if hourly_forecast:
-            fc_this_hour = next(
-                (w for h, w in hourly_forecast if int(h) == now_h), None)
-            if fc_this_hour is not None:
-                shared["pv_forecast_hour_kwh"] = fc_this_hour / 1000.0
+        if pv_actual_kwh is not None and self._pv_hour_snapshot_h != now_h:
+            # Hour boundary: publish the production of the hour that just
+            # ENDED together with the forecast for THAT SAME hour, so weather
+            # learning divides matching hours. Previously the actual was for
+            # the ended hour but the forecast was overwritten every cycle with
+            # the CURRENT hour, biasing the learned factor on morning/evening
+            # ramps where consecutive-hour forecasts differ a lot.
+            ended_hour = self._pv_hour_snapshot_h
+            if self._pv_hour_snapshot_kwh is not None:
+                shared["pv_actual_hour_kwh"] = max(
+                    0.0, pv_actual_kwh - self._pv_hour_snapshot_kwh)
+                if hourly_forecast and ended_hour is not None:
+                    fc_ended = next(
+                        (w for h, w in hourly_forecast
+                         if int(h) == ended_hour), None)
+                    if fc_ended is not None:
+                        shared["pv_forecast_hour_kwh"] = fc_ended / 1000.0
+            self._pv_hour_snapshot_kwh = pv_actual_kwh
+            self._pv_hour_snapshot_h = now_h
 
         # ── SOC trajectory start detection ─────────────────────────
+        # Guard on an actually-resolvable target SOC (config/entity/slider),
+        # not on the legacy target_soc_entity key which AURUM never sets —
+        # that made the trajectory learner permanently inert.
         excess = shared.get("excess_for_devices", 0)
         if (self._trajectory_start_soc is None
-                and excess > 0 and self.target_soc_entity
+                and excess > 0 and self._get_target_soc() is not None
                 and battery_soc is not None):
             self._trajectory_start_soc = battery_soc
             self._trajectory_start_time = now
@@ -395,6 +402,18 @@ class BudgetManager:
         if self.target_soc_entity:
             return get_float(self.hass, self.target_soc_entity, default=None)
         return self._config_target_soc
+
+    def set_target_soc(self, value):
+        """Update the runtime target SOC from the Target SOC number slider.
+
+        Without this the budget kept using the value frozen at config init
+        (_config_target_soc), so moving the slider changed only the battery
+        gate while the energy-to-target budget aimed at the stale target.
+        """
+        try:
+            self._config_target_soc = float(value)
+        except (TypeError, ValueError):
+            pass
 
     def _get_smoothed_weather_factor(self):
         """EMA-smoothed weather factor to prevent budget jumps.
@@ -777,10 +796,18 @@ class BudgetManager:
             # ── Option 1: Open-Meteo "watts" attribute ──────────────
             watts_data = attrs.get("watts")
             if watts_data and isinstance(watts_data, dict):
+                today = datetime.now().date()
                 hourly = {}
                 for ts_str, watts_val in watts_data.items():
                     try:
                         dt = datetime.fromisoformat(str(ts_str))
+                        # The 'watts' dict spans multiple days (today+tomorrow);
+                        # keep only today's slots so same-hour entries from
+                        # different days are not averaged into one bucket
+                        # (which would blend a sunny today with a rainy
+                        # tomorrow and distort the hourly profile).
+                        if dt.date() != today:
+                            continue
                         hour = dt.hour
                         if hour not in hourly:
                             hourly[hour] = []

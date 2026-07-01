@@ -653,20 +653,35 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
         if dev is None:
             return await self.async_step_init()
 
+        errors: dict[str, str] = {}
         if user_input is not None:
-            # Replace the device in the list
-            self._devices = [
-                user_input if d["name"] == name else d
-                for d in self._devices
-            ]
-            self._options[CONF_DEVICES] = self._devices
-            return self.async_create_entry(title="", data={
-                **self._current, **self._options,
-            })
+            from .modules.helpers import slugify as _slugify
+            new_slug = _slugify(user_input.get(CONF_DEV_NAME, ""))
+            # Slugs of all OTHER devices (exclude the one being edited).
+            others = {
+                _slugify(d.get(CONF_DEV_NAME, ""))
+                for d in self._devices if d["name"] != name}
+            if not new_slug:
+                errors["base"] = "invalid_device_name"
+            elif new_slug in others:
+                # Entity unique_ids derive from the slug; renaming onto an
+                # existing slug would collide/overwrite the other device.
+                errors["base"] = "duplicate_device"
+            else:
+                # Replace the device in the list
+                self._devices = [
+                    user_input if d["name"] == name else d
+                    for d in self._devices
+                ]
+                self._options[CONF_DEVICES] = self._devices
+                return self.async_create_entry(title="", data={
+                    **self._current, **self._options,
+                })
 
         return self.async_show_form(
             step_id="edit_device",
-            data_schema=_schema_add_device(dev),
+            data_schema=_schema_add_device(user_input or dev),
+            errors=errors,
         )
 
     async def async_step_remove_device(self, user_input=None):
@@ -686,12 +701,37 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
                 from homeassistant.helpers import entity_registry as er
                 from .modules.helpers import slugify as _slugify
                 slug = removed_dev.get("slug") or _slugify(name)
+                # Slugs of the surviving devices (self._devices already has the
+                # removed device filtered out). Used to disambiguate prefix
+                # collisions: a slug that is a prefix of another device's slug
+                # (e.g. "washer" vs "washer_2") must NOT match the other's
+                # entities. We assign each entity to the device with the
+                # LONGEST matching slug prefix and only remove ours.
+                survivor_slugs = {
+                    _slugify(d.get(CONF_DEV_NAME, "")) for d in self._devices}
+                all_slugs = survivor_slugs | {slug}
                 ent_reg = er.async_get(self.hass)
                 entries = er.async_entries_for_config_entry(
                     ent_reg, self.config_entry.entry_id
                 )
                 for entry in entries:
-                    if f"aurum_{slug}" in entry.entity_id:
+                    object_id = entry.entity_id.split(".", 1)[-1]
+                    # Candidate owners: every slug that matches this entity's
+                    # object_id either exactly (the per-device status sensor
+                    # is object_id "aurum_{slug}" with NO suffix) or as a
+                    # bounded prefix (slug followed by "_suffix"). The
+                    # longest-match arbitration below then prevents a
+                    # prefix-slug (e.g. "washer") from claiming another
+                    # device's entities (e.g. "washer_2").
+                    candidates = [
+                        s for s in all_slugs
+                        if s and (object_id == f"aurum_{s}"
+                                  or object_id.startswith(f"aurum_{s}_"))
+                    ]
+                    if not candidates:
+                        continue
+                    owner = max(candidates, key=len)
+                    if owner == slug:
                         _LOGGER.debug(
                             "AURUM: removing entity %s (device '%s' deleted)",
                             entry.entity_id, name,
