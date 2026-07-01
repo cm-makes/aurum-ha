@@ -120,13 +120,17 @@ class AurumCoordinator(DataUpdateCoordinator):
             })
 
     async def async_shutdown(self):
-        """Save state before shutdown."""
+        """Save state, then run base coordinator teardown."""
         try:
             await self.hass.async_add_executor_job(
                 self.persistence.save, self.devices, self.budget)
             _LOGGER.info("AURUM state saved on shutdown")
         except Exception as e:
             _LOGGER.warning("State save on shutdown failed: %s", e)
+        # Let the base DataUpdateCoordinator cancel its refresh timer,
+        # unsubscribe the EVENT_HOMEASSISTANT_STOP listener and shut down the
+        # debouncer. Skipping this leaked one bus listener per reload.
+        await super().async_shutdown()
 
     # ══════════════════════════════════════════════════════════════
     #  MAIN UPDATE LOOP
@@ -199,7 +203,11 @@ class AurumCoordinator(DataUpdateCoordinator):
                         self._last_consumption_update_day = adapt_day
 
                     # Daily: safety-factor adaptation at 17:00
-                    if (current_hour == 17 and now.minute < 1
+                    # Use a 5-minute window (like the 23:55 job) so a larger
+                    # configured update_interval can't step over a 60s window
+                    # and skip the daily adaptation. _last_adapt_day still
+                    # guards against running it more than once per day.
+                    if (current_hour == 17 and now.minute < 5
                             and adapt_day != self._last_adapt_day):
                         self.budget.adapt_safety_factor(shared)
                         self._last_adapt_day = adapt_day

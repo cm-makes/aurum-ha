@@ -337,7 +337,23 @@ class AurumPVPowerSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-class AurumBatterySOCSensor(CoordinatorEntity, SensorEntity):
+class _AttrAvailabilityMixin:
+    """Restore _attr_available-based availability for CoordinatorEntity.
+
+    CoordinatorEntity.available only reflects coordinator.last_update_success
+    and ignores _attr_available, so subclasses that toggle _attr_available to
+    signal a missing underlying value would otherwise stay 'available' and
+    report state 'unknown' instead of 'unavailable'. Placing this mixin first
+    in the MRO makes its available combine both signals.
+    """
+
+    @property
+    def available(self):
+        return super().available and getattr(self, "_attr_available", True)
+
+
+class AurumBatterySOCSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Current battery state of charge."""
 
     _attr_device_class = SensorDeviceClass.BATTERY
@@ -412,10 +428,14 @@ class AurumBatteryDischargeSensor(CoordinatorEntity, SensorEntity):
 # ══════════════════════════════════════════════════════════════════
 
 
-class AurumForecastRemainingSensor(CoordinatorEntity, SensorEntity):
+class AurumForecastRemainingSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Remaining PV forecast for today in kWh."""
 
-    _attr_device_class = SensorDeviceClass.ENERGY
+    # ENERGY_STORAGE (not ENERGY) pairs validly with MEASUREMENT for a
+    # point-in-time, decreasing "remaining" kWh quantity. ENERGY only permits
+    # TOTAL / TOTAL_INCREASING and would log a validation warning.
+    _attr_device_class = SensorDeviceClass.ENERGY_STORAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "kWh"
     _attr_icon = "mdi:solar-power-variant-outline"
@@ -483,7 +503,8 @@ class AurumBudgetWSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-class AurumSafetyFactorSensor(CoordinatorEntity, SensorEntity):
+class AurumSafetyFactorSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Adaptive safety factor for PV forecast correction."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -510,7 +531,8 @@ class AurumSafetyFactorSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-class AurumElectricityPriceSensor(CoordinatorEntity, SensorEntity):
+class AurumElectricityPriceSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Current electricity price from configured price entity."""
 
     # No device_class: a price *rate* (ct/kWh) is not SensorDeviceClass.MONETARY,

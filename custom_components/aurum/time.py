@@ -11,6 +11,7 @@ from homeassistant.components.time import TimeEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -33,12 +34,15 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class AurumDeviceDeadline(CoordinatorEntity, TimeEntity):
+class AurumDeviceDeadline(CoordinatorEntity, TimeEntity, RestoreEntity):
     """Time entity: per-device deadline (must finish by).
 
     When set together with muss_heute switch and estimated_runtime,
     AURUM will force-start the device in time to meet the deadline.
     Set to 00:00 to disable the deadline.
+
+    The chosen deadline persists across restart/reload via RestoreEntity;
+    the config value is only the initial seed on first creation.
     """
 
     _attr_icon = "mdi:clock-alert-outline"
@@ -67,8 +71,23 @@ class AurumDeviceDeadline(CoordinatorEntity, TimeEntity):
                     self._attr_native_value = None
                 break
 
-    async def async_set_value(self, value: dt_time) -> None:
-        """Update device deadline."""
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state not in (
+                None, "unknown", "unavailable"):
+            try:
+                parts = last.state.split(":")
+                restored = dt_time(
+                    int(parts[0]),
+                    int(parts[1]) if len(parts) > 1 else 0)
+            except (ValueError, IndexError):
+                restored = None
+            if restored is not None:
+                self._apply(restored)
+
+    def _apply(self, value: dt_time) -> None:
+        """Push the deadline into the in-memory device dict."""
         # 00:00 means disabled
         if value.hour == 0 and value.minute == 0:
             deadline_str = None
@@ -81,4 +100,8 @@ class AurumDeviceDeadline(CoordinatorEntity, TimeEntity):
                 break
 
         self._attr_native_value = value if deadline_str else None
+
+    async def async_set_value(self, value: dt_time) -> None:
+        """Update device deadline."""
+        self._apply(value)
         self.async_write_ha_state()

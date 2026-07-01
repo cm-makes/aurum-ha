@@ -656,6 +656,14 @@ class DeviceManager:
 
         # ── DETECTED: Turn OFF immediately → WAITING (transient) ─
         if sd_state == SD_STATE_DETECTED:
+            # Standby-monitoring time must NOT count as program runtime.
+            # During STANDBY the Shelly is on (device drawing standby power)
+            # but _runtime_tick is deliberately never advanced; without this
+            # anchor the pause _turn_off would accumulate the whole standby
+            # span (via the on_since fallback in _accumulate_runtime) into
+            # runtime_today_s and could trip _runtime_target_reached before
+            # the program ever runs on PV. SD runtime only accrues in RUNNING.
+            dev["_runtime_tick"] = now
             self._turn_off(dev, now, excess, battery_soc,
                            "sd_pause_program")
             dev["sd_state"] = SD_STATE_WAITING
@@ -923,6 +931,11 @@ class DeviceManager:
         dev["_runtime_tick"] = now
         dev["total_switches"] += 1
         dev["managed_on"] = True
+        # A plain turn-on is NOT a forced start: clear any stale force-started
+        # immunity so the device stays sheddable (SOC/surplus protection).
+        # Deadline force-starts re-set force_started=True right after calling
+        # _turn_on (see the "deadline_forced" callers), so this is safe.
+        dev["force_started"] = False
         dev["_scheduling_reason"] = reason
         dev["excess_since"] = None
         dev["_excess_deficit_since"] = None
@@ -1221,3 +1234,6 @@ class DeviceManager:
             dev["total_switches"] = 0
             dev["_switch_times"] = []
             dev["_scheduling_reason"] = None
+            # Force-started immunity must not survive midnight; a device that
+            # was deadline-forced yesterday should be sheddable again today.
+            dev["force_started"] = False

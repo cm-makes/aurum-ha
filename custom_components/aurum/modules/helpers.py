@@ -119,10 +119,18 @@ class CSVLogger:
             self._init_file()
         rows = self._buffer
         self._buffer = []
+        written = 0
         try:
             with open(self.path, 'a', newline='') as f:
                 writer = csv.writer(f)
                 for row in rows:
                     writer.writerow(row)
+                    written += 1
         except Exception as e:
             self.hass.log(f"CSV write error: {e}", level="WARNING")
+            # Re-queue only the rows NOT yet written so they are retried on
+            # the next flush without dropping them — and without duplicating
+            # rows already flushed before a mid-loop failure. Bound the
+            # retained backlog so a persistent failure can't grow it forever.
+            max_backlog = getattr(self, "max_lines", 10000) or 10000
+            self._buffer = (rows[written:] + self._buffer)[-max_backlog:]

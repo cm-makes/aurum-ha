@@ -41,10 +41,16 @@ class HassAccess:
             entity_id, state, attributes or {})
 
     def call_service(self, service, **kwargs):
-        """Call a HA service (fire-and-forget, safe in async context)."""
+        """Call a HA service (fire-and-forget).
+
+        Uses hass.add_job with the async service API so it is safe whether
+        invoked from the event loop (e.g. budget.adapt_safety_factor) or from
+        an executor thread. The previous synchronous services.call blocked the
+        loop on run_coroutine_threadsafe(...).result() when called on-loop.
+        """
         domain, service_name = service.split("/", 1)
-        self._hass.services.call(
-            domain, service_name, kwargs, blocking=False)
+        self._hass.add_job(
+            self._hass.services.async_call, domain, service_name, kwargs)
 
     def turn_on(self, entity_id, **kwargs):
         """Turn on a switch/input_boolean."""

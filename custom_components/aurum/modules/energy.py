@@ -31,6 +31,7 @@ class EnergyManager:
         self.ema_alpha_up = config.get("ema_alpha_up", 0.2)
         self._grid_ema = None       # symmetric EMA (battery decisions)
         self._grid_ema_asym = None  # asymmetric EMA (device decisions)
+        self._last_soc = None       # last valid battery SOC (outage hold)
 
     def update(self, shared):
         """Read sensors, calculate excess, update shared dict."""
@@ -60,8 +61,22 @@ class EnergyManager:
 
         # Battery SOC (optional)
         if self.battery_soc_entity:
-            shared["battery_soc"] = get_float(
-                self.hass, self.battery_soc_entity, -1)
+            soc = get_float(self.hass, self.battery_soc_entity, default=None)
+            if soc is None:
+                # Sensor IS configured but temporarily unavailable/unknown.
+                # Must NOT fall back to -1 (the "no battery" sentinel): that
+                # would silently disable ALL battery protection during a
+                # common transient (HA restart, inverter/cloud dropout),
+                # letting devices discharge the battery below min_soc.
+                # Hold the last known SOC; if none yet, assume a protective
+                # low SOC so devices can't drain the battery (they may still
+                # run on genuine grid export, which needs no battery).
+                soc = self._last_soc if self._last_soc is not None else 0.0
+                _LOGGER.debug(
+                    "AURUM: battery SOC unavailable, holding %.1f%%", soc)
+            else:
+                self._last_soc = soc
+            shared["battery_soc"] = soc
         else:
             shared["battery_soc"] = -1  # -1 = no battery
 
