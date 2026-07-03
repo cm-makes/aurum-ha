@@ -53,11 +53,24 @@ def ema_update_asymmetric(current_ema, raw, alpha_down=0.7, alpha_up=0.2):
 
 
 def slugify(name):
-    """Convert a device name to a slug (lowercase, underscored)."""
+    """Convert a device name to a slug (lowercase, underscored, ASCII).
+
+    Must yield a valid HA entity object_id ([a-z0-9_]) because AURUM
+    forces entity_ids from this slug. German umlauts get the customary
+    ae/oe/ue/ss transliteration; any other non-ASCII character folds to
+    its ASCII base (é→e) or drops, so names like "Café" can't produce an
+    invalid entity_id.
+    """
+    import unicodedata
     slug = name.lower().strip()
     for old, new in [("ü", "ue"), ("ö", "oe"), ("ä", "ae"), ("ß", "ss")]:
         slug = slug.replace(old, new)
-    slug = "".join(c if c.isalnum() or c == "_" else "_" for c in slug)
+    # Fold remaining non-ASCII to ASCII base characters (é→e, ç→c, …)
+    slug = unicodedata.normalize("NFKD", slug).encode(
+        "ascii", "ignore").decode("ascii")
+    slug = "".join(
+        c if (c.isascii() and c.isalnum()) or c == "_" else "_"
+        for c in slug)
     while "__" in slug:
         slug = slug.replace("__", "_")
     return slug.strip("_")

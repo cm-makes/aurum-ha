@@ -250,7 +250,8 @@
       "soc_is_fraction": "Dieser Sensor liefert den Ladestand als 0–1 (Bruchteil), AURUM erwartet aber 0–100 (Prozent). Lege einen Template-Sensor an, der mit 100 multipliziert, oder wähle einen Sensor in Prozent.",
       "not_numeric": "Dieser Sensor liefert aktuell keine Zahl. Prüfe, ob der Sensor online ist und einen Wert liefert.",
       "duplicate_device": "Ein Gerät mit diesem Namen existiert bereits. Wähle einen anderen Namen — jedes Gerät braucht einen eindeutigen Namen.",
-      "invalid_device_name": "Bitte gib einen Gerätenamen ein (Buchstaben oder Zahlen)."
+      "invalid_device_name": "Bitte gib einen Gerätenamen ein (Buchstaben oder Zahlen).",
+      "reserved_device_name": "Dieser Name ist für AURUMs eigene Sensoren reserviert. Wähle einen anderen Gerätenamen."
     }
   },
   "selector": {

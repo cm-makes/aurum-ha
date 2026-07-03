@@ -53,6 +53,8 @@ class AurumDeviceActiveSensor(CoordinatorEntity, BinarySensorEntity):
         self._attr_name = f"AURUM {self._dev_name} Active"
         self._attr_icon = _device_icon(self._dev_name)
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id from AURUM's slug (umlaut-safe id contract)
+        self.entity_id = f"binary_sensor.aurum_{slug}_active"
 
     @callback
     def _handle_coordinator_update(self):

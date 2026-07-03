@@ -12,6 +12,17 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import selector
 
+# Device slugs that would collide with AURUM's own hub entity object_ids
+# (sensor.aurum_{slug} / _power / _energy_today / _active derivations).
+_RESERVED_SLUGS = {
+    "pv_power", "grid_power", "battery_soc", "battery_charge",
+    "battery_discharge", "battery_mode", "excess_power", "budget",
+    "house_consumption", "forecast_remaining", "energy_today", "cycle",
+    "safety_factor", "electricity_price", "cheap_grid_active",
+    # prefixes whose per-device suffixes collide with hub ids:
+    "pv", "grid", "battery", "energy", "cheap_grid",
+}
+
 from .const import (
     DOMAIN,
     CONF_GRID_POWER_ENTITY,
@@ -606,6 +617,8 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
                 _slugify(d.get(CONF_DEV_NAME, "")) for d in self._devices}
             if not new_slug:
                 errors["base"] = "invalid_device_name"
+            elif new_slug in _RESERVED_SLUGS:
+                errors["base"] = "reserved_device_name"
             elif new_slug in existing:
                 # Entity unique_ids derive from the slug; a duplicate would
                 # collide/overwrite the existing device's entities.
@@ -663,6 +676,8 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
                 for d in self._devices if d["name"] != name}
             if not new_slug:
                 errors["base"] = "invalid_device_name"
+            elif new_slug in _RESERVED_SLUGS:
+                errors["base"] = "reserved_device_name"
             elif new_slug in others:
                 # Entity unique_ids derive from the slug; renaming onto an
                 # existing slug would collide/overwrite the other device.

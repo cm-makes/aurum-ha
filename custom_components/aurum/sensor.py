@@ -159,6 +159,11 @@ class AurumDeviceStatusSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"AURUM {self._dev_name}"
         self._attr_icon = _device_icon(self._dev_name)
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Force deterministic entity_id from AURUM's own slug. Without this
+        # HA derives the object_id from the name via ITS slugify, which
+        # transliterates umlauts differently (ä→a vs AURUM's ä→ae), breaking
+        # the id contract the dashboard panel and docs rely on.
+        self.entity_id = f"sensor.aurum_{slug}"
 
     @callback
     def _handle_coordinator_update(self):
@@ -199,6 +204,8 @@ class AurumDevicePowerSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"AURUM {self._dev_name} Power"
         self._attr_icon = "mdi:flash"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id (see AurumDeviceStatusSensor)
+        self.entity_id = f"sensor.aurum_{slug}_power"
 
     @callback
     def _handle_coordinator_update(self):
@@ -224,6 +231,8 @@ class AurumDeviceRuntimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{slug}_runtime"
         self._attr_name = f"AURUM {self._dev_name} Runtime"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id (see AurumDeviceStatusSensor)
+        self.entity_id = f"sensor.aurum_{slug}_runtime"
 
     @callback
     def _handle_coordinator_update(self):
@@ -253,6 +262,8 @@ class AurumDeviceEnergySensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{slug}_energy"
         self._attr_name = f"AURUM {self._dev_name} Energy Today"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id (see AurumDeviceStatusSensor)
+        self.entity_id = f"sensor.aurum_{slug}_energy_today"
 
     @callback
     def _handle_coordinator_update(self):

@@ -3,11 +3,11 @@
   "name": "AURUM – Solar Surplus Optimizer",
   "codeowners": ["@cm-makes"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["frontend", "http"],
   "documentation": "https://github.com/cm-makes/aurum-ha",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/cm-makes/aurum-ha/issues",
   "requirements": [],
-  "version": "1.9.1"
+  "version": "1.10.0"
 }
