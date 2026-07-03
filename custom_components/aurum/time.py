@@ -54,6 +54,8 @@ class AurumDeviceDeadline(CoordinatorEntity, TimeEntity, RestoreEntity):
         self._attr_unique_id = f"{entry.entry_id}_{slug}_deadline"
         self._attr_name = f"AURUM {self._dev_name} Deadline"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id from AURUM's slug (umlaut-safe id contract)
+        self.entity_id = f"time.aurum_{slug}_deadline"
 
         # Get initial value from device config
         for dev in coordinator.devices.devices:

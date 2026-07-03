@@ -137,6 +137,8 @@ class AurumDeviceSOCThreshold(_AurumRestoreNumber):
         self._attr_unique_id = f"{entry.entry_id}_{slug}_soc_threshold"
         self._attr_name = f"AURUM {self._dev_name} SOC Threshold"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id from AURUM's slug (umlaut-safe id contract)
+        self.entity_id = f"number.aurum_{slug}_soc_threshold"
 
         # Get initial value from device config
         for dev in coordinator.devices.devices:
@@ -174,6 +176,8 @@ class AurumDeviceMaxPrice(_AurumRestoreNumber):
         self._attr_unique_id = f"{entry.entry_id}_{slug}_max_price"
         self._attr_name = f"AURUM {self._dev_name} Max Price"
         self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id from AURUM's slug (umlaut-safe id contract)
+        self.entity_id = f"number.aurum_{slug}_max_price"
 
         # Get initial value from device config
         for dev in coordinator.devices.devices:

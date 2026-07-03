@@ -250,7 +250,8 @@
       "soc_is_fraction": "This sensor reports battery level as 0–1 (fraction), but AURUM expects 0–100 (percent). Add a Template sensor that multiplies by 100, or pick a sensor that reports percent.",
       "not_numeric": "This sensor doesn't report a number right now. Check that the sensor is online and reporting a value.",
       "duplicate_device": "A device with this name already exists. Pick a different name — each device needs a unique name.",
-      "invalid_device_name": "Please enter a device name (letters or numbers)."
+      "invalid_device_name": "Please enter a device name (letters or numbers).",
+      "reserved_device_name": "This name is reserved for AURUM's own sensors. Pick a different device name."
     }
   },
   "selector": {
