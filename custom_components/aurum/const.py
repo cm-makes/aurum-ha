@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.10.1"
+VERSION = "1.11.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -23,6 +23,12 @@ CONF_BATTERY_CAPACITY_WH = "battery_capacity_wh"
 CONF_TARGET_SOC = "target_soc"
 CONF_MIN_SOC = "min_soc"
 CONF_UPDATE_INTERVAL = "update_interval"
+# Battery-priority surplus semantics (community request, discussion #9):
+#   False (default/legacy): excess = -grid - battery_power_net
+#     → battery charging power counts as redirectable device surplus
+#   True: excess = -grid
+#     → batteries charge first; only genuine grid export is device surplus
+CONF_BATTERY_PRIORITY = "battery_priority"
 
 # ── Config keys: Notifications ──────────────────────────────────
 CONF_NOTIFY_SERVICE = "notify_service"
@@ -63,6 +69,14 @@ CONF_DEV_INTERRUPTIBLE = "interruptible"
 CONF_DEV_MANUAL_OVERRIDE_ENTITY = "manual_override_entity"
 CONF_DEV_MUSS_HEUTE_ENTITY = "muss_heute_entity"
 CONF_DEV_RESIDUAL_POWER = "residual_power"
+# Optional per-device run condition (community request, discussion #5):
+# device may only run while <condition_entity> is below/above <value>,
+# e.g. water heater only when sensor.boiler_temp is below 55.
+CONF_DEV_CONDITION_ENTITY = "condition_entity"
+CONF_DEV_CONDITION_OP = "condition_op"          # "below" | "above"
+CONF_DEV_CONDITION_VALUE = "condition_value"
+CONDITION_OP_BELOW = "below"
+CONDITION_OP_ABOVE = "above"
 
 # ── Device config keys: Price-aware scheduling ──────────────────
 CONF_DEV_PRICE_MODE = "price_mode"

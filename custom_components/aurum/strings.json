@@ -34,13 +34,15 @@
           "battery_capacity_wh": "Battery size",
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
-          "update_interval": "Update speed"
+          "update_interval": "Update speed",
+          "battery_priority": "Battery priority"
         },
         "data_description": {
           "battery_capacity_wh": "How large is your battery? Enter in watt-hours. Examples: 5,000 Wh = 5 kWh, 10,000 Wh = 10 kWh.",
           "target_soc": "At what charge level should all devices be allowed to run? Default: 80%. While the battery is below this, AURUM only runs devices with special permission.",
           "min_soc": "Below what charge level should ALL devices be turned off? Protects your battery from deep discharge. Default: 10%.",
-          "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed."
+          "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed.",
+          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first. When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
         }
       }
     },
@@ -86,7 +88,8 @@
           "price_entity": "Electricity price sensor (optional)",
           "price_level_entity": "Price level sensor (optional)",
           "cheap_period_entity": "Cheap price period sensor (optional)",
-          "cheap_period_starts_in_entity": "Cheap period countdown (optional)"
+          "cheap_period_starts_in_entity": "Cheap period countdown (optional)",
+          "battery_priority": "Battery priority"
         },
         "data_description": {
           "grid_power_entity": "Your grid meter sensor in watts. Positive = drawing from grid, negative = feeding in.",
@@ -106,7 +109,8 @@
           "price_entity": "Current electricity price in ct/kWh. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
           "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
           "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty.",
-          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Can be left empty."
+          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Can be left empty.",
+          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first. When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
         }
       },
       "add_device": {
@@ -138,7 +142,10 @@
           "debounce_on": "Debounce ON",
           "debounce_off": "Debounce OFF",
           "min_on_time": "Minimum ON time",
-          "min_off_time": "Minimum OFF time"
+          "min_off_time": "Minimum OFF time",
+          "condition_entity": "Run condition sensor (optional)",
+          "condition_op": "Condition",
+          "condition_value": "Condition limit"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'. This name will appear as a sensor in Home Assistant.",
@@ -166,7 +173,9 @@
           "debounce_on": "How long surplus must be sufficient before turning on (seconds). Prevents switching on during brief sun spikes. Default: 300s (5 min).",
           "debounce_off": "How long deficit must persist before turning off (seconds). Lets the device ride through short clouds. Default: 600s (10 min).",
           "min_on_time": "Once turned on, how long must the device stay on (seconds)? Protects devices that don't like short cycles. Default: 600s (10 min).",
-          "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s."
+          "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s.",
+          "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
+          "condition_value": "Threshold for the run condition sensor."
         }
       },
       "edit_device_select": {
@@ -205,7 +214,10 @@
           "debounce_on": "Debounce ON",
           "debounce_off": "Debounce OFF",
           "min_on_time": "Minimum ON time",
-          "min_off_time": "Minimum OFF time"
+          "min_off_time": "Minimum OFF time",
+          "condition_entity": "Run condition sensor (optional)",
+          "condition_op": "Condition",
+          "condition_value": "Condition limit"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'.",
@@ -231,7 +243,9 @@
           "debounce_on": "How long surplus must be sufficient before turning on (seconds).",
           "debounce_off": "How long deficit must persist before turning off (seconds).",
           "min_on_time": "Minimum time the device stays on once started (seconds).",
-          "min_off_time": "Minimum time the device stays off after being turned off (seconds)."
+          "min_off_time": "Minimum time the device stays off after being turned off (seconds).",
+          "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
+          "condition_value": "Threshold for the run condition sensor."
         }
       },
       "remove_device": {
@@ -267,6 +281,12 @@
       "options": {
         "price_mode_solar_only": "Solar only – runs only on PV surplus (default)",
         "price_mode_cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar"
+      }
+    },
+    "condition_op": {
+      "options": {
+        "below": "Sensor must be below the limit",
+        "above": "Sensor must be above the limit"
       }
     }
   }

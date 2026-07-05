@@ -139,6 +139,11 @@ class DeviceManager:
             "residual_power": cfg.get(
                 "residual_power", DEFAULT_DEV_RESIDUAL_POWER),
 
+            # Run condition (optional prerequisite, e.g. boiler temp < 55)
+            "condition_entity": cfg.get("condition_entity"),
+            "condition_op": cfg.get("condition_op", "below"),
+            "condition_value": cfg.get("condition_value"),
+
             # Price-aware scheduling
             "price_mode": cfg.get("price_mode", "solar_only"),
             "max_price": cfg.get("max_price", 0),
@@ -305,6 +310,31 @@ class DeviceManager:
                     self._reset_muss_heute(dev)
                 continue
 
+            # ── 1d. Run condition not met → stop / block start ───
+            # Optional prerequisite (e.g. boiler temp below limit).
+            # Blocks ALL start paths (surplus, cheap grid, deadline)
+            # and stops a running device once min_on_time is honored.
+            # Non-interruptible devices are never stopped mid-run, but
+            # they won't be restarted while the condition is unmet.
+            # SD devices are handled inside the state machine (block
+            # new starts, never interrupt a RUNNING program).
+            if (not dev["startup_detection"]
+                    and not self._condition_met(dev)):
+                if was_on:
+                    if not dev["interruptible"]:
+                        devices_on += 1
+                        continue
+                    on_s = ((now - dev["on_since"]).total_seconds()
+                            if dev["on_since"] else None)
+                    if on_s is not None and on_s < dev["min_on_time"]:
+                        dev["_pending_off"] = None
+                        devices_on += 1
+                        continue
+                    self._turn_off(dev, now, excess, battery_soc,
+                                   "condition_not_met")
+                    dev["_pending_off"] = None
+                continue
+
             # ── 2. Startup detection devices ─────────────────────
             if dev["startup_detection"]:
                 sd_turnon = excess - newly_allocated
@@ -451,6 +481,26 @@ class DeviceManager:
     #  SHOULD TURN ON / OFF (HELIOS-compatible)
     # ══════════════════════════════════════════════════════════════
 
+    def _condition_met(self, dev):
+        """Optional run condition: entity below/above threshold.
+
+        E.g. water heater only while sensor.boiler_temp is below 55.
+        Returns True when no condition is configured. An unavailable
+        sensor also returns True (fail-open): a broken temp sensor must
+        not permanently strand the device — the regular surplus logic
+        still applies either way.
+        """
+        entity = dev.get("condition_entity")
+        value = dev.get("condition_value")
+        if not entity or value is None:
+            return True
+        current = get_float(self.hass, entity, default=None)
+        if current is None:
+            return True
+        if dev.get("condition_op", "below") == "above":
+            return current > float(value)
+        return current < float(value)
+
     def _runtime_target_reached(self, dev):
         """True when stop_after_runtime is set and today's runtime
         has reached the estimated_runtime target."""
@@ -466,6 +516,10 @@ class DeviceManager:
         """Check if device should be turned on. Returns True/False."""
         # Runtime target reached: stay off for the rest of the day
         if self._runtime_target_reached(dev):
+            return False
+
+        # Run condition not met (e.g. boiler already hot) → stay off
+        if not self._condition_met(dev):
             return False
 
         # Min off-time: don't turn back on too quickly
@@ -689,6 +743,13 @@ class DeviceManager:
             # Runtime target reached: stay paused for the rest of the
             # day — blocks both deadline force-start and excess start.
             if self._runtime_target_reached(dev):
+                dev["excess_since"] = None
+                return False, 0
+
+            # Run condition not met (e.g. boiler already hot): block
+            # both deadline force-start and excess start. A RUNNING
+            # program is never interrupted by the condition.
+            if not self._condition_met(dev):
                 dev["excess_since"] = None
                 return False, 0
 

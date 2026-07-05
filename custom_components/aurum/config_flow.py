@@ -35,6 +35,7 @@ from .const import (
     CONF_PV_ACTUAL_TODAY_ENTITY,
     CONF_WEATHER_ENTITY,
     CONF_BATTERY_CAPACITY_WH,
+    CONF_BATTERY_PRIORITY,
     CONF_TARGET_SOC,
     CONF_MIN_SOC,
     CONF_UPDATE_INTERVAL,
@@ -62,6 +63,11 @@ from .const import (
     CONF_DEV_STOP_AFTER_RUNTIME,
     CONF_DEV_INTERRUPTIBLE,
     CONF_DEV_RESIDUAL_POWER,
+    CONF_DEV_CONDITION_ENTITY,
+    CONF_DEV_CONDITION_OP,
+    CONF_DEV_CONDITION_VALUE,
+    CONDITION_OP_BELOW,
+    CONDITION_OP_ABOVE,
     CONF_DEV_PRICE_MODE,
     CONF_DEV_MAX_PRICE,
     PRICE_MODE_SOLAR_ONLY,
@@ -259,6 +265,10 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
             unit_of_measurement="s",
             mode=selector.NumberSelectorMode.BOX)),
         vol.Optional(
+            CONF_BATTERY_PRIORITY,
+            default=d.get(CONF_BATTERY_PRIORITY, False),
+        ): selector.BooleanSelector(),
+        vol.Optional(
             CONF_NOTIFY_SERVICE,
             description={"suggested_value": d.get(CONF_NOTIFY_SERVICE, "")},
         ): selector.TextSelector(selector.TextSelectorConfig(
@@ -395,6 +405,32 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
         # switch entities (switch.aurum_{slug}_override / _muss_heute).
         # Legacy manual_override_entity / muss_heute_entity configs
         # remain supported as fallback but no longer shown in the UI.
+        # ── Run condition (optional prerequisite) ─────────────
+        # Device may only run while <entity> is below/above <value>,
+        # e.g. water heater only when boiler temp is below 55 °C.
+        vol.Optional(
+            CONF_DEV_CONDITION_ENTITY,
+            default=d.get(CONF_DEV_CONDITION_ENTITY, vol.UNDEFINED),
+        ): _SENSOR,
+        vol.Optional(
+            CONF_DEV_CONDITION_OP,
+            default=d.get(CONF_DEV_CONDITION_OP, CONDITION_OP_BELOW),
+        ): selector.SelectSelector(selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(
+                    value=CONDITION_OP_BELOW, label="condition_op_below"),
+                selector.SelectOptionDict(
+                    value=CONDITION_OP_ABOVE, label="condition_op_above"),
+            ],
+            translation_key="condition_op",
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )),
+        vol.Optional(
+            CONF_DEV_CONDITION_VALUE,
+            default=d.get(CONF_DEV_CONDITION_VALUE, vol.UNDEFINED),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=-100, max=10000, step=0.5,
+            mode=selector.NumberSelectorMode.BOX)),
         # ── Price-aware scheduling ───────────────────────────
         vol.Optional(
             CONF_DEV_PRICE_MODE,

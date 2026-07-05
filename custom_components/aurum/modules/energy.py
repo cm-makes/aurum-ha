@@ -26,6 +26,10 @@ class EnergyManager:
         self.battery_discharge_power_entity = config.get(
             "battery_discharge_power_entity")
 
+        # Battery-priority surplus semantics (see const.CONF_BATTERY_PRIORITY):
+        # True → only genuine grid export counts as device surplus.
+        self.battery_priority = bool(config.get("battery_priority", False))
+
         self.ema_alpha = config.get("ema_alpha", 0.3)
         self.ema_alpha_down = config.get("ema_alpha_down", 0.7)
         self.ema_alpha_up = config.get("ema_alpha_up", 0.2)
@@ -106,12 +110,18 @@ class EnergyManager:
         #   Example: grid=0W, battery charging 3kW → excess = 0 - (-3000) = 3000W
         has_battery_power = (self.battery_charge_power_entity
                              or self.battery_discharge_power_entity)
-        if has_battery_power:
+        if has_battery_power and not self.battery_priority:
+            # Legacy semantics: battery charge/discharge is folded into the
+            # surplus, so devices may divert power away from battery charging
+            # (pv - house). Per-device SOC thresholds are the only guard.
             shared["excess"] = round(
                 -self._grid_ema_asym - battery_power_net, 1)
             shared["excess_raw"] = round(
                 -grid_raw - battery_power_net, 1)
         else:
-            # Fallback: simple grid-only calculation
+            # Grid-only surplus: with battery_priority=True the battery
+            # absorbs PV first and ONLY genuine grid export is offered to
+            # devices (community request, discussion #9). Also the fallback
+            # when no battery power sensors are configured.
             shared["excess"] = round(-self._grid_ema_asym, 1)
             shared["excess_raw"] = round(-grid_raw, 1)
