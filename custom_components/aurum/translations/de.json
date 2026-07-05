@@ -34,13 +34,15 @@
           "battery_capacity_wh": "Batteriegröße",
           "target_soc": "Ladeziel",
           "min_soc": "Batterie-Reserve",
-          "update_interval": "Aktualisierung"
+          "update_interval": "Aktualisierung",
+          "battery_priority": "Batterie-Vorrang"
         },
         "data_description": {
           "battery_capacity_wh": "Wie groß ist deine Batterie? Angabe in Wattstunden. Beispiele: 5.000 Wh = 5 kWh, 10.000 Wh = 10 kWh.",
           "target_soc": "Ab welchem Ladestand dürfen alle Geräte laufen? Standardmäßig 80%. Solange die Batterie darunter liegt, lässt AURUM nur Geräte mit besonderer Freigabe laufen.",
           "min_soc": "Unter welchem Ladestand sollen ALLE Geräte abgeschaltet werden? Schützt deine Batterie vor Tiefentladung. Standard: 10%.",
-          "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden."
+          "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden.",
+          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst. Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
         }
       }
     },
@@ -86,7 +88,8 @@
           "price_entity": "Strompreis-Sensor (optional)",
           "price_level_entity": "Preisstufen-Sensor (optional)",
           "cheap_period_entity": "Sensor für günstige Preisphase (optional)",
-          "cheap_period_starts_in_entity": "Countdown bis zur günstigen Phase (optional)"
+          "cheap_period_starts_in_entity": "Countdown bis zur günstigen Phase (optional)",
+          "battery_priority": "Batterie-Vorrang"
         },
         "data_description": {
           "grid_power_entity": "Dein Netzzähler-Sensor in Watt. Positiv = Strombezug, negativ = Einspeisung.",
@@ -106,7 +109,8 @@
           "price_entity": "Aktueller Strompreis in ct/kWh. Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
           "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
           "cheap_period_entity": "Binärsensor, der während günstiger Preisphasen EIN ist (z.B. tibber_prices Bestpreis-Phase). Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Kann leer bleiben.",
-          "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Kann leer bleiben."
+          "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Kann leer bleiben.",
+          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst. Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
         }
       },
       "add_device": {
@@ -138,7 +142,10 @@
           "debounce_on": "Einschaltverzögerung",
           "debounce_off": "Ausschaltverzögerung",
           "min_on_time": "Mindest-Einschaltzeit",
-          "min_off_time": "Mindest-Ausschaltzeit"
+          "min_off_time": "Mindest-Ausschaltzeit",
+          "condition_entity": "Bedingungs-Sensor (optional)",
+          "condition_op": "Bedingung",
+          "condition_value": "Grenzwert"
         },
         "data_description": {
           "name": "Gib dem Gerät einen eindeutigen Namen, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'. Wird als Sensor-Name in Home Assistant angezeigt.",
@@ -166,7 +173,9 @@
           "debounce_on": "Wie lange der Überschuss ausreichen muss bevor eingeschaltet wird (Sekunden). Verhindert Einschalten bei kurzen Sonnenphasen. Standard: 300s (5 Min).",
           "debounce_off": "Wie lange das Defizit bestehen muss bevor abgeschaltet wird (Sekunden). Lässt das Gerät kurze Wolken überbrücken. Standard: 600s (10 Min).",
           "min_on_time": "Wie lange muss das Gerät mindestens eingeschaltet bleiben (Sekunden)? Schützt Geräte die keine kurzen Zyklen mögen. Standard: 600s (10 Min).",
-          "min_off_time": "Wie lange muss das Gerät mindestens ausgeschaltet bleiben (Sekunden)? Nützlich für Kompressoren, Lüfter mit Nachlauf. Standard: 60s."
+          "min_off_time": "Wie lange muss das Gerät mindestens ausgeschaltet bleiben (Sekunden)? Nützlich für Kompressoren, Lüfter mit Nachlauf. Standard: 60s.",
+          "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
+          "condition_value": "Schwellwert für den Bedingungs-Sensor."
         }
       },
       "edit_device_select": {
@@ -205,7 +214,10 @@
           "debounce_on": "Einschaltverzögerung",
           "debounce_off": "Ausschaltverzögerung",
           "min_on_time": "Mindest-Einschaltzeit",
-          "min_off_time": "Mindest-Ausschaltzeit"
+          "min_off_time": "Mindest-Ausschaltzeit",
+          "condition_entity": "Bedingungs-Sensor (optional)",
+          "condition_op": "Bedingung",
+          "condition_value": "Grenzwert"
         },
         "data_description": {
           "name": "Eindeutiger Gerätename, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'.",
@@ -231,7 +243,9 @@
           "debounce_on": "Wie lange Überschuss ausreichen muss vor dem Einschalten (Sekunden).",
           "debounce_off": "Wie lange Defizit bestehen muss vor dem Abschalten (Sekunden).",
           "min_on_time": "Mindestzeit die das Gerät eingeschaltet bleibt (Sekunden).",
-          "min_off_time": "Mindestzeit die das Gerät ausgeschaltet bleibt (Sekunden)."
+          "min_off_time": "Mindestzeit die das Gerät ausgeschaltet bleibt (Sekunden).",
+          "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
+          "condition_value": "Schwellwert für den Bedingungs-Sensor."
         }
       },
       "remove_device": {
@@ -267,6 +281,12 @@
       "options": {
         "price_mode_solar_only": "Nur Solar – läuft ausschließlich mit PV-Überschuss (Standard)",
         "price_mode_cheap_grid": "Solar + günstiges Netz – läuft auch, wenn der Strom günstig ist, selbst ohne Solar"
+      }
+    },
+    "condition_op": {
+      "options": {
+        "below": "Sensor muss unter dem Grenzwert liegen",
+        "above": "Sensor muss über dem Grenzwert liegen"
       }
     }
   }
