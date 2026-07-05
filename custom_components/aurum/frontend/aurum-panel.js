@@ -48,6 +48,42 @@ const STATE_COLOR = {
   disabled: "var(--error-color, #db4437)",
 };
 
+// UI strings — English default, German when the HA UI language is de.
+// Mirrors the integration's notification localization (en/de parity).
+const STRINGS = {
+  en: {
+    solar: "Solar", grid: "Grid", battery: "Battery", surplus: "Surplus",
+    budget: "Budget", house: "House", forecast: "Left today", cheap: "Cheap grid",
+    cheapActive: "active", devices: "Devices",
+    empty: "No devices configured yet. Add one in the AURUM options " +
+      "(Settings → Integrations → AURUM → Configure) — it will show up " +
+      "here automatically.",
+    modePV: "PV", modeManual: "Manual", modeOff: "Off",
+    modePVTitle: "AURUM controls the device from PV surplus automatically",
+    modeManualTitle: "AURUM pauses — you control the device yourself",
+    modeOffTitle: "Device stays off (force-off)",
+    mussHeute: "Must run today",
+    mussHeuteTitle: "Activate the deadline — the device will finish today",
+    socThreshold: "SOC threshold", maxPrice: "Max price (ct/kWh)",
+    deadline: "Finish by", stateOff: "off",
+  },
+  de: {
+    solar: "Solar", grid: "Netz", battery: "Akku", surplus: "Überschuss",
+    budget: "Budget", house: "Haus", forecast: "Rest heute", cheap: "Günstig",
+    cheapActive: "aktiv", devices: "Geräte",
+    empty: "Noch keine Geräte konfiguriert. Füge in den AURUM-Einstellungen " +
+      "ein Gerät hinzu – es erscheint dann hier automatisch.",
+    modePV: "PV", modeManual: "Manuell", modeOff: "Aus",
+    modePVTitle: "AURUM steuert automatisch nach PV-Überschuss",
+    modeManualTitle: "AURUM pausiert – du steuerst das Gerät selbst",
+    modeOffTitle: "Gerät bleibt aus (Force-Off)",
+    mussHeute: "Muss heute",
+    mussHeuteTitle: "Deadline aktivieren – Gerät läuft heute auf jeden Fall",
+    socThreshold: "SOC-Schwelle", maxPrice: "Max. Preis (ct/kWh)",
+    deadline: "Fertig bis", stateOff: "aus",
+  },
+};
+
 class AurumPanel extends HTMLElement {
   constructor() {
     super();
@@ -79,6 +115,19 @@ class AurumPanel extends HTMLElement {
   }
   _exists(entityId) {
     return !!(this._hass && this._hass.states[entityId]);
+  }
+
+  _lang() {
+    const l =
+      (this._hass &&
+        ((this._hass.locale && this._hass.locale.language) ||
+          this._hass.language)) ||
+      "en";
+    return String(l).toLowerCase().startsWith("de") ? "de" : "en";
+  }
+
+  _t(key) {
+    return (STRINGS[this._lang()] || STRINGS.en)[key] || STRINGS.en[key] || key;
   }
 
   _devices() {
@@ -118,7 +167,8 @@ class AurumPanel extends HTMLElement {
     // but also when a device's name resolves or its optional control
     // entities (muss_heute / sliders / deadline) register later — during
     // HA startup the override switch can appear before the rest.
-    const sig = JSON.stringify(
+    const sig = JSON.stringify([
+      this._lang(), // rebuild with new labels if the UI language changes
       devices.map((d) => [
         d.slug,
         d.name,
@@ -126,8 +176,8 @@ class AurumPanel extends HTMLElement {
         this._exists(d.e.socThreshold),
         this._exists(d.e.maxPrice),
         this._exists(d.e.deadline),
-      ])
-    );
+      ]),
+    ]);
     if (sig !== this._sig) {
       this._sig = sig;
       this._build(devices);
@@ -163,15 +213,13 @@ class AurumPanel extends HTMLElement {
     devWrap.className = "aurum-section";
     const h = document.createElement("div");
     h.className = "aurum-section-title";
-    h.textContent = "Geräte";
+    h.textContent = this._t("devices");
     devWrap.appendChild(h);
 
     if (!devices.length) {
       const empty = document.createElement("div");
       empty.className = "aurum-empty";
-      empty.textContent =
-        "Noch keine Geräte konfiguriert. Füge in den AURUM-" +
-        "Einstellungen ein Gerät hinzu – es erscheint dann hier automatisch.";
+      empty.textContent = this._t("empty");
       devWrap.appendChild(empty);
     } else {
       const grid = document.createElement("div");
@@ -209,11 +257,11 @@ class AurumPanel extends HTMLElement {
       };
     };
 
-    add("pv", "🔆", "Solar", () => {
+    add("pv", "🔆", this._t("solar"), () => {
       const v = parseFloat(this._st(HUB.pv));
       return { text: isNaN(v) ? "–" : `${Math.round(v)} W`, color: "#ffb300" };
     });
-    add("grid", "🔌", "Netz", () => {
+    add("grid", "🔌", this._t("grid"), () => {
       const v = parseFloat(this._st(HUB.grid));
       if (isNaN(v)) return { text: "–" };
       if (v > 50)
@@ -225,34 +273,34 @@ class AurumPanel extends HTMLElement {
         };
       return { text: "≈ 0 W", color: "var(--secondary-text-color,#888)" };
     });
-    add("soc", "🔋", "Akku", () => {
+    add("soc", "🔋", this._t("battery"), () => {
       const v = parseFloat(this._st(HUB.soc));
       if (isNaN(v) || v < 0) return { text: "–", color: "var(--secondary-text-color,#888)" };
       const color = v >= 60 ? "var(--success-color,#43a047)" : v >= 30 ? "#ffb300" : "var(--error-color,#db4437)";
       return { text: `${Math.round(v)} %`, color };
     });
-    add("surplus", "⚡", "Überschuss", () => {
+    add("surplus", "⚡", this._t("surplus"), () => {
       const v = parseFloat(this._st(HUB.surplus));
       if (isNaN(v)) return { text: "–" };
       const color = v > 500 ? "var(--success-color,#43a047)" : v > 100 ? "#ffb300" : "var(--secondary-text-color,#888)";
       return { text: `${Math.round(v)} W`, color };
     });
-    add("budget", "🎯", "Budget", () => {
+    add("budget", "🎯", this._t("budget"), () => {
       const v = parseFloat(this._st(HUB.budget));
       return { text: isNaN(v) ? "∞" : `${Math.round(v)} W` };
     });
-    add("house", "🏠", "Haus", () => {
+    add("house", "🏠", this._t("house"), () => {
       const v = parseFloat(this._st(HUB.house));
       return { text: isNaN(v) ? "–" : `${Math.round(v)} W` };
     });
-    add("forecast", "📈", "Rest heute", () => {
+    add("forecast", "📈", this._t("forecast"), () => {
       const v = parseFloat(this._st(HUB.forecast));
       return { text: isNaN(v) ? "–" : `${v.toFixed(1)} kWh` };
     });
-    add("cheap", "💶", "Günstig", () => {
+    add("cheap", "💶", this._t("cheap"), () => {
       const on = this._st(HUB.cheap) === "on";
       return {
-        text: on ? "aktiv" : "–",
+        text: on ? this._t("cheapActive") : "–",
         color: on ? "#ffb300" : "var(--secondary-text-color,#888)",
       };
     });
@@ -306,15 +354,15 @@ class AurumPanel extends HTMLElement {
       if (!this._exists(entity)) return;
       this._callService("switch", service, { entity_id: entity });
     };
-    const mPV = mkMode("PV", "AURUM steuert automatisch nach PV-Überschuss", () => {
+    const mPV = mkMode(this._t("modePV"), this._t("modePVTitle"), () => {
       svc("turn_off", e.override);
       svc("turn_off", e.disable);
     });
-    const mManual = mkMode("Manuell", "AURUM pausiert – du steuerst das Gerät selbst", () => {
+    const mManual = mkMode(this._t("modeManual"), this._t("modeManualTitle"), () => {
       svc("turn_on", e.override);
       svc("turn_off", e.disable);
     });
-    const mOff = mkMode("Aus", "Gerät bleibt aus (Force-Off)", () => {
+    const mOff = mkMode(this._t("modeOff"), this._t("modeOffTitle"), () => {
       svc("turn_off", e.override);
       svc("turn_on", e.disable);
     });
@@ -326,8 +374,8 @@ class AurumPanel extends HTMLElement {
     if (this._exists(e.mussHeute)) {
       tMuss = document.createElement("button");
       tMuss.className = "aurum-toggle";
-      tMuss.textContent = "Muss heute";
-      tMuss.title = "Deadline aktivieren – Gerät läuft heute auf jeden Fall";
+      tMuss.textContent = this._t("mussHeute");
+      tMuss.title = this._t("mussHeuteTitle");
       tMuss.addEventListener("click", () =>
         this._callService("switch", "toggle", { entity_id: e.mussHeute })
       );
@@ -345,7 +393,7 @@ class AurumPanel extends HTMLElement {
       const row = document.createElement("label");
       row.className = "aurum-input-row";
       const lab = document.createElement("span");
-      lab.textContent = "SOC-Schwelle";
+      lab.textContent = this._t("socThreshold");
       socVal = document.createElement("span");
       socVal.className = "aurum-input-val";
       socInput = document.createElement("input");
@@ -376,7 +424,7 @@ class AurumPanel extends HTMLElement {
       const row = document.createElement("label");
       row.className = "aurum-input-row aurum-input-inline";
       const lab = document.createElement("span");
-      lab.textContent = "Max. Preis (ct/kWh)";
+      lab.textContent = this._t("maxPrice");
       priceInput = document.createElement("input");
       priceInput.type = "number";
       priceInput.min = "0";
@@ -402,7 +450,7 @@ class AurumPanel extends HTMLElement {
       const row = document.createElement("label");
       row.className = "aurum-input-row aurum-input-inline";
       const lab = document.createElement("span");
-      lab.textContent = "Deadline";
+      lab.textContent = this._t("deadline");
       deadlineInput = document.createElement("input");
       deadlineInput.type = "time";
       deadlineInput.className = "aurum-num";
@@ -428,7 +476,7 @@ class AurumPanel extends HTMLElement {
 
       const disabled = this._st(e.disable) === "on";
       if (disabled) {
-        badge.textContent = "aus";
+        badge.textContent = this._t("stateOff");
         badge.style.background = STATE_COLOR.disabled;
       }
 
