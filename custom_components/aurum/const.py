@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.11.0"
+VERSION = "1.12.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -69,6 +69,12 @@ CONF_DEV_INTERRUPTIBLE = "interruptible"
 CONF_DEV_MANUAL_OVERRIDE_ENTITY = "manual_override_entity"
 CONF_DEV_MUSS_HEUTE_ENTITY = "muss_heute_entity"
 CONF_DEV_RESIDUAL_POWER = "residual_power"
+# Per-device daily-reset hour (community request, discussion #11):
+#   0  = midnight (default, existing behaviour)
+#   9  = 09:00 — the runtime/energy counters reset at 09:00 so a cheap_grid
+#        device runs on solar first during the day and only fills any runtime
+#        shortfall from cheap grid overnight before the next reset.
+CONF_DEV_DAY_START_HOUR = "day_start_hour"      # int 0-23
 # Optional per-device run condition (community request, discussion #5):
 # device may only run while <condition_entity> is below/above <value>,
 # e.g. water heater only when sensor.boiler_temp is below 55.

@@ -214,14 +214,18 @@ class AurumCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.warning("Budget error: %s", e)
 
-            # ── Daily reset (midnight) ────────────────────────────
+            # ── Daily reset ───────────────────────────────────────
+            # Per-device reset at each device's configured day_start_hour
+            # (checked every cycle; each device resets at its own boundary).
+            self.devices.daily_reset(shared["now"])
+
+            # Budget learned-state reset stays aligned to the calendar day
+            # (midnight): it is a global, forecast-driven quantity.
             today = shared["now"].timetuple().tm_yday
             if today != self._last_daily_reset:
-                if self._last_daily_reset >= 0:
-                    self.devices.daily_reset()
-                    if self.budget:
-                        self.budget.daily_reset()
-                    _LOGGER.info("AURUM: Daily counters reset")
+                if self._last_daily_reset >= 0 and self.budget:
+                    self.budget.daily_reset()
+                    _LOGGER.info("AURUM: Budget daily reset")
                 self._last_daily_reset = today
 
             # ── Step 2c: Pricing (optional) ───────────────────────

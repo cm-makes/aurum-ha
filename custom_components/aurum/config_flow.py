@@ -61,6 +61,7 @@ from .const import (
     CONF_DEV_DEADLINE,
     CONF_DEV_ESTIMATED_RUNTIME,
     CONF_DEV_STOP_AFTER_RUNTIME,
+    CONF_DEV_DAY_START_HOUR,
     CONF_DEV_INTERRUPTIBLE,
     CONF_DEV_RESIDUAL_POWER,
     CONF_DEV_CONDITION_ENTITY,
@@ -396,6 +397,13 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             CONF_DEV_STOP_AFTER_RUNTIME,
             default=d.get(CONF_DEV_STOP_AFTER_RUNTIME, False),
         ): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_DEV_DAY_START_HOUR,
+            default=d.get(CONF_DEV_DAY_START_HOUR, 0),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=23, step=1,
+            unit_of_measurement="h",
+            mode=selector.NumberSelectorMode.BOX)),
         # ── Behavior ──────────────────────────────────────────
         vol.Optional(
             CONF_DEV_INTERRUPTIBLE,
