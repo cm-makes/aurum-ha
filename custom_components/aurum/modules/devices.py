@@ -155,6 +155,11 @@ class DeviceManager:
             "force_started": False,
             "_scheduling_reason": None,
 
+            # Daily-reset hour for the runtime/energy counters (0-23).
+            # 0 = midnight (default). See const.CONF_DEV_DAY_START_HOUR.
+            "day_start_hour": int(cfg.get("day_start_hour", 0) or 0),
+            "_last_reset": None,   # datetime of this device's last reset
+
             # Startup detection
             "startup_detection": cfg.get("startup_detection", False),
             "sd_state": "",
@@ -1283,18 +1288,47 @@ class DeviceManager:
                 reason,
             ])
 
-    def daily_reset(self):
-        """Reset daily counters (call at midnight)."""
+    def _reset_device_counters(self, dev):
+        """Zero a single device's daily counters."""
+        self.hass.log(
+            f"AURUM daily {dev['name']}: "
+            f"{dev['runtime_today_s'] / 60:.1f} min, "
+            f"{dev['energy_today_wh'] / 1000:.3f} kWh")
+        dev["runtime_today_s"] = 0
+        dev["energy_today_wh"] = 0.0
+        dev["total_switches"] = 0
+        dev["_switch_times"] = []
+        dev["_scheduling_reason"] = None
+        # Force-started immunity must not survive the daily reset; a device
+        # that was deadline-forced yesterday should be sheddable again today.
+        dev["force_started"] = False
+
+    def daily_reset(self, now=None):
+        """Reset per-device daily counters at each device's day-start hour.
+
+        Call every cycle with ``now``. Each device resets only when the
+        current time crosses its own ``day_start_hour`` boundary (default
+        0 = midnight). On the first call after startup the boundary is just
+        recorded (no reset), matching the previous midnight behaviour.
+
+        ``now=None`` resets every device unconditionally (used by tests and
+        simulations that drive the reset explicitly).
+        """
+        if now is None:
+            for dev in self.devices:
+                self._reset_device_counters(dev)
+            return
+
         for dev in self.devices:
-            self.hass.log(
-                f"AURUM daily {dev['name']}: "
-                f"{dev['runtime_today_s'] / 60:.1f} min, "
-                f"{dev['energy_today_wh'] / 1000:.3f} kWh")
-            dev["runtime_today_s"] = 0
-            dev["energy_today_wh"] = 0.0
-            dev["total_switches"] = 0
-            dev["_switch_times"] = []
-            dev["_scheduling_reason"] = None
-            # Force-started immunity must not survive midnight; a device that
-            # was deadline-forced yesterday should be sheddable again today.
-            dev["force_started"] = False
+            hour = dev.get("day_start_hour", 0) or 0
+            cycle_start = now.replace(
+                hour=int(hour), minute=0, second=0, microsecond=0)
+            if cycle_start > now:
+                cycle_start -= timedelta(days=1)
+            last = dev.get("_last_reset")
+            if last is None:
+                dev["_last_reset"] = cycle_start
+                continue
+            if cycle_start > last:
+                self._reset_device_counters(dev)
+                dev["_last_reset"] = cycle_start

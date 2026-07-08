@@ -145,7 +145,8 @@
           "min_off_time": "Minimum OFF time",
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
-          "condition_value": "Condition limit"
+          "condition_value": "Condition limit",
+          "day_start_hour": "Daily reset hour"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'. This name will appear as a sensor in Home Assistant.",
@@ -175,7 +176,8 @@
           "min_on_time": "Once turned on, how long must the device stay on (seconds)? Protects devices that don't like short cycles. Default: 600s (10 min).",
           "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s.",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
-          "condition_value": "Threshold for the run condition sensor."
+          "condition_value": "Threshold for the run condition sensor.",
+          "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
         }
       },
       "edit_device_select": {
@@ -217,7 +219,8 @@
           "min_off_time": "Minimum OFF time",
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
-          "condition_value": "Condition limit"
+          "condition_value": "Condition limit",
+          "day_start_hour": "Daily reset hour"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'.",
@@ -245,7 +248,8 @@
           "min_on_time": "Minimum time the device stays on once started (seconds).",
           "min_off_time": "Minimum time the device stays off after being turned off (seconds).",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
-          "condition_value": "Threshold for the run condition sensor."
+          "condition_value": "Threshold for the run condition sensor.",
+          "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
         }
       },
       "remove_device": {
