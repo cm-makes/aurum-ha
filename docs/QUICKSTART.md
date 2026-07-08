@@ -172,23 +172,25 @@ Pro Gerät:
 
 ## Schritt 7 – Dashboard nutzen
 
-Nach dem Neustart sollte in der Seitenleiste **„AURUM"** erscheinen
-(mit dem Overlay aus `quickstart.sh`).
+Nach dem Neustart erscheint **„AURUM"** (☀️) automatisch in der Seitenleiste –
+das Dashboard ist in die Integration eingebaut, es muss nichts installiert oder
+kopiert werden. Es passt sich live an deine Geräte an (Gerät hinzufügen → Karte
+erscheint) und folgt deinem HA-Theme (Deutsch bei deutscher HA-Oberfläche).
 
-Alternativ manuell:
-1. Einstellungen → Dashboards → „Dashboard hinzufügen".
-2. Titel „AURUM", Icon `mdi:solar-power-variant`.
-3. In das neue Dashboard den Inhalt aus
-   [`image_overlay/config/dashboards/aurum.yaml`](https://github.com/cm-makes/aurum-ha/blob/main/image_overlay/config/dashboards/aurum.yaml)
-   kopieren (⋮ → „Roher Konfigurations-Editor").
+> Der Eintrag ist alphabetisch einsortiert – bei langer Seitenleiste ggf. nach
+> unten scrollen oder über *Profil → Seitenleiste bearbeiten* nach oben ziehen.
 
 ---
 
 ## Häufige Probleme
 
-**Problem:** „Dashboard zeigt nur `unknown` Werte"
+**Problem:** „Dashboard zeigt nur `–` / `unknown` Werte"
 → Du hast die AURUM-Integration noch nicht konfiguriert (Schritt 5). Das Dashboard
   basiert auf `sensor.aurum_*` Entitäten, die erst nach der Integration existieren.
+
+**Problem:** „Kein AURUM in der Seitenleiste"
+→ Browser einmal neu laden (Strg+F5) – Panels werden nur beim Laden eingelesen.
+  Bei vielen Einträgen nach unten scrollen (alphabetisch einsortiert).
 
 **Problem:** „Keine Geräte im Dropdown"
 → Die Smart-Plug-Integration wurde noch nicht eingerichtet (Schritt 3c). Erst diese
@@ -197,9 +199,6 @@ Alternativ manuell:
 **Problem:** „PV zeigt 0 W obwohl Sonne scheint"
 → Vorzeichen-Konvention prüfen. AURUM erwartet: PV-Leistung **positiv**, Netz **positiv = Bezug**.
   Bei manchen Invertern ist das gedreht – im HA-Entity-Inspektor schauen.
-
-**Problem:** „Mushroom-Karten werden nicht angezeigt"
-→ HACS → Frontend → Mushroom installieren + HA einmal neu laden (Strg+F5).
 
 ---
 

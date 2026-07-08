@@ -5,9 +5,8 @@
 #  Run inside Home Assistant OS via the "Advanced SSH & Web Terminal"
 #  add-on. Installs:
 #   - HACS (official installer)
-#   - AURUM integration (from GitHub release)
-#   - Mushroom Cards, button-card, auto-entities (HACS frontend deps)
-#   - AURUM overlay: configuration.yaml snippets, theme, dashboard
+#   - AURUM integration (from GitHub release; ships its own dashboard panel)
+#   - AURUM overlay: configuration.yaml snippets + theme
 #
 #  Safe to re-run: checks before overwriting.
 #
@@ -75,25 +74,11 @@ else
   install_gh_zip_to "cm-makes/aurum-ha" "$CUSTOM_COMPONENTS/aurum" "custom_components/aurum"
 fi
 
-# ── 3. Frontend deps (Mushroom, button-card, auto-entities) ─
-install_lovelace_plugin() {
-  # $1 = github owner/repo, $2 = js filename within archive dist
-  local repo="$1" jsname="$2" plugin_name
-  plugin_name=$(basename "$repo")
-  local target="$WWW_COMMUNITY/$plugin_name"
-  if [ -d "$target" ]; then
-    log "Frontend plugin $plugin_name already present → skipping"
-    return
-  fi
-  log "Installing frontend plugin $plugin_name..."
-  install_gh_zip_to "$repo" "$target" ""
-}
+# ── 3. Dashboard ────────────────────────────────────────────
+# AURUM ships a built-in sidebar panel, so no Lovelace frontend cards
+# (Mushroom / button-card / auto-entities) need to be installed anymore.
 
-install_lovelace_plugin "piitaya/lovelace-mushroom"   "mushroom.js"
-install_lovelace_plugin "custom-cards/button-card"    "button-card.js"
-install_lovelace_plugin "thomasloven/lovelace-auto-entities" "auto-entities.js"
-
-# ── 4. Overlay: configuration.yaml snippets + theme + dashboard ──
+# ── 4. Overlay: configuration.yaml snippets + theme ──
 overlay_fetch() {
   local rel_path="$1"
   local target="$CONFIG_DIR/$rel_path"
@@ -109,7 +94,6 @@ overlay_fetch() {
 log "Deploying AURUM overlay files..."
 overlay_fetch "themes/aurum-dark.yaml"
 overlay_fetch "packages/aurum_defaults.yaml"
-overlay_fetch "dashboards/aurum.yaml"
 
 # ── configuration.yaml merge (manual step if file exists) ──
 if [ -s "$CONFIG_DIR/configuration.yaml" ] && grep -q "default_config:" "$CONFIG_DIR/configuration.yaml"; then
