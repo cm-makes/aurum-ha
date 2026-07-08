@@ -3,8 +3,11 @@
 # ══════════════════════════════════════════════════════════════
 #  This file is intended for fresh HA installations bootstrapped via
 #  `tools/quickstart.sh`. Safe to merge manually with an existing
-#  configuration.yaml: just copy the `frontend:`, `homeassistant:`
-#  (themes:), and `lovelace:` blocks if you already have other content.
+#  configuration.yaml: just copy the `frontend:` and `homeassistant:`
+#  (themes:) blocks if you already have other content.
+#
+#  The AURUM dashboard is provided by the integration itself as a built-in
+#  sidebar panel — no lovelace dashboard needs to be configured here.
 #
 #  Reference: https://www.home-assistant.io/docs/configuration/
 # ══════════════════════════════════════════════════════════════
@@ -20,16 +23,8 @@ homeassistant:
 frontend:
   themes: !include_dir_merge_named themes
 
-# ── Extra dashboards (in addition to the auto-generated one) ──
-lovelace:
-  mode: storage
-  dashboards:
-    aurum-dashboard:
-      mode: yaml
-      title: AURUM
-      icon: mdi:solar-power-variant
-      show_in_sidebar: true
-      filename: dashboards/aurum.yaml
+# The AURUM sidebar dashboard is registered automatically by the integration
+# (a built-in custom panel) — no `lovelace:` dashboard entry is required.
 
 # ── Optional: sensible logging defaults ──
 logger:

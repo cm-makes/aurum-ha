@@ -67,6 +67,7 @@ class MockHass:
         self.logs = []
         self.actions = []          # list of (action, entity_id)
         self.services = []         # list of (service, kwargs)
+        self.config_path = "."     # used by PersistenceManager
 
     def get_state(self, entity_id, default=None):
         return self.states.get(entity_id, default)

@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,30 +99,54 @@ class PersistenceManager:
             _LOGGER.warning("State file corrupt, starting fresh: %s", e)
             return
 
-        # Check if state file is from today — if not, reset daily counters
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        saved_date = state.get("_meta", {}).get("saved_date")
-        is_today = (saved_date == today_str)
-        if not is_today:
-            _LOGGER.info(
-                "AURUM: State file is from %s (today: %s) — "
-                "resetting daily counters",
-                saved_date or "unknown", today_str)
+        # Per-device daily-cycle rollover check. Each device's "day" ends at
+        # its own day_start_hour (default 0 = midnight), so we compare the
+        # save timestamp against that device's current cycle boundary rather
+        # than a single global calendar day — otherwise a restart in the
+        # pre-boundary window (e.g. 03:00 for a 09:00 device) would wrongly
+        # zero runtime that still belongs to the ongoing cycle.
+        saved_at_str = state.get("_meta", {}).get("saved_at")
+        saved_at = None
+        if saved_at_str:
+            try:
+                saved_at = datetime.fromisoformat(saved_at_str)
+            except (ValueError, TypeError):
+                saved_at = None
+        now = datetime.now()
+
+        def _cycle_start(dev):
+            hour = int(dev.get("day_start_hour", 0) or 0)
+            cs = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if cs > now:
+                cs -= timedelta(days=1)
+            return cs
 
         for dev in devices.devices:
             name = dev["name"]
+            # Anchor the reset boundary so coordinator.daily_reset(now) won't
+            # immediately re-reset right after a restart.
+            cycle_start = _cycle_start(dev)
+            dev["_last_reset"] = cycle_start
+
             if name not in state:
                 continue
 
             saved = state[name]
 
+            # This device's cycle rolled over iff the save predates its
+            # current boundary (day_start_hour aware).
+            rolled_over = (saved_at is None) or (saved_at < cycle_start)
+            if rolled_over:
+                _LOGGER.info(
+                    "AURUM: %s daily cycle rolled over since save (%s) — "
+                    "resetting counters", name, saved_at_str or "unknown")
+
             # Restore simple value fields
             for field in _VALUE_FIELDS:
                 if field in saved:
-                    # Reset daily counters if state is from a previous day
-                    if not is_today and field in ("runtime_today_s",
-                                                   "energy_today_wh",
-                                                   "total_switches"):
+                    if rolled_over and field in ("runtime_today_s",
+                                                 "energy_today_wh",
+                                                 "total_switches"):
                         dev[field] = 0
                     else:
                         dev[field] = saved[field]

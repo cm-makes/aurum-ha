@@ -40,8 +40,12 @@
 
 | Feature | Description |
 |---|---|
+| **Built-in Dashboard** | A self-adapting **AURUM** sidebar panel ships with the integration — no YAML, no extra cards. Add or remove a device and it updates automatically |
 | **PV Surplus Steering** | Turns devices on/off based on available excess power |
+| **Battery Priority** | Optional: only genuine grid export counts as surplus, so the battery charges first |
 | **Battery-Aware** | Respects battery SOC with configurable target and minimum thresholds |
+| **Run Conditions** | Optional per-device prerequisite (a sensor below/above a limit — e.g. water heater only while the tank is below 55 °C) |
+| **Daily Reset Hour** | Per-device reset hour for runtime counters — align a cheap-grid device to the solar day |
 | **Priority-Based** | Higher priority devices get power first |
 | **Startup Detection** | Detects washing machine / dishwasher program start, pauses until PV surplus is available, resumes automatically |
 | **PV Forecast Budget** | Uses Solcast or Open-Meteo forecast to limit device runtime so the battery reliably reaches target SOC |
@@ -112,6 +116,13 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
 | **Deadline** | Time by which the device must have run (e.g. `18:00`) |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
+| **Run condition sensor** | Optional prerequisite: a sensor that must be **below** / **above** a limit for the device to run (e.g. water heater only while `sensor.boiler_temp` is below `55`). Blocks all start paths; an unavailable sensor fails open. |
+| **Daily reset hour** | Hour (0–23) when this device's runtime counter resets. `0` = midnight (default). Set to `9` so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight. |
+
+> **Battery priority** (in *Configure → Energy & Battery*) is a global toggle:
+> when enabled, only genuine grid **export** counts as surplus for devices, so
+> the battery charges first. Off (default) keeps the previous behaviour where
+> battery-charging power may be diverted to devices.
 
 <p align="center">
   <img src="docs/device-config.png" alt="AURUM Device Configuration" width="400">
@@ -256,15 +267,25 @@ Every 15 seconds:
 
 ---
 
-## Example Dashboard
+## Dashboard
 
-A ready-to-use Mushroom-based dashboard is included:
+AURUM ships with its own **dashboard panel** — nothing to install or configure.
+After setup, an **AURUM** entry (☀️) appears in the Home Assistant sidebar. It
+renders live from AURUM's own entities and adapts automatically: add or remove a
+device in the options and its card appears or disappears.
 
-**[example_dashboard.yaml](example_dashboard.yaml)**
+It shows overview chips (PV, grid import/export, battery SOC, surplus, budget,
+house consumption, remaining forecast, cheap-grid flag) and one card per device
+with a **PV | Manual | Off** mode selector, a *Must-run-today* toggle, and the
+SOC-threshold, max-price and deadline controls. It follows your HA theme and is
+localized (English by default, German when the HA UI is set to German).
 
-Copy the contents into **Settings > Dashboards > Raw configuration editor**.
+> The sidebar entry is sorted alphabetically — if your sidebar is long, scroll
+> down or pin it to the top via *Profile → Edit sidebar*.
 
-> Requires [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) (installable via HACS)
+**Optional (legacy):** a manual Mushroom-based dashboard is still available as
+**[example_dashboard.yaml](example_dashboard.yaml)** for users who prefer a
+Lovelace dashboard (requires [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) via HACS).
 
 ---
 
@@ -283,9 +304,12 @@ The file contains: energy values, battery state, budget info, device states, ove
 - [x] Price-aware scheduling (Tibber, Nordpool, aWATTar, EPEX Spot)
 - [x] Per-device energy tracking (kWh/day)
 - [x] Push notifications (mobile app)
+- [x] Built-in dashboard panel (auto-adapting AURUM sidebar view)
+- [x] Battery-priority surplus mode
+- [x] Per-device run conditions (sensor prerequisite)
+- [x] Per-device daily reset hour
 - [ ] Cost tracking (import/export/autarky per device)
 - [ ] Multi-battery support
-- [ ] Lovelace custom card for AURUM device overview
 
 ---
 

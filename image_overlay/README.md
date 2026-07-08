@@ -11,7 +11,9 @@ Used by `tools/quickstart.sh` and (later) the full SD card image builder.
 | `config/configuration.yaml` | Enables `default_config`, packages folder, custom theme |
 | `config/themes/aurum-dark.yaml` | Dark theme, gold/amber accents |
 | `config/packages/aurum_defaults.yaml` | Sensible defaults (timer helpers, device presets) |
-| `config/dashboards/aurum.yaml` | Pre-built lovelace dashboard using only `sensor.aurum_*` entities |
+
+> The AURUM dashboard is a **built-in sidebar panel** provided by the integration
+> itself — no lovelace dashboard file is bundled or configured here anymore.
 
 ## Design Principles
 
@@ -25,4 +27,5 @@ Used by `tools/quickstart.sh` and (later) the full SD card image builder.
 ## Usage
 
 The `tools/quickstart.sh` installer copies these files into `/config/` after
-installing HACS, AURUM, Mushroom Cards, and button-card.
+installing HACS and AURUM. The dashboard ships with the integration as a
+built-in sidebar panel, so no extra Lovelace cards are required.
