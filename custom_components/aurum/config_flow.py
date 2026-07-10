@@ -71,6 +71,7 @@ from .const import (
     CONDITION_OP_ABOVE,
     CONF_DEV_PRICE_MODE,
     CONF_DEV_MAX_PRICE,
+    CONF_DEV_PV_POWER_THRESHOLD,
     PRICE_MODE_SOLAR_ONLY,
     PRICE_MODE_CHEAP_GRID,
     CONF_DEV_SD_POWER_THRESHOLD,
@@ -467,6 +468,15 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             default=d.get(CONF_DEV_RESIDUAL_POWER, DEFAULT_DEV_RESIDUAL_POWER),
         ): selector.NumberSelector(selector.NumberSelectorConfig(
             min=0, max=1000, step=10,
+            unit_of_measurement="W",
+            mode=selector.NumberSelectorMode.BOX)),
+        # ── PV-power gate: raw PV >= threshold + SOC ok → run on solar ──
+        # 0 = disabled. Bypasses the daily budget cap.
+        vol.Optional(
+            CONF_DEV_PV_POWER_THRESHOLD,
+            default=d.get(CONF_DEV_PV_POWER_THRESHOLD, 0),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=10000, step=50,
             unit_of_measurement="W",
             mode=selector.NumberSelectorMode.BOX)),
         # ── Timing (advanced) ────────────────────────────────

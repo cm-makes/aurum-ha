@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-10
+
+### Added
+- **Per-device raw-PV run gate (`pv_power_threshold`)** – New optional per-device setting: run the device whenever *actual* PV generation is at or above the threshold (W) **and** battery SOC is at or above the device `soc_threshold`, independent of the computed surplus and the daily budget. Unlike the surplus/budget logic (which can reserve all solar for battery charging), this starts e.g. a pool pump on a sunny morning whenever `PV ≥ 1000 W and battery ≥ 25 %`. Debounced on both edges; turns off when PV falls a hysteresis band below the threshold or SOC drops. Exposed three ways: the device options form, a live `number.aurum_{slug}_pv_power_threshold` entity (durable via RestoreNumber), and a "Solar power ≥ (W)" control on the dashboard panel. Reason surfaces as `solar_pv`. EN/DE strings added. Unit-tested via the simulation harness. Set to 0 to disable (default).
+
 ### Fixed
 - **Manual override ignored during the battery-charging emergency** – When the battery entered charging mode (SOC at `min_soc`), `DeviceManager.update()` force-off *every* running device without checking the per-device manual-override switch (`switch.aurum_{slug}_override`), violating its documented "AURUM will not touch the device in any cycle" contract. An externally-driven cycle — e.g. an anti-legionella water-heater boost held above its run-condition threshold — could be aborted mid-run when SOC dipped to `min_soc`. The emergency loop now skips overridden devices (anchoring `on_since` for min-on-time coherence), exactly as the normal control path does. Regression-tested via the simulation harness.
 

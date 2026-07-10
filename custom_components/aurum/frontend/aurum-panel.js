@@ -34,6 +34,7 @@ const DEV = (slug) => ({
   disable: `switch.aurum_${slug}_disable`,
   socThreshold: `number.aurum_${slug}_soc_threshold`,
   maxPrice: `number.aurum_${slug}_max_price`,
+  pvThreshold: `number.aurum_${slug}_pv_power_threshold`,
   deadline: `time.aurum_${slug}_deadline`,
 });
 
@@ -65,6 +66,7 @@ const STRINGS = {
     mussHeute: "Must run today",
     mussHeuteTitle: "Activate the deadline — the device will finish today",
     socThreshold: "SOC threshold", maxPrice: "Max price (ct/kWh)",
+    pvThreshold: "Solar power ≥ (W)",
     deadline: "Finish by", stateOff: "off",
   },
   de: {
@@ -80,6 +82,7 @@ const STRINGS = {
     mussHeute: "Muss heute",
     mussHeuteTitle: "Deadline aktivieren – Gerät läuft heute auf jeden Fall",
     socThreshold: "SOC-Schwelle", maxPrice: "Max. Preis (ct/kWh)",
+    pvThreshold: "Solarleistung ≥ (W)",
     deadline: "Fertig bis", stateOff: "aus",
   },
 };
@@ -175,6 +178,7 @@ class AurumPanel extends HTMLElement {
         this._exists(d.e.mussHeute),
         this._exists(d.e.socThreshold),
         this._exists(d.e.maxPrice),
+        this._exists(d.e.pvThreshold),
         this._exists(d.e.deadline),
       ]),
     ]);
@@ -445,6 +449,31 @@ class AurumPanel extends HTMLElement {
       inputs.appendChild(row);
     }
 
+    let pvInput = null;
+    if (this._exists(e.pvThreshold)) {
+      const row = document.createElement("label");
+      row.className = "aurum-input-row aurum-input-inline";
+      const lab = document.createElement("span");
+      lab.textContent = this._t("pvThreshold");
+      pvInput = document.createElement("input");
+      pvInput.type = "number";
+      pvInput.min = "0";
+      pvInput.max = "10000";
+      pvInput.step = "50";
+      pvInput.className = "aurum-num";
+      pvInput.addEventListener("change", () => {
+        if (pvInput.value === "") return;
+        const v = Math.min(10000, Math.max(0, Number(pvInput.value)));
+        this._callService("number", "set_value", {
+          entity_id: e.pvThreshold,
+          value: v,
+        });
+      });
+      row.appendChild(lab);
+      row.appendChild(pvInput);
+      inputs.appendChild(row);
+    }
+
     let deadlineInput = null;
     if (this._exists(e.deadline)) {
       const row = document.createElement("label");
@@ -521,6 +550,10 @@ class AurumPanel extends HTMLElement {
       if (priceInput && !priceInput.matches(":focus")) {
         const v = this._st(e.maxPrice);
         if (v != null && !isNaN(parseFloat(v))) priceInput.value = String(parseFloat(v));
+      }
+      if (pvInput && !pvInput.matches(":focus")) {
+        const v = this._st(e.pvThreshold);
+        if (v != null && !isNaN(parseFloat(v))) pvInput.value = String(Math.round(parseFloat(v)));
       }
       if (deadlineInput && !deadlineInput.matches(":focus")) {
         const v = this._st(e.deadline); // "HH:MM:SS" or unknown

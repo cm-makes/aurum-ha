@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.12.2"
+VERSION = "1.13.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -87,6 +87,12 @@ CONDITION_OP_ABOVE = "above"
 # ── Device config keys: Price-aware scheduling ──────────────────
 CONF_DEV_PRICE_MODE = "price_mode"
 CONF_DEV_MAX_PRICE = "max_price"
+
+# ── Device config keys: PV-power gate ───────────────────────────
+# Raw-PV turn-on: run the device whenever actual PV generation is at
+# or above this many watts AND battery SOC >= the device soc_threshold,
+# independent of computed surplus/budget. 0 = disabled.
+CONF_DEV_PV_POWER_THRESHOLD = "pv_power_threshold"
 
 # ── Price modes ─────────────────────────────────────────────────
 PRICE_MODE_SOLAR_ONLY = "solar_only"
