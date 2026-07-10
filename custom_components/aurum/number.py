@@ -38,6 +38,8 @@ async def async_setup_entry(
     for dev_state in coordinator.device_states:
         entities.append(
             AurumDeviceSOCThreshold(coordinator, entry, dev_state))
+        entities.append(
+            AurumDevicePVPowerThreshold(coordinator, entry, dev_state))
         # Max Price only applies to cheap_grid devices (is_price_ok ignores
         # it for solar_only). Create it only for those, matching the class
         # docstring and avoiding a functionless entity on solar_only devices.
@@ -152,6 +154,48 @@ class AurumDeviceSOCThreshold(_AurumRestoreNumber):
                 dev["soc_threshold"] = int(value)
                 break
         self._attr_native_value = int(value)
+
+
+class AurumDevicePVPowerThreshold(_AurumRestoreNumber):
+    """Number entity: per-device raw-PV turn-on threshold (W).
+
+    When > 0 the device runs whenever actual PV generation >= this value
+    AND battery SOC >= the device SOC threshold, bypassing the daily
+    budget. 0 disables the gate (normal surplus/price logic only).
+
+    Value persists via RestoreNumber independent of the config entry, so
+    dashboard changes are durable across restart/reload.
+    """
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 10000
+    _attr_native_step = 50
+    _attr_native_unit_of_measurement = "W"
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:solar-power-variant"
+
+    def __init__(self, coordinator, entry, dev_state):
+        super().__init__(coordinator)
+        slug = dev_state["slug"]
+        self._dev_name = dev_state["name"]
+        self._attr_unique_id = f"{entry.entry_id}_{slug}_pv_power_threshold"
+        self._attr_name = f"AURUM {self._dev_name} PV Power Threshold"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic id from AURUM's slug (umlaut-safe id contract)
+        self.entity_id = f"number.aurum_{slug}_pv_power_threshold"
+
+        # Get initial value from device config
+        for dev in coordinator.devices.devices:
+            if dev["name"] == self._dev_name:
+                self._attr_native_value = dev.get("pv_power_threshold", 0)
+                break
+
+    def _apply(self, value) -> None:
+        for dev in self.coordinator.devices.devices:
+            if dev["name"] == self._dev_name:
+                dev["pv_power_threshold"] = round(value)
+                break
+        self._attr_native_value = round(value)
 
 
 class AurumDeviceMaxPrice(_AurumRestoreNumber):

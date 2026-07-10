@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-device raw-PV run gate (`pv_power_threshold`)** – New optional per-device setting: run the device whenever *actual* PV generation is at or above the threshold (W) **and** battery SOC is at or above the device `soc_threshold`, independent of the computed surplus and the daily budget. Unlike the surplus/budget logic (which can reserve all solar for battery charging), this starts e.g. a pool pump on a sunny morning whenever `PV ≥ 1000 W and battery ≥ 25 %`. Debounced on both edges; turns off when PV falls a hysteresis band below the threshold or SOC drops. Exposed three ways: the device options form, a live `number.aurum_{slug}_pv_power_threshold` entity (durable via RestoreNumber), and a "Solar power ≥ (W)" control on the dashboard panel. Reason surfaces as `solar_pv`. EN/DE strings added. Unit-tested via the simulation harness. Set to 0 to disable (default).
+
 ## [1.9.0] - 2026-06-26
 
 ### Added

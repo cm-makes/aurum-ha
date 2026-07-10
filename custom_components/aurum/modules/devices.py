@@ -148,6 +148,10 @@ class DeviceManager:
             "price_mode": cfg.get("price_mode", "solar_only"),
             "max_price": cfg.get("max_price", 0),
 
+            # PV-power gate: raw PV >= threshold + SOC ok → run on solar,
+            # bypassing the budget cap. 0 = disabled (backward compatible).
+            "pv_power_threshold": cfg.get("pv_power_threshold", 0),
+
             # Deadline scheduling
             "deadline": cfg.get("deadline"),           # "HH:MM" or None
             "estimated_runtime": cfg.get("estimated_runtime", 0),  # minutes
@@ -192,6 +196,7 @@ class DeviceManager:
             "excess_since": None,          # When excess first became sufficient
             "_excess_deficit_since": None,  # Deficit tolerance timer
             "_soc_grid_deficit_since": None,  # SOC grid deficit timer
+            "_pv_gate_low_since": None,     # PV-gate release tolerance timer
             "_switch_times": [],            # Recent switch timestamps
             "_pending_off": None,           # Deferred turn-off reason
             "_cached_on": False,            # Cached is_on state for shedding
@@ -211,6 +216,11 @@ class DeviceManager:
         excess_raw = shared.get("excess_raw_for_devices", 0)  # RAW (turn-off)
         battery_soc = shared.get("battery_soc", -1)
         battery_mode = shared.get("battery_mode", MODE_NORMAL)
+
+        # Raw PV generation (W) for the pv_power_threshold gate. Stashed on
+        # self so _should_turn_on / _should_turn_off can read it without
+        # threading it through every call site.
+        self._pv_power_now = shared.get("pv_power", 0)
 
         # Grid-only excess: how much PV is being exported to grid right now.
         # Used as fallback when battery SOC is below device threshold —
@@ -390,9 +400,14 @@ class DeviceManager:
                 # apply in that case.
                 in_grid_only_mode = (
                     battery_soc >= 0 and battery_soc < soc_threshold)
+                # PV gate runs on genuine solar by explicit user intent —
+                # exempt it from the budget cap (which reserves solar for
+                # battery charging), same as the grid-only case.
+                pv_gate = self._pv_gate_ok(dev, battery_soc, soc_threshold)
                 budget_cap = (
                     device_budget_w is not None
                     and not in_grid_only_mode
+                    and not pv_gate
                     and newly_allocated + dev["nominal_power"] > device_budget_w
                 )
                 if budget_cap:
@@ -516,6 +531,23 @@ class DeviceManager:
             return False
         return dev["runtime_today_s"] >= target_min * 60
 
+    def _pv_gate_ok(self, dev, battery_soc, soc_threshold):
+        """True when the raw-PV gate is satisfied for this device.
+
+        Enabled per device via pv_power_threshold > 0. Grants a run when
+        actual PV generation is at/above the threshold AND the battery is
+        at/above the device soc_threshold. Independent of computed surplus
+        and the daily budget, so a device can run on a sunny day even when
+        house load eats the surplus and AURUM would otherwise reserve solar
+        for battery charging. SOC unknown (<0) fails safe → gate closed.
+        """
+        threshold = dev.get("pv_power_threshold") or 0
+        if threshold <= 0:
+            return False
+        if battery_soc < 0 or battery_soc < soc_threshold:
+            return False
+        return self._pv_power_now >= threshold
+
     def _should_turn_on(self, dev, available_excess, available_grid_excess,
                         battery_soc, soc_threshold, now):
         """Check if device should be turned on. Returns True/False."""
@@ -548,6 +580,21 @@ class DeviceManager:
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is True):
             dev["_scheduling_reason"] = "cheap_grid"
+            return True
+
+        # ── PV-power gate: raw solar above threshold + healthy SOC ──
+        # Runs on actual PV generation regardless of computed surplus, so a
+        # sunny day starts the device even when house load hides the surplus.
+        # Still debounced (like the surplus path) to ride out passing clouds.
+        if self._pv_gate_ok(dev, battery_soc, soc_threshold):
+            penalty = self._get_switch_penalty(dev, now)
+            if dev["excess_since"] is None:
+                dev["excess_since"] = now
+                return False
+            elapsed = (now - dev["excess_since"]).total_seconds()
+            if elapsed < dev["debounce_on"] * penalty:
+                return False
+            dev["_scheduling_reason"] = "solar_pv"
             return True
 
         # Enough excess? (nominal + hysteresis_on + residual_power)
@@ -595,6 +642,28 @@ class DeviceManager:
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is False):
             return "price_no_longer_cheap"
+
+        # ── PV-power gate release: solar dropped or SOC fell ──
+        # Mirror of the pv_power_threshold turn-on. Hold while PV stays
+        # within hysteresis_off of the on-threshold and SOC is healthy;
+        # otherwise stop once the shortfall persists for debounce_off.
+        # Takes precedence over the generic SOC/excess-deficit blocks below
+        # so a gated device stops on falling sun even while surplus remains.
+        if dev.get("_scheduling_reason") == "solar_pv":
+            threshold = dev.get("pv_power_threshold") or 0
+            off_level = max(0, threshold - dev["hysteresis_off"])
+            soc_ok = battery_soc < 0 or battery_soc >= soc_threshold
+            if self._pv_power_now >= off_level and soc_ok:
+                dev["_pv_gate_low_since"] = None
+                return None
+            if dev["_pv_gate_low_since"] is None:
+                dev["_pv_gate_low_since"] = now
+                return None
+            elapsed = (now - dev["_pv_gate_low_since"]).total_seconds()
+            if elapsed < dev["debounce_off"]:
+                return None
+            dev["_pv_gate_low_since"] = None
+            return "pv_below_threshold"
 
         # SOC below threshold: turn off if deficit persists
         # Uses per-device debounce_off as tolerance (same semantics).
