@@ -15,6 +15,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Manual override ignored during the battery-charging emergency** – When the battery entered charging mode (SOC at `min_soc`), `DeviceManager.update()` force-off *every* running device without checking the per-device manual-override switch (`switch.aurum_{slug}_override`), violating its documented "AURUM will not touch the device in any cycle" contract. An externally-driven cycle — e.g. an anti-legionella water-heater boost held above its run-condition threshold — could be aborted mid-run when SOC dipped to `min_soc`. The emergency loop now skips overridden devices (anchoring `on_since` for min-on-time coherence), exactly as the normal control path does. Regression-tested via the simulation harness.
 
+## [1.12.1] - 2026-07-08
+
+### Fixed
+- **`day_start_hour` restart persistence** – restore now decides the daily-counter rollover per device against each device's own reset boundary (using the saved timestamp) instead of a single global calendar day, so a restart in a `day_start_hour > 0` device's pre-boundary window no longer wrongly zeroes runtime that still belongs to the ongoing cycle. Default (midnight) behaviour is unchanged.
+
+### Changed
+- Documentation synced to the shipping feature set: README and QUICKSTART now describe the built-in dashboard panel, battery priority, run conditions and the daily reset hour. Removed the stale manual dashboard from the Plug & Play overlay (superseded by the built-in panel); the optional legacy `example_dashboard.yaml` remains.
+
+## [1.12.0] - 2026-07-08
+
+### Added
+- **Per-device daily reset hour (`day_start_hour`, 0–23, default 0)** (discussion #11) – the runtime/energy counters reset at the configured hour instead of midnight, so a cheap-grid device with a runtime target runs on solar first during the day and only tops up from cheap grid overnight. Different devices can have different reset hours; default 0 preserves existing behaviour.
+
+## [1.11.0] - 2026-07-05
+
+### Added
+- **Battery priority** toggle (discussion #9) – when enabled, only genuine grid export counts as device surplus, so the battery charges first. Off (default) keeps the previous semantics.
+- **Per-device run condition** (discussion #5) – an optional prerequisite sensor (below/above a limit) that must hold for the device to run (e.g. water heater only while boiler temperature is below 55). Blocks every start path, stops a running device once unmet (respecting min-on-time), never interrupts a startup-detection program, and fails open on an unavailable sensor.
+
+## [1.10.1] - 2026-07-05
+
+### Fixed
+- **Dashboard panel localization** (#7) – panel strings are now localized (English by default, German when the HA UI language is German) instead of hard-coded German.
+
+## [1.10.0] - 2026-07-03
+
+### Added
+- **Built-in dashboard panel** – a self-adapting AURUM sidebar panel ships with the integration (no YAML, no extra cards). Overview chips plus one card per device with a PV | Manual | Off mode selector and the per-device controls; discovered live from the entities so adding/removing a device updates it automatically.
+
+### Fixed
+- Deterministic `entity_id`s for all per-device platforms (sensor, binary_sensor, number, time), matching the switches. Previously HA derived object_ids from friendly names via its own slugify, which transliterates umlauts differently (`ä→a` vs AURUM's `ä→ae`) and broke the id contract for umlaut device names; a one-time registry migration heals existing installs.
+- `slugify` ASCII-folds non-German diacritics so forced entity_ids are always valid.
+- Config flow rejects device names that collide with AURUM's own hub sensor ids.
+
+## [1.9.1] - 2026-07-01
+
+### Fixed
+- **18 findings from an adversarial code audit** (see `docs/CODE_AUDIT_2026-07-01.md`), including: `remove_device` slug-prefix collision deleting other devices' entities; a synchronous service call on the event loop (safety-factor adaptation) that could block the coordinator; startup-detection standby time counted as runtime; `force_started` never cleared (device permanently non-sheddable); the SOC trajectory learner being inert and weather-learning comparing mismatched hours; the Target-SOC slider not affecting the budget; missing slug-uniqueness on device rename; dead `_attr_available` (sensors showing "unknown" instead of "unavailable"); an unavailable battery SOC failing open and disabling battery protection; non-persistent slider/deadline values; plus several low-severity fixes.
+
 ## [1.9.0] - 2026-06-26
 
 ### Added

@@ -45,6 +45,7 @@
 | **Battery Priority** | Optional: only genuine grid export counts as surplus, so the battery charges first |
 | **Battery-Aware** | Respects battery SOC with configurable target and minimum thresholds |
 | **Run Conditions** | Optional per-device prerequisite (a sensor below/above a limit — e.g. water heater only while the tank is below 55 °C) |
+| **PV Power Gate** | Optional per-device threshold: run on raw PV generation above a limit (with healthy SOC), bypassing the budget cap |
 | **Daily Reset Hour** | Per-device reset hour for runtime counters — align a cheap-grid device to the solar day |
 | **Priority-Based** | Higher priority devices get power first |
 | **Startup Detection** | Detects washing machine / dishwasher program start, pauses until PV surplus is available, resumes automatically |
@@ -118,6 +119,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
 | **Run condition sensor** | Optional prerequisite: a sensor that must be **below** / **above** a limit for the device to run (e.g. water heater only while `sensor.boiler_temp` is below `55`). Blocks all start paths; an unavailable sensor fails open. |
 | **Daily reset hour** | Hour (0–23) when this device's runtime counter resets. `0` = midnight (default). Set to `9` so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight. |
+| **PV power threshold** | Optional: run whenever *actual* PV generation is ≥ this many watts **and** battery SOC ≥ the device's SOC threshold, bypassing the daily budget cap. Expresses "run whenever PV ≥ 1000 W and battery ≥ 25 %" — useful when the surplus/budget logic reserves solar for the battery and a device (e.g. a pool pump) wouldn't otherwise start. Requires a PV **power** sensor. `0` = disabled (default). Also available as a live `number.aurum_{slug}_pv_power_threshold` entity and a dashboard control. |
 
 > **Battery priority** (in *Configure → Energy & Battery*) is a global toggle:
 > when enabled, only genuine grid **export** counts as surplus for devices, so
@@ -277,7 +279,7 @@ device in the options and its card appears or disappears.
 It shows overview chips (PV, grid import/export, battery SOC, surplus, budget,
 house consumption, remaining forecast, cheap-grid flag) and one card per device
 with a **PV | Manual | Off** mode selector, a *Must-run-today* toggle, and the
-SOC-threshold, max-price and deadline controls. It follows your HA theme and is
+SOC-threshold, max-price, PV-power-threshold and deadline controls. It follows your HA theme and is
 localized (English by default, German when the HA UI is set to German).
 
 > The sidebar entry is sorted alphabetically — if your sidebar is long, scroll
