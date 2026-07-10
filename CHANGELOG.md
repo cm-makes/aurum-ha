@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Manual override ignored during the battery-charging emergency** – When the battery entered charging mode (SOC at `min_soc`), `DeviceManager.update()` force-off *every* running device without checking the per-device manual-override switch (`switch.aurum_{slug}_override`), violating its documented "AURUM will not touch the device in any cycle" contract. An externally-driven cycle — e.g. an anti-legionella water-heater boost held above its run-condition threshold — could be aborted mid-run when SOC dipped to `min_soc`. The emergency loop now skips overridden devices (anchoring `on_since` for min-on-time coherence), exactly as the normal control path does. Regression-tested via the simulation harness.
+
 ## [1.9.0] - 2026-06-26
 
 ### Added

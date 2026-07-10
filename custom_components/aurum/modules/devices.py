@@ -225,6 +225,16 @@ class DeviceManager:
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
+                # Manual override → AURUM must not touch the device in ANY
+                # cycle, including this emergency (contract of the override
+                # switch). Keeps externally-driven cycles (e.g. an
+                # anti-legionella boost above the run-condition threshold)
+                # from being killed when SOC drops to min_soc.
+                if self._is_manual_override(dev):
+                    if self._is_device_on(dev):
+                        if dev["on_since"] is None:
+                            dev["on_since"] = now
+                    continue
                 # SD devices in standby: keep Shelly ON (3-5W)
                 if (dev["startup_detection"]
                         and dev["sd_state"] in ("", SD_STATE_STANDBY)):
