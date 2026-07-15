@@ -23,6 +23,7 @@ from .modules.battery import BatteryManager
 from .modules.budget import BudgetManager
 from .modules.devices import DeviceManager
 from .modules.pricing import PricingManager
+from .modules.advisor import AdvisorManager
 from .modules.helpers import CSVLogger
 from .modules.persistence import PersistenceManager
 
@@ -66,6 +67,7 @@ class AurumCoordinator(DataUpdateCoordinator):
         self.devices = DeviceManager(self.bridge, self.config)
         self.pricing = PricingManager(self.bridge, self.config)
         self.devices.pricing = self.pricing  # expose to device manager
+        self.advisor = AdvisorManager(self.bridge, self.config)
         self.persistence = PersistenceManager(self.bridge, self.config)
 
         # ── Daily adaptation tracking ──────────────────────────────
@@ -118,6 +120,11 @@ class AurumCoordinator(DataUpdateCoordinator):
                 "sd_state": dev.get("sd_state", ""),
                 "price_mode": dev.get("price_mode", "solar_only"),
             })
+        # Seed the odd-cycle cache with the placeholders: the first
+        # post-startup cycle is odd (grace=6 → cycle 7), and an empty
+        # cache would make the advisor report "idle – no devices" for
+        # one cycle on every restart even with devices configured.
+        self._cached_device_states = list(self.device_states)
 
     async def async_shutdown(self):
         """Save state, then run base coordinator teardown."""
@@ -136,6 +143,15 @@ class AurumCoordinator(DataUpdateCoordinator):
     #  MAIN UPDATE LOOP
     # ══════════════════════════════════════════════════════════════
 
+    def _run_advisor(self, shared):
+        """Fill shared["advisor"] – a pure summary that must never raise
+        into the control loop. Invoked from the update loop's finally
+        block so it covers every return path."""
+        try:
+            shared["advisor"] = self.advisor.update(shared)
+        except Exception as e:
+            _LOGGER.warning("Advisor error: %s", e)
+
     def _entities_ready(self):
         """Check if critical sensors are available."""
         grid = self.config.get("grid_power_entity")
@@ -147,10 +163,9 @@ class AurumCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Orchestrate: Energy → Battery → Devices → Persist."""
+        self.cycle += 1
+        shared = {"now": datetime.now(), "cycle": self.cycle}
         try:
-            self.cycle += 1
-            shared = {"now": datetime.now(), "cycle": self.cycle}
-
             # ── Startup guard ──────────────────────────────────────
             startup_mode = self.cycle <= self.STARTUP_GRACE_CYCLES
             if startup_mode:
@@ -285,3 +300,11 @@ class AurumCoordinator(DataUpdateCoordinator):
             _LOGGER.error("AURUM update error: %s\n%s",
                           e, traceback.format_exc())
             raise UpdateFailed(f"Update failed: {e}") from e
+        finally:
+            # ── Advisor (decision transparency) ────────────────────
+            # Single exit point: runs on EVERY return path (startup
+            # early-returns, main path, future guards) so no new
+            # early-return can forget it. Mutates the shared dict that
+            # is being returned; the advisor itself handles the startup
+            # snapshot and never raises into the control loop.
+            self._run_advisor(shared)

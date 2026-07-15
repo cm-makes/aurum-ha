@@ -20,6 +20,19 @@ const HUB = {
   house: "sensor.aurum_house_consumption",
   forecast: "sensor.aurum_forecast_remaining",
   cheap: "binary_sensor.aurum_cheap_grid_active",
+  advisor: "sensor.aurum_current_decision",
+};
+
+// Advisor decision code → banner icon + accent color.
+const DECISION_META = {
+  startup: { icon: "⏳", color: "var(--secondary-text-color,#888)" },
+  battery_charging: { icon: "🔋", color: "#ffb300" },
+  running_solar: { icon: "☀️", color: "var(--success-color,#43a047)" },
+  running_cheap_grid: { icon: "💶", color: "#ffb300" },
+  running: { icon: "▶️", color: "var(--success-color,#43a047)" },
+  waiting: { icon: "⌛", color: "var(--secondary-text-color,#888)" },
+  idle: { icon: "💤", color: "var(--secondary-text-color,#888)" },
+  unknown: { icon: "❔", color: "var(--secondary-text-color,#888)" },
 };
 
 // Per-device entity_id suffixes, all derived from the device slug.
@@ -68,6 +81,34 @@ const STRINGS = {
     socThreshold: "SOC threshold", maxPrice: "Max price (ct/kWh)",
     pvThreshold: "Solar power ≥ (W)",
     deadline: "Finish by", stateOff: "off",
+    devicesOn: "active",
+    // Advisor decision headline — FALLBACK ONLY. The banner prefers
+    // hass.formatEntityState() (backend translations, all HA languages);
+    // these strings only render on older HA frontends without it.
+    decision_startup: "Starting up",
+    decision_battery_charging: "Charging battery – devices paused",
+    decision_running_solar: "Running on solar surplus",
+    decision_running_cheap_grid: "Running on cheap grid power",
+    decision_running: "Devices running",
+    decision_waiting: "Waiting for surplus",
+    decision_idle: "Idle – no devices",
+    decision_unknown: "Unknown",
+    // Advisor per-device reason codes (attributes – no backend translation)
+    reason_solar_surplus: "solar surplus",
+    reason_solar_pv: "solar power ≥ threshold",
+    reason_cheap_grid: "cheap grid power",
+    reason_manual_override: "manual override",
+    reason_forced_deadline: "deadline start",
+    reason_running: "running",
+    reason_runtime_done: "daily runtime reached",
+    reason_program_done: "program finished",
+    reason_program_paused: "program paused",
+    reason_program_standby: "waiting for program start",
+    reason_battery_charging: "battery charging",
+    reason_below_soc_threshold: "battery below threshold",
+    reason_condition_not_met: "run condition not met",
+    reason_disabled: "disabled (force-off)",
+    reason_waiting_surplus: "waiting for surplus",
   },
   de: {
     solar: "Solar", grid: "Netz", battery: "Akku", surplus: "Überschuss",
@@ -84,6 +125,32 @@ const STRINGS = {
     socThreshold: "SOC-Schwelle", maxPrice: "Max. Preis (ct/kWh)",
     pvThreshold: "Solarleistung ≥ (W)",
     deadline: "Fertig bis", stateOff: "aus",
+    devicesOn: "aktiv",
+    // Advisor-Entscheidung — NUR FALLBACK (siehe EN-Kommentar).
+    decision_startup: "Startet …",
+    decision_battery_charging: "Batterie lädt – Geräte pausiert",
+    decision_running_solar: "Läuft mit Solar-Überschuss",
+    decision_running_cheap_grid: "Läuft mit günstigem Netzstrom",
+    decision_running: "Geräte laufen",
+    decision_waiting: "Wartet auf Überschuss",
+    decision_idle: "Leerlauf – keine Geräte",
+    decision_unknown: "Unbekannt",
+    // Advisor-Begründungen pro Gerät (Attribute – keine Backend-Übersetzung)
+    reason_solar_surplus: "Solar-Überschuss",
+    reason_solar_pv: "Solarleistung ≥ Schwelle",
+    reason_cheap_grid: "günstiger Netzstrom",
+    reason_manual_override: "manuell übersteuert",
+    reason_forced_deadline: "Deadline-Start",
+    reason_running: "läuft",
+    reason_runtime_done: "Tageslaufzeit erreicht",
+    reason_program_done: "Programm fertig",
+    reason_program_paused: "Programm pausiert",
+    reason_program_standby: "wartet auf Programmstart",
+    reason_battery_charging: "Batterie lädt",
+    reason_below_soc_threshold: "Akku unter Schwelle",
+    reason_condition_not_met: "Bedingung nicht erfüllt",
+    reason_disabled: "deaktiviert (Aus-Schalter)",
+    reason_waiting_surplus: "wartet auf Überschuss",
   },
 };
 
@@ -93,6 +160,7 @@ class AurumPanel extends HTMLElement {
     this._hass = null;
     this._sig = null; // structural signature (device slugs)
     this._refs = {}; // id -> update fn
+    this._advReasons = null; // slug -> advisor reason (memo per update)
   }
 
   set hass(hass) {
@@ -172,6 +240,7 @@ class AurumPanel extends HTMLElement {
     // HA startup the override switch can appear before the rest.
     const sig = JSON.stringify([
       this._lang(), // rebuild with new labels if the UI language changes
+      this._exists(HUB.advisor), // banner appears when the sensor registers
       devices.map((d) => [
         d.slug,
         d.name,
@@ -191,6 +260,7 @@ class AurumPanel extends HTMLElement {
 
   _build(devices) {
     this._refs = {};
+    this._advReasons = null;
     this.innerHTML = "";
 
     const style = document.createElement("style");
@@ -208,6 +278,10 @@ class AurumPanel extends HTMLElement {
       '<div class="aurum-title">☀️ AURUM</div>' +
       '<div class="aurum-sub">Solar Surplus Optimizer</div>';
     root.appendChild(header);
+
+    // Advisor banner: what AURUM is doing right now, and why.
+    // Hidden entirely on installs that predate the advisor sensor.
+    if (this._exists(HUB.advisor)) root.appendChild(this._buildAdvisor());
 
     // Overview chips
     root.appendChild(this._buildOverview());
@@ -232,6 +306,81 @@ class AurumPanel extends HTMLElement {
       devWrap.appendChild(grid);
     }
     root.appendChild(devWrap);
+  }
+
+  // Translate an advisor reason code; fall back to the raw code so new
+  // backend vocabulary still renders (untranslated) instead of vanishing.
+  _reasonText(code) {
+    if (!code) return "";
+    const key = "reason_" + code;
+    const lang = STRINGS[this._lang()] || STRINGS.en;
+    return lang[key] || STRINGS.en[key] || code;
+  }
+
+  _buildAdvisor() {
+    const box = document.createElement("div");
+    box.className = "aurum-advisor";
+    const icon = document.createElement("div");
+    icon.className = "aurum-advisor-icon";
+    const body = document.createElement("div");
+    body.className = "aurum-advisor-body";
+    const head = document.createElement("div");
+    head.className = "aurum-advisor-head";
+    const sub = document.createElement("div");
+    sub.className = "aurum-advisor-sub";
+    body.appendChild(head);
+    body.appendChild(sub);
+    box.appendChild(icon);
+    box.appendChild(body);
+
+    this._refs["advisor"] = () => {
+      let code = this._st(HUB.advisor) || "unknown";
+      if (code === "unavailable") code = "unknown";
+      const meta = DECISION_META[code] || DECISION_META.unknown;
+      icon.textContent = meta.icon;
+      box.style.borderLeftColor = meta.color;
+
+      // Headline: prefer HA's backend-localized ENUM state (covers every
+      // HA language); fall back to the local mirror on older frontends.
+      let headline = "";
+      const stObj = this._hass && this._hass.states[HUB.advisor];
+      if (stObj && typeof this._hass.formatEntityState === "function") {
+        try {
+          headline = this._hass.formatEntityState(stObj);
+        } catch (_e) { /* fall back below */ }
+      }
+      if (!headline || headline === code) {
+        const lang = STRINGS[this._lang()] || STRINGS.en;
+        headline =
+          lang["decision_" + code] || STRINGS.en["decision_" + code] || code;
+      }
+      head.textContent = headline;
+
+      // Memo for the device cards: slug → reason (built once per update
+      // pass; this updater runs before the card updaters by insertion
+      // order). Cleared in _build.
+      this._advReasons = null;
+      const advDevs = this._attr(HUB.advisor, "devices");
+      if (Array.isArray(advDevs)) {
+        this._advReasons = new Map();
+        for (const x of advDevs) {
+          if (x && x.slug) this._advReasons.set(x.slug, x.reason);
+        }
+      }
+
+      // Context line: devices active · surplus (live sensor) · price.
+      const parts = [];
+      const on = this._attr(HUB.advisor, "devices_on");
+      const total = this._attr(HUB.advisor, "devices_total");
+      if (on != null && total != null)
+        parts.push(`${on}/${total} ${this._t("devicesOn")}`);
+      const ex = parseFloat(this._st(HUB.surplus));
+      if (!isNaN(ex)) parts.push(`⚡ ${Math.round(ex)} W`);
+      const ct = this._attr(HUB.advisor, "current_price_ct");
+      if (ct != null) parts.push(`💶 ${ct} ct/kWh`);
+      sub.textContent = parts.join(" · ");
+    };
+    return box;
   }
 
   _buildOverview() {
@@ -523,8 +672,18 @@ class AurumPanel extends HTMLElement {
       }
       metrics.textContent = parts.join("   ");
 
-      const rs = this._attr(e.status, "scheduling_reason");
-      reason.textContent = rs ? `→ ${rs}` : "";
+      // Prefer the advisor's per-device reason (translated, via the memo
+      // the banner updater builds); fall back to the raw scheduling_reason
+      // attribute on pre-advisor installs.
+      let reasonText = "";
+      if (this._advReasons && this._advReasons.has(d.slug)) {
+        reasonText = this._reasonText(this._advReasons.get(d.slug));
+      }
+      if (!reasonText) {
+        const rs = this._attr(e.status, "scheduling_reason");
+        if (rs) reasonText = rs;
+      }
+      reason.textContent = reasonText ? `→ ${reasonText}` : "";
 
       // Derive the active mode: Aus (disable) beats Manuell (override),
       // matching the backend priority in devices.py.
@@ -582,6 +741,15 @@ const CSS = `
 .aurum-header { margin-bottom: 16px; }
 .aurum-title { font-size: 1.6rem; font-weight: 600; }
 .aurum-sub { color: var(--secondary-text-color); font-size: .9rem; }
+.aurum-advisor { display: flex; align-items: center; gap: 14px;
+  background: var(--card-background-color, #1c1c1c); border-radius: 14px;
+  padding: 12px 16px; margin-bottom: 14px;
+  border: 1px solid var(--divider-color, transparent);
+  border-left: 4px solid var(--secondary-text-color, #888);
+  box-shadow: var(--ha-card-box-shadow, none); }
+.aurum-advisor-icon { font-size: 1.7rem; }
+.aurum-advisor-head { font-weight: 600; font-size: 1.05rem; }
+.aurum-advisor-sub { color: var(--secondary-text-color); font-size: .82rem; margin-top: 2px; }
 .aurum-overview { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
 .aurum-chip { display: flex; align-items: center; gap: 10px;
   background: var(--card-background-color, #1c1c1c); border-radius: 14px;

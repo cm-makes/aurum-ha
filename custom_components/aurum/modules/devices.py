@@ -33,6 +33,10 @@ from ..const import (
     DEFAULT_DEV_RESIDUAL_POWER,
     DEFAULT_EXCESS_DEFICIT_TOLERANCE,
     DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
+    SCHED_REASON_SURPLUS_AVAILABLE,
+    SCHED_REASON_EXCESS_SUFFICIENT,
+    SCHED_REASON_CHEAP_GRID,
+    SCHED_REASON_SOLAR_PV,
     override_entity_id,
     muss_heute_entity_id,
     disable_entity_id,
@@ -443,7 +447,7 @@ class DeviceManager:
                     # _should_turn_off no longer recognises the device,
                     # causing night-time on/off ping-pong.
                     reason = dev.get("_scheduling_reason") or \
-                        "surplus_available"
+                        SCHED_REASON_SURPLUS_AVAILABLE
                     self._turn_on(dev, now, excess, battery_soc, reason)
                     newly_allocated += dev["nominal_power"]
                     available_excess -= dev["nominal_power"]
@@ -589,7 +593,7 @@ class DeviceManager:
         if (dev.get("price_mode") == "cheap_grid"
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is True):
-            dev["_scheduling_reason"] = "cheap_grid"
+            dev["_scheduling_reason"] = SCHED_REASON_CHEAP_GRID
             return True
 
         # ── PV-power gate: raw solar above threshold + healthy SOC ──
@@ -604,7 +608,7 @@ class DeviceManager:
             elapsed = (now - dev["excess_since"]).total_seconds()
             if elapsed < dev["debounce_on"] * penalty:
                 return False
-            dev["_scheduling_reason"] = "solar_pv"
+            dev["_scheduling_reason"] = SCHED_REASON_SOLAR_PV
             return True
 
         # Enough excess? (nominal + hysteresis_on + residual_power)
@@ -648,7 +652,7 @@ class DeviceManager:
         # This prevents running on expensive grid power after a price jump.
         # Only act when the price is *known* to be expensive (False); when
         # the sensor is unavailable (None) we hold state to avoid oscillation.
-        if (dev.get("_scheduling_reason") == "cheap_grid"
+        if (dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is False):
             return "price_no_longer_cheap"
@@ -659,7 +663,7 @@ class DeviceManager:
         # otherwise stop once the shortfall persists for debounce_off.
         # Takes precedence over the generic SOC/excess-deficit blocks below
         # so a gated device stops on falling sun even while surplus remains.
-        if dev.get("_scheduling_reason") == "solar_pv":
+        if dev.get("_scheduling_reason") == SCHED_REASON_SOLAR_PV:
             threshold = dev.get("pv_power_threshold") or 0
             off_level = max(0, threshold - dev["hysteresis_off"])
             soc_ok = battery_soc < 0 or battery_soc >= soc_threshold
@@ -696,7 +700,7 @@ class DeviceManager:
         # `should_run_on_grid` is True when cheap and None when the price
         # sensor is unavailable – in both cases we hold (only a known-
         # expensive price, handled above, drops the cheap_grid grant).
-        if (dev.get("_scheduling_reason") == "cheap_grid"
+        if (dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is not False):
             dev["_excess_deficit_since"] = None
@@ -879,7 +883,7 @@ class DeviceManager:
                     seconds=dev["sd_max_runtime"])
                 dev["excess_since"] = None
                 dev["force_started"] = False
-                dev["_scheduling_reason"] = "excess_sufficient"
+                dev["_scheduling_reason"] = SCHED_REASON_EXCESS_SUFFICIENT
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Started "
                     f"(excess={turnon_excess:.0f}W >= "
@@ -1068,7 +1072,8 @@ class DeviceManager:
                              dev["nominal_power"])
         return dev["nominal_power"]
 
-    def _turn_on(self, dev, now, excess, soc, reason="surplus_available"):
+    def _turn_on(self, dev, now, excess, soc,
+                 reason=SCHED_REASON_SURPLUS_AVAILABLE):
         """Turn a device on."""
         self.hass.turn_on(dev["switch_entity"])
         dev["on_since"] = now
@@ -1205,6 +1210,10 @@ class DeviceManager:
                 "max_price": dev.get("max_price", 0),
                 "stop_after_runtime": dev.get("stop_after_runtime", False),
                 "runtime_target_reached": self._runtime_target_reached(dev),
+                # Authoritative off-reasons for the advisor: the manager
+                # knows WHY a device is off; consumers must not re-derive.
+                "disabled": self._is_disabled(dev),
+                "condition_met": self._condition_met(dev),
             })
 
         shared["device_states"] = device_states
@@ -1216,7 +1225,7 @@ class DeviceManager:
         # when AURUM is intentionally consuming grid power at low prices.
         # True if any device is currently ON with scheduling_reason=cheap_grid.
         shared["cheap_grid_active"] = any(
-            d.get("_scheduling_reason") == "cheap_grid"
+            d.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID
             and self._is_device_on(d)
             for d in self.devices
         )

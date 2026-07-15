@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -97,6 +97,15 @@ CONF_DEV_PV_POWER_THRESHOLD = "pv_power_threshold"
 # ── Price modes ─────────────────────────────────────────────────
 PRICE_MODE_SOLAR_ONLY = "solar_only"
 PRICE_MODE_CHEAP_GRID = "cheap_grid"
+
+# ── Device scheduling reasons ────────────────────────────────────
+# Produced by DeviceManager (dev["_scheduling_reason"], published in
+# device_states), consumed by the advisor and the cheap-grid binary
+# sensor. Single definition point so producer and consumers can't drift.
+SCHED_REASON_SURPLUS_AVAILABLE = "surplus_available"
+SCHED_REASON_EXCESS_SUFFICIENT = "excess_sufficient"
+SCHED_REASON_CHEAP_GRID = "cheap_grid"
+SCHED_REASON_SOLAR_PV = "solar_pv"
 
 # ── Device config keys: Startup Detection ────────────────────────
 CONF_DEV_SD_POWER_THRESHOLD = "sd_power_threshold"

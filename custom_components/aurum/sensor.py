@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VERSION
+from .modules.advisor import DECISION_OPTIONS
 
 
 def _device_icon(name: str) -> str:
@@ -73,6 +74,7 @@ async def async_setup_entry(
         AurumBudgetWSensor(coordinator, entry),
         AurumSafetyFactorSensor(coordinator, entry),
         AurumElectricityPriceSensor(coordinator, entry),
+        AurumAdvisorSensor(coordinator, entry),
     ]
 
     for dev_state in coordinator.device_states:
@@ -126,6 +128,38 @@ class AurumBatteryModeSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
         self._attr_native_value = data.get("battery_mode", "unknown")
+        self.async_write_ha_state()
+
+
+class AurumAdvisorSensor(CoordinatorEntity, SensorEntity):
+    """Current-decision advisor: what AURUM is doing right now and why.
+
+    State is a stable decision *code* (localised via translation_key). The
+    structured breakdown – battery mode, surplus, price context and a
+    per-device reason list – rides in the attributes for a dashboard card
+    to render. See modules/advisor.py for the code vocabulary.
+    """
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = DECISION_OPTIONS
+    _attr_translation_key = "advisor_decision"
+    _attr_icon = "mdi:lightbulb-on-outline"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_advisor"
+        self._attr_name = "AURUM Current Decision"
+        self._attr_device_info = _hub_device_info(entry.entry_id)
+        # Deterministic entity_id so dashboards/docs can rely on it.
+        self.entity_id = "sensor.aurum_current_decision"
+
+    @callback
+    def _handle_coordinator_update(self):
+        data = (self.coordinator.data or {}).get("advisor", {}) or {}
+        self._attr_native_value = data.get("decision", "unknown")
+        self._attr_extra_state_attributes = {
+            k: v for k, v in data.items() if k != "decision"
+        }
         self.async_write_ha_state()
 
 

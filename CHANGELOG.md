@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-15
+
+### Added
+- **Advisor: "Current Decision" sensor (`sensor.aurum_current_decision`)** – Decision transparency ported from the HELIOS parent project and rebuilt for AURUM's per-device model. A single ENUM sensor answers *"what is AURUM doing right now, and why"*. The state is a stable, localised decision code (`running_solar`, `running_cheap_grid`, `running`, `waiting`, `battery_charging`, `startup`, `idle`); the attributes carry a structured breakdown for dashboard cards: battery mode, price context, device counts, and a per-device list with a machine-readable `reason` code each (`solar_surplus`, `solar_pv`, `cheap_grid`, `manual_override`, `forced_deadline`, `runtime_done`, `program_done`, `program_paused`, `program_standby`, `battery_charging`, `below_soc_threshold`, `condition_not_met`, `disabled`, `waiting_surplus`). The module is a pure function of the coordinator's shared state — no extra HA polling, no side effects on control — and runs from the update loop's `finally` block so every return path (including the startup grace period) publishes a decision. The attributes deliberately carry no fast-changing numbers (no watts, no timestamps), so idle periods don't generate recorder writes; live power values stay in the dedicated numeric sensors. Always active (no configuration). Decision-state strings localised EN/DE via `translation_key` + `SensorDeviceClass.ENUM`. `current_decision` added to the reserved device-name list. Unit-tested.
+- **Dashboard panel: Advisor banner** – The AURUM sidebar panel now shows a decision banner at the top ("☀️ Running on solar surplus · 2/3 active · ⚡ 1240 W · 💶 18.4 ct/kWh"). The headline uses HA's backend-localised ENUM state via `hass.formatEntityState()` (every HA language) with an EN/DE fallback for older frontends; the surplus figure comes live from `sensor.aurum_excess_power`. The per-device cards now show the advisor's translated reason ("→ solar surplus", "→ program paused", "→ disabled (force-off)") instead of the raw `scheduling_reason` code, falling back to the raw code on installs that predate the advisor.
+- **`device_states` now publishes `disabled` and `condition_met`** – DeviceManager exposes its authoritative off-reasons (force-off switch, per-device run condition) in the published device state, so the advisor and external automations don't have to re-derive them. Scheduling-reason strings (`surplus_available`, `excess_sufficient`, `cheap_grid`, `solar_pv`) are now shared `SCHED_REASON_*` constants in `const.py` — producer (devices.py) and consumers (advisor, cheap-grid flag) can no longer drift.
+
 ## [1.13.0] - 2026-07-10
 
 ### Added

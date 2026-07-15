@@ -296,5 +296,21 @@
         "above": "Sensor muss über dem Grenzwert liegen"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "advisor_decision": {
+        "state": {
+          "startup": "Startet …",
+          "battery_charging": "Batterie lädt – Geräte pausiert",
+          "running_solar": "Läuft mit Solar-Überschuss",
+          "running_cheap_grid": "Läuft mit günstigem Netzstrom",
+          "running": "Geräte laufen",
+          "waiting": "Wartet auf Überschuss",
+          "idle": "Leerlauf – keine Geräte",
+          "unknown": "Unbekannt"
+        }
+      }
+    }
   }
 }
