@@ -19,6 +19,7 @@ _RESERVED_SLUGS = {
     "battery_discharge", "battery_mode", "excess_power", "budget",
     "house_consumption", "forecast_remaining", "energy_today", "cycle",
     "safety_factor", "electricity_price", "cheap_grid_active",
+    "current_decision",
     # prefixes whose per-device suffixes collide with hub ids:
     "pv", "grid", "battery", "energy", "cheap_grid",
 }

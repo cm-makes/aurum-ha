@@ -296,5 +296,21 @@
         "above": "Sensor must be above the limit"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "advisor_decision": {
+        "state": {
+          "startup": "Starting up",
+          "battery_charging": "Charging battery – devices paused",
+          "running_solar": "Running on solar surplus",
+          "running_cheap_grid": "Running on cheap grid power",
+          "running": "Devices running",
+          "waiting": "Waiting for surplus",
+          "idle": "Idle – no devices",
+          "unknown": "Unknown"
+        }
+      }
+    }
   }
 }
