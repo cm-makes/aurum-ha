@@ -86,7 +86,7 @@ const STRINGS = {
     // hass.formatEntityState() (backend translations, all HA languages);
     // these strings only render on older HA frontends without it.
     decision_startup: "Starting up",
-    decision_battery_charging: "Charging battery – devices paused",
+    decision_battery_charging: "Battery below reserve – devices paused",
     decision_running_solar: "Running on solar surplus",
     decision_running_cheap_grid: "Running on cheap grid power",
     decision_running: "Devices running",
@@ -104,7 +104,7 @@ const STRINGS = {
     reason_program_done: "program finished",
     reason_program_paused: "program paused",
     reason_program_standby: "waiting for program start",
-    reason_battery_charging: "battery charging",
+    reason_battery_charging: "battery below reserve",
     reason_below_soc_threshold: "battery below threshold",
     reason_condition_not_met: "run condition not met",
     reason_disabled: "disabled (force-off)",
@@ -128,7 +128,7 @@ const STRINGS = {
     devicesOn: "aktiv",
     // Advisor-Entscheidung — NUR FALLBACK (siehe EN-Kommentar).
     decision_startup: "Startet …",
-    decision_battery_charging: "Batterie lädt – Geräte pausiert",
+    decision_battery_charging: "Akku unter Reserve – Geräte pausiert",
     decision_running_solar: "Läuft mit Solar-Überschuss",
     decision_running_cheap_grid: "Läuft mit günstigem Netzstrom",
     decision_running: "Geräte laufen",
@@ -146,7 +146,7 @@ const STRINGS = {
     reason_program_done: "Programm fertig",
     reason_program_paused: "Programm pausiert",
     reason_program_standby: "wartet auf Programmstart",
-    reason_battery_charging: "Batterie lädt",
+    reason_battery_charging: "Akku unter Reserve",
     reason_below_soc_threshold: "Akku unter Schwelle",
     reason_condition_not_met: "Bedingung nicht erfüllt",
     reason_disabled: "deaktiviert (Aus-Schalter)",

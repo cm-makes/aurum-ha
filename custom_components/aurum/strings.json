@@ -303,7 +303,7 @@
       "advisor_decision": {
         "state": {
           "startup": "Starting up",
-          "battery_charging": "Charging battery – devices paused",
+          "battery_charging": "Battery below reserve – devices paused",
           "running_solar": "Running on solar surplus",
           "running_cheap_grid": "Running on cheap grid power",
           "running": "Devices running",
