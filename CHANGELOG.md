@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-07-16
+
+### Fixed
+- **Advisor wording: "Charging battery" → "Battery below reserve"** – The `battery_charging` decision/reason labels (EN/DE, sensor state + panel banner + device reason lines) claimed the battery was actively charging. AURUM doesn't measure that: the mode means *SOC is at or below `min_soc`, devices are paused*. The battery may well be idle at that moment (spotted during a live session: BYD at 2 % on a July morning, not charging). The machine-readable codes (`battery_charging`) are unchanged — only display strings; no breaking change for automations.
+
 ## [1.14.0] - 2026-07-15
 
 ### Added

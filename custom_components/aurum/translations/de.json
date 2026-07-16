@@ -302,7 +302,7 @@
       "advisor_decision": {
         "state": {
           "startup": "Startet …",
-          "battery_charging": "Batterie lädt – Geräte pausiert",
+          "battery_charging": "Akku unter Reserve – Geräte pausiert",
           "running_solar": "Läuft mit Solar-Überschuss",
           "running_cheap_grid": "Läuft mit günstigem Netzstrom",
           "running": "Geräte laufen",
