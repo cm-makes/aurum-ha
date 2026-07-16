@@ -248,6 +248,7 @@ Every 15 seconds:
 | `sensor.aurum_budget` | Sensor | Device power budget (W) |
 | `sensor.aurum_safety_factor` | Sensor | Budget safety factor (%) |
 | `sensor.aurum_energy_today` | Sensor | Total energy all devices today (Wh) |
+| `sensor.aurum_current_decision` | Sensor | What AURUM is doing right now, and why — see [The Advisor](#the-advisor-current-decision) |
 | `sensor.aurum_cycle` | Sensor | Update cycle counter (diagnostic) |
 | `number.aurum_target_soc` | Number | Target SOC slider |
 | `number.aurum_min_soc` | Number | Minimum SOC slider |
@@ -276,10 +277,13 @@ After setup, an **AURUM** entry (☀️) appears in the Home Assistant sidebar. 
 renders live from AURUM's own entities and adapts automatically: add or remove a
 device in the options and its card appears or disappears.
 
-It shows overview chips (PV, grid import/export, battery SOC, surplus, budget,
-house consumption, remaining forecast, cheap-grid flag) and one card per device
-with a **PV | Manual | Off** mode selector, a *Must-run-today* toggle, and the
-SOC-threshold, max-price, PV-power-threshold and deadline controls. It follows your HA theme and is
+It shows a **decision banner** up top (what AURUM is doing right now — see
+[The Advisor](#the-advisor-current-decision)), overview chips (PV, grid
+import/export, battery SOC, surplus, budget, house consumption, remaining
+forecast, cheap-grid flag) and one card per device with a **PV | Manual | Off**
+mode selector, a *Must-run-today* toggle, a translated reason line ("→ solar
+surplus", "→ waiting for program start"), and the SOC-threshold, max-price,
+PV-power-threshold and deadline controls. It follows your HA theme and is
 localized (English by default, German when the HA UI is set to German).
 
 > The sidebar entry is sorted alphabetically — if your sidebar is long, scroll
@@ -288,6 +292,81 @@ localized (English by default, German when the HA UI is set to German).
 **Optional (legacy):** a manual Mushroom-based dashboard is still available as
 **[example_dashboard.yaml](example_dashboard.yaml)** for users who prefer a
 Lovelace dashboard (requires [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) via HACS).
+
+---
+
+## The Advisor: Current Decision
+
+`sensor.aurum_current_decision` answers the most common question about any
+automatic optimizer: **"Why is AURUM (not) running my device right now?"**
+Zero configuration — it's always active.
+
+### Sensor state (localized EN/DE)
+
+| Code | Meaning |
+|------|---------|
+| `running_solar` | At least one device is running on PV surplus |
+| `running_cheap_grid` | Running because electricity is cheap |
+| `running` | Running for another reason (manual override, deadline) |
+| `waiting` | Devices configured, none running — waiting for surplus |
+| `battery_charging` | Battery below your `min_soc` reserve — devices paused |
+| `startup` | Sensor warm-up after a restart (~90 s) |
+| `idle` | No devices configured |
+
+### Per-device reasons (attributes)
+
+The `devices` attribute lists every device with a machine-readable `reason`:
+
+| Reason | Meaning |
+|--------|---------|
+| `solar_surplus` | Running on PV surplus |
+| `solar_pv` | Running via the raw-PV gate (`pv_power_threshold`) |
+| `cheap_grid` | Running on cheap grid power |
+| `manual_override` | You took over — AURUM hands off |
+| `forced_deadline` | Deadline start (must finish today) |
+| `runtime_done` / `program_done` | Done for today |
+| `program_standby` | Waiting for you to start a program (washer/dishwasher) |
+| `program_paused` | Program paused, waiting for surplus to resume |
+| `battery_charging` | Battery below reserve |
+| `below_soc_threshold` | Battery below this device's SOC threshold |
+| `condition_not_met` | Run condition blocks it (e.g. boiler already hot) |
+| `disabled` | Force-off switch is on |
+| `waiting_surplus` | Not enough surplus right now |
+
+> Reason codes in attributes are untranslated by design (HA only translates
+> entity states). The AURUM panel shows them translated; in your own cards
+> you see the codes.
+
+### Use it in your own dashboard
+
+```yaml
+type: markdown
+content: >
+  ## {{ states('sensor.aurum_current_decision') }}
+  {% for d in state_attr('sensor.aurum_current_decision', 'devices') %}
+  - **{{ d.name }}**: {{ d.state }} → {{ d.reason }}
+  {% endfor %}
+```
+
+### Use it in automations
+
+```yaml
+# Push notification when the battery drops below reserve
+trigger:
+  - platform: state
+    entity_id: sensor.aurum_current_decision
+    to: battery_charging
+
+# Condition: has the washing machine finished its program today?
+condition: >
+  {{ state_attr('sensor.aurum_current_decision', 'devices')
+     | selectattr('slug', 'eq', 'washing_machine')
+     | map(attribute='reason') | first == 'program_done' }}
+```
+
+The attributes deliberately contain no fast-changing numbers (no watts, no
+timestamps), so the sensor produces clean state history and won't bloat your
+recorder database. Live power values live in the dedicated numeric sensors.
 
 ---
 
