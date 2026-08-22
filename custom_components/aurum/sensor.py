@@ -17,7 +17,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, VERSION
+from .const import (
+    DOMAIN,
+    VERSION,
+    PRICE_MODE_CHEAP_GRID,
+    PRICE_MODE_CHEAP_GRID_SOC,
+)
 from .modules.advisor import DECISION_OPTIONS
 
 
@@ -209,7 +214,8 @@ class AurumDeviceStatusSensor(CoordinatorEntity, SensorEntity):
                     "scheduling_reason": ds.get("scheduling_reason"),
                 }
                 # Add pricing info for price-aware devices
-                if ds.get("price_mode") in ("cheap_grid", "cheap_grid_soc"):
+                if ds.get("price_mode") in (
+                        PRICE_MODE_CHEAP_GRID, PRICE_MODE_CHEAP_GRID_SOC):
                     attrs["price_mode"] = ds.get("price_mode")
                     attrs["cheap_period"] = data.get("cheap_period", False)
                     starts_in = data.get("cheap_period_starts_in_min")

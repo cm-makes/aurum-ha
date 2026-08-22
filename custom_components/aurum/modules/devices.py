@@ -37,6 +37,7 @@ from ..const import (
     SCHED_REASON_EXCESS_SUFFICIENT,
     SCHED_REASON_CHEAP_GRID,
     SCHED_REASON_SOLAR_PV,
+    PRICE_MODE_CHEAP_GRID,
     PRICE_MODE_CHEAP_GRID_SOC,
     override_entity_id,
     muss_heute_entity_id,
@@ -595,7 +596,7 @@ class DeviceManager:
         # a price-based start is granted; below threshold it falls through
         # to the PV-gate/surplus checks below (same as solar_only).
         if (dev.get("price_mode") in (
-                "cheap_grid", PRICE_MODE_CHEAP_GRID_SOC)
+                PRICE_MODE_CHEAP_GRID, PRICE_MODE_CHEAP_GRID_SOC)
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is True):
             price_soc_ok = (
