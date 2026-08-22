@@ -431,7 +431,24 @@ Your support helps keep this project alive and growing.
 
 ## Troubleshooting
 
-Most setup issues fall into one of these patterns. Before opening an issue, check whether your symptom matches.
+### Start here: ask AURUM what it's doing
+
+Before working through the symptoms below, look at **`sensor.aurum_current_decision`** — or the banner at the top of the AURUM panel. It answers *"why is (not) this device running right now?"* for every device, in plain language, with no configuration:
+
+```
+Waiting for surplus · 0/3 active
+  Pool pump      → below battery threshold
+  Water heater   → waiting for surplus
+  Dishwasher     → waiting for program start
+```
+
+Most "it doesn't work" reports turn out to be AURUM working correctly and saying so — a battery below the device threshold, a run condition that isn't met, a daily runtime already used up. See [The Advisor](#the-advisor-current-decision) for every reason code and what it means.
+
+If the decision genuinely doesn't match what you expected, that's worth an [issue](https://github.com/cm-makes/aurum-ha/issues) — include the sensor's attributes and we can see exactly what AURUM saw.
+
+### Then check these patterns
+
+Most remaining setup issues fall into one of these. Before opening an issue, check whether your symptom matches.
 
 ### `sensor.aurum_excess_power` is always 0 (or always huge) — devices never react
 

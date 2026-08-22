@@ -1,5 +1,15 @@
 # AURUM Plug & Play – Quickstart
 
+> **🇬🇧 Already running Home Assistant?** This guide is written in German and
+> starts from bare metal — flashing a Raspberry Pi, installing HA OS, pairing
+> your inverter. If you already have Home Assistant running and just want to
+> install and configure AURUM, you want the
+> [README setup section](../README.md#setup) instead — that's a five-minute
+> job, in English.
+>
+> **🇩🇪 Du hast schon Home Assistant?** Dann brauchst du diese Anleitung nicht
+> — die [Setup-Sektion im README](../README.md#setup) reicht.
+
 Dieses Dokument führt dich durch die Ersteinrichtung von AURUM auf einem
 neuen Raspberry Pi mit Home Assistant OS. Zielgruppe: PV-Besitzer, die
 **noch kein Home Assistant** laufen haben und schnell zu einem Ergebnis
