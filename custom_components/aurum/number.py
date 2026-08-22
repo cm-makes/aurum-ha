@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, PRICE_MODE_CHEAP_GRID_SOC
 from .sensor import _hub_device_info
 
 
@@ -40,13 +40,13 @@ async def async_setup_entry(
             AurumDeviceSOCThreshold(coordinator, entry, dev_state))
         entities.append(
             AurumDevicePVPowerThreshold(coordinator, entry, dev_state))
-        # Max Price only applies to cheap_grid devices (is_price_ok ignores
+        # Max Price only applies to price-aware devices (is_price_ok ignores
         # it for solar_only). Create it only for those, matching the class
         # docstring and avoiding a functionless entity on solar_only devices.
         price_mode = next(
             (d.get("price_mode") for d in coordinator.devices.devices
              if d["name"] == dev_state["name"]), "solar_only")
-        if price_mode == "cheap_grid":
+        if price_mode in ("cheap_grid", PRICE_MODE_CHEAP_GRID_SOC):
             entities.append(
                 AurumDeviceMaxPrice(coordinator, entry, dev_state))
 

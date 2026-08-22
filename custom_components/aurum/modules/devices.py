@@ -37,6 +37,7 @@ from ..const import (
     SCHED_REASON_EXCESS_SUFFICIENT,
     SCHED_REASON_CHEAP_GRID,
     SCHED_REASON_SOLAR_PV,
+    PRICE_MODE_CHEAP_GRID_SOC,
     override_entity_id,
     muss_heute_entity_id,
     disable_entity_id,
@@ -590,11 +591,21 @@ class DeviceManager:
         # ── Price-aware: cheap grid power allows immediate turn-on ──
         # No debounce needed: electricity prices change on 15-min/hourly
         # intervals, not per-second like PV surplus. React immediately.
-        if (dev.get("price_mode") == "cheap_grid"
+        # cheap_grid_soc additionally requires SOC >= soc_threshold before
+        # a price-based start is granted; below threshold it falls through
+        # to the PV-gate/surplus checks below (same as solar_only).
+        if (dev.get("price_mode") in (
+                "cheap_grid", PRICE_MODE_CHEAP_GRID_SOC)
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is True):
-            dev["_scheduling_reason"] = SCHED_REASON_CHEAP_GRID
-            return True
+            price_soc_ok = (
+                dev.get("price_mode") != PRICE_MODE_CHEAP_GRID_SOC
+                or battery_soc < 0
+                or battery_soc >= soc_threshold
+            )
+            if price_soc_ok:
+                dev["_scheduling_reason"] = SCHED_REASON_CHEAP_GRID
+                return True
 
         # ── PV-power gate: raw solar above threshold + healthy SOC ──
         # Runs on actual PV generation regardless of computed surplus, so a
@@ -700,11 +711,21 @@ class DeviceManager:
         # `should_run_on_grid` is True when cheap and None when the price
         # sensor is unavailable – in both cases we hold (only a known-
         # expensive price, handled above, drops the cheap_grid grant).
+        # cheap_grid_soc: only hold while SOC is at/above soc_threshold —
+        # once it drops below, the price grant no longer applies and the
+        # device falls through to the generic excess-deficit check below,
+        # same as a solar_only device would.
         if (dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID
                 and self.pricing
                 and self.pricing.should_run_on_grid(dev) is not False):
-            dev["_excess_deficit_since"] = None
-            return None
+            price_soc_ok = (
+                dev.get("price_mode") != PRICE_MODE_CHEAP_GRID_SOC
+                or battery_soc < 0
+                or battery_soc >= soc_threshold
+            )
+            if price_soc_ok:
+                dev["_excess_deficit_since"] = None
+                return None
 
         # Excess deficit: turn off if deficit persists for debounce_off seconds.
         # Switch penalty multiplies the threshold to protect relays.
