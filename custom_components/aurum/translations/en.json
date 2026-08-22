@@ -167,7 +167,7 @@
           "estimated_runtime": "How long should this device run per day, or how long does a typical cycle take? Examples: Pool pump ~ 400 min/day, Washing machine ~ 120 min. Used together with the deadline so AURUM knows when to start — and as the daily target for 'Stop when daily runtime is reached'.",
           "stop_after_runtime": "Turn the device off once it has run for the configured duration today. Without this option it keeps running as long as surplus and battery allow. The counter resets at midnight. Perfect for pool pumps: 'run 400 minutes, then stop'.",
           "interruptible": "Can AURUM turn this device off when surplus drops? Disable for devices that must not be interrupted (e.g. 3D printer, aquarium heater). Default: on.",
-          "price_mode": "Solar only: device runs exclusively on PV surplus — never uses grid power. Cheap grid: device primarily runs on PV surplus, but ALSO turns on when electricity is cheap (below your max price or during best-price periods) — even at night or on cloudy days. Both modes always prefer solar when available. Requires a price sensor in settings.",
+          "price_mode": "Solar only: device runs exclusively on PV surplus — never uses grid power. Cheap grid: device primarily runs on PV surplus, but ALSO turns on when electricity is cheap (below your max price or during best-price periods) — even at night or on cloudy days, regardless of battery SOC. Cheap grid (SOC-gated): same as Cheap grid, but the price-based start is only allowed while battery SOC is at or above this device's SOC threshold — below it, only genuine solar surplus can run the device. All modes always prefer solar when available. Requires a price sensor in settings.",
           "max_price": "Maximum electricity price in ct/kWh at which this device may use grid power. Set to 0 to use price level / cheap period detection instead. Only applies in 'Cheap grid' mode.",
           "residual_power": "Extra safety margin added to the surplus requirement. Prevents the device from consuming power that's needed for grid stability. Default: 100W.",
           "pv_power_threshold": "Run this device whenever actual solar generation is at or above this many watts AND the battery is at or above the device's battery level — regardless of house load or the daily solar budget. Great for a pool pump: 'run whenever PV > 1000W and battery > 25%'. Set to 0 to disable and use only the normal surplus/price logic.",
@@ -287,7 +287,8 @@
     "price_mode": {
       "options": {
         "price_mode_solar_only": "Solar only – runs only on PV surplus (default)",
-        "price_mode_cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar"
+        "price_mode_cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar",
+        "price_mode_cheap_grid_soc": "Solar + cheap grid (SOC-gated) – also runs on cheap grid, but only while battery SOC is at or above this device's SOC threshold"
       }
     },
     "condition_op": {

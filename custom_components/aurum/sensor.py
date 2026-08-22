@@ -208,9 +208,9 @@ class AurumDeviceStatusSensor(CoordinatorEntity, SensorEntity):
                 attrs = {
                     "scheduling_reason": ds.get("scheduling_reason"),
                 }
-                # Add pricing info for cheap_grid devices
-                if ds.get("price_mode") == "cheap_grid":
-                    attrs["price_mode"] = "cheap_grid"
+                # Add pricing info for price-aware devices
+                if ds.get("price_mode") in ("cheap_grid", "cheap_grid_soc"):
+                    attrs["price_mode"] = ds.get("price_mode")
                     attrs["cheap_period"] = data.get("cheap_period", False)
                     starts_in = data.get("cheap_period_starts_in_min")
                     attrs["cheap_period_starts_in_min"] = starts_in

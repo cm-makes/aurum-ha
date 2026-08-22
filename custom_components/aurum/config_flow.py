@@ -75,6 +75,7 @@ from .const import (
     CONF_DEV_PV_POWER_THRESHOLD,
     PRICE_MODE_SOLAR_ONLY,
     PRICE_MODE_CHEAP_GRID,
+    PRICE_MODE_CHEAP_GRID_SOC,
     CONF_DEV_SD_POWER_THRESHOLD,
     CONF_DEV_SD_DETECTION_TIME,
     CONF_DEV_SD_STANDBY_POWER,
@@ -453,6 +454,9 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
                 selector.SelectOptionDict(
                     value=PRICE_MODE_CHEAP_GRID,
                     label="price_mode_cheap_grid"),
+                selector.SelectOptionDict(
+                    value=PRICE_MODE_CHEAP_GRID_SOC,
+                    label="price_mode_cheap_grid_soc"),
             ],
             translation_key="price_mode",
             mode=selector.SelectSelectorMode.DROPDOWN,

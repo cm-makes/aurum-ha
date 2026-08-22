@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.14.1"
+VERSION = "1.15.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -97,6 +97,10 @@ CONF_DEV_PV_POWER_THRESHOLD = "pv_power_threshold"
 # ── Price modes ─────────────────────────────────────────────────
 PRICE_MODE_SOLAR_ONLY = "solar_only"
 PRICE_MODE_CHEAP_GRID = "cheap_grid"
+# Like cheap_grid, but the price-based start/hold is also gated by the
+# device's soc_threshold: below it, only genuine solar surplus can run
+# the device — cheap grid price alone is not enough.
+PRICE_MODE_CHEAP_GRID_SOC = "cheap_grid_soc"
 
 # ── Device scheduling reasons ────────────────────────────────────
 # Produced by DeviceManager (dev["_scheduling_reason"], published in
