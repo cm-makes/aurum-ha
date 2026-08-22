@@ -168,7 +168,7 @@ Edit a device and set:
 
 | Setting | Description |
 |---------|-------------|
-| **Price mode** | *Solar only* (default) or *Solar + cheap grid* |
+| **Price mode** | *Solar only* (default), *Solar + cheap grid*, or *Solar + cheap grid (SOC-gated)* |
 | **Maximum price** | Grid power only below this price (ct/kWh). Set to 0 to use price level / cheap period instead. |
 
 **How it works:**
@@ -180,6 +180,20 @@ A device with `cheap_grid` mode turns on when **any** of these is true:
 4. `price_level_entity` is `very_cheap` or `cheap`
 
 Debounce timers still apply to prevent flapping on price edges.
+
+**`cheap_grid` vs. `cheap_grid_soc`:** in plain `cheap_grid`, conditions 2–4
+start the device regardless of battery SOC — the device's `soc_threshold` is
+never consulted on the price path. That is the right behaviour for a load
+that should always take cheap grid power (a water heater, say), but it means
+a device can run on grid all night while the battery sits below the reserve
+you configured for it.
+
+`cheap_grid_soc` behaves identically **except** that the price-based start is
+only granted while battery SOC is at or above that device's `soc_threshold`.
+Below the threshold the device falls back to solar-only behaviour: genuine PV
+surplus (grid export) can still run it, a cheap price alone cannot. Set a
+device to `cheap_grid_soc` when you want price-awareness *and* a battery
+floor; leave it on `cheap_grid` when price should always win.
 
 **Works with:**
 - [Tibber Prices](https://github.com/jpawlowski/hass.tibber_prices) — provides best price periods, countdown, price levels
@@ -206,6 +220,7 @@ Every 15 seconds:
   4. Optional: Read electricity price -> determine if cheap period active
   5. For each device (by priority):
      - Cheap grid mode + price OK? -> Turn ON (even without surplus)
+       (cheap_grid_soc: only while SOC >= the device soc_threshold)
      - Enough surplus + SOC OK + budget available? -> Turn ON
      - Surplus gone or SOC low? -> Turn OFF (respecting min-on-time)
   6. Startup Detection: If a washing machine starts -> protect the cycle
@@ -256,7 +271,7 @@ Every 15 seconds:
 ### Per Device
 | Entity | Type | Description |
 |--------|------|-------------|
-| `sensor.aurum_{slug}` | Sensor | Device state (on/off/manual_override/running/standby/waiting/done). For cheap_grid devices: includes scheduling_reason, cheap_period, starts_in attributes |
+| `sensor.aurum_{slug}` | Sensor | Device state (on/off/manual_override/running/standby/waiting/done). For price-aware devices (cheap_grid, cheap_grid_soc): includes scheduling_reason, price_mode, cheap_period, starts_in attributes |
 | `sensor.aurum_{slug}_power` | Sensor | Current power draw (W) |
 | `sensor.aurum_{slug}_runtime` | Sensor | Runtime today (min) |
 | `sensor.aurum_{slug}_energy_today` | Sensor | Energy consumed today (Wh, TOTAL_INCREASING — HA Energy Dashboard compatible) |

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-08-22
+
+### Added
+- **SOC-gated cheap-grid price mode (`cheap_grid_soc`)** — A third per-device `price_mode` alongside `solar_only` and `cheap_grid`. It behaves like `cheap_grid` (runs on PV surplus *or* cheap grid price), except that the price-based start is only granted while battery SOC is at or above that device's `soc_threshold`. Below the threshold the device falls back to `solar_only` behaviour: genuine grid-export surplus can still start it, a cheap price alone cannot. Background: on the plain `cheap_grid` path, `_should_turn_on` returns early on a cheap price *before* any SOC logic runs, so `soc_threshold` is silently never consulted for a price-driven start — a device could run on grid all night with the battery well below its configured reserve. `cheap_grid` is deliberately left unchanged (a water heater that should always take cheap power is a legitimate use case); `cheap_grid_soc` is the opt-in for users who want price-awareness *and* a battery floor. The Max Price number entity and the sensor pricing attributes are created for the new mode too, and the device sensor now reports which of the two price-aware modes is active. EN/DE strings added. Unit-tested.
+
+  Contributed by [@psecker](https://github.com/psecker) in [#21](https://github.com/cm-makes/aurum-ha/pull/21).
+
+### Fixed
+- **CI ran only a fraction of the test suite** — the `Unit Tests` workflow step invoked `pytest tests/test_devices.py`, so every other test module (advisor, PV gate, day-start-hour, persistence, stop-after-runtime, i18n, smoke, v1.11 features …) was collected by nobody. Now runs `pytest tests/` — 202 tests instead of 51.
+
+### Changed
+- **`max_price` help text** now names both price-aware modes instead of only `cheap_grid` (EN/DE).
+- Internal: the `cheap_grid` price-mode literal is replaced by the `PRICE_MODE_CHEAP_GRID` constant in `devices.py`, `number.py` and `sensor.py`, so producer and consumers can no longer drift (same treatment the `SCHED_REASON_*` strings got in 1.14.0).
+
 ## [1.14.1] - 2026-07-16
 
 ### Fixed
