@@ -139,6 +139,7 @@ class DeviceManager:
 
             # Behavior
             "interruptible": cfg.get("interruptible", True),
+            "ignore_low_soc": cfg.get("ignore_low_soc", False),
             "manual_override_entity": cfg.get("manual_override_entity"),
             "muss_heute_entity": cfg.get("muss_heute_entity"),
             "disable_entity": cfg.get("disable_entity"),
@@ -238,9 +239,15 @@ class DeviceManager:
         # None when budget module is not active.
         device_budget_w = shared.get("device_budget_w")
 
-        # ── Emergency: battery charging → turn off everything ────
+        # ── Emergency: battery charging → turn off everything, except
+        # devices flagged ignore_low_soc, which skip this force-off and
+        # fall through to normal per-device evaluation below (so e.g. a
+        # cheap_grid device can still start on a fixed cheap-tariff window
+        # even while the battery itself is being protected) ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
+                if dev.get("ignore_low_soc"):
+                    continue
                 # Manual override → AURUM must not touch the device in ANY
                 # cycle, including this emergency (contract of the override
                 # switch). Keeps externally-driven cycles (e.g. an
@@ -262,8 +269,9 @@ class DeviceManager:
                 if self._is_device_on(dev):
                     self._turn_off(dev, now, excess, battery_soc,
                                    "battery_charging")
-            self._publish_device_states(shared, battery_soc)
-            return
+            if not any(dev.get("ignore_low_soc") for dev in self.devices):
+                self._publish_device_states(shared, battery_soc)
+                return
 
         # ── Control each device (priority-ordered) ───────────────
         available_excess = excess
@@ -271,6 +279,10 @@ class DeviceManager:
         newly_allocated = 0.0
 
         for dev in self.devices:
+            # Already force-stopped in the emergency block above — battery
+            # protection wins for devices that don't ignore it.
+            if battery_mode == MODE_CHARGING and not dev.get("ignore_low_soc"):
+                continue
             was_on = self._is_device_on(dev)
             dev["_cached_on"] = was_on
             actual_power = self._get_device_power(dev) if was_on else 0
@@ -420,10 +432,20 @@ class DeviceManager:
                 # exempt it from the budget cap (which reserves solar for
                 # battery charging), same as the grid-only case.
                 pv_gate = self._pv_gate_ok(dev, battery_soc, soc_threshold)
+                # ignore_low_soc: this device's schedule (e.g. a cheap_grid
+                # start on a fixed tariff window) must not depend on SOC at
+                # all. Without this, the budget module zeroes device_budget_w
+                # after sunset and only exempts devices whose SOC has fallen
+                # below their OWN soc_threshold — so a device with a high
+                # soc_threshold (e.g. water heater at 60%) is exempted most
+                # nights while one with a low soc_threshold (e.g. pool pump
+                # at 25%) stays capped and never reaches the cheap_grid
+                # check below, even though both are price_mode=cheap_grid.
                 budget_cap = (
                     device_budget_w is not None
                     and not in_grid_only_mode
                     and not pv_gate
+                    and not dev.get("ignore_low_soc")
                     and newly_allocated + dev["nominal_power"] > device_budget_w
                 )
                 if budget_cap:
@@ -1227,6 +1249,7 @@ class DeviceManager:
                 "priority": dev["priority"],
                 "force_started": dev.get("force_started", False),
                 "interruptible": dev["interruptible"],
+                "ignore_low_soc": dev.get("ignore_low_soc", False),
                 "scheduling_reason": dev.get("_scheduling_reason"),
                 "price_mode": dev.get("price_mode", "solar_only"),
                 "max_price": dev.get("max_price", 0),

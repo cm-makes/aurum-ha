@@ -147,7 +147,8 @@
           "condition_entity": "Bedingungs-Sensor (optional)",
           "condition_op": "Bedingung",
           "condition_value": "Grenzwert",
-          "day_start_hour": "Reset-Stunde (täglich)"
+          "day_start_hour": "Reset-Stunde (täglich)",
+          "ignore_low_soc": "Akku-SOC ignorieren"
         },
         "data_description": {
           "name": "Gib dem Gerät einen eindeutigen Namen, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'. Wird als Sensor-Name in Home Assistant angezeigt.",
@@ -179,7 +180,8 @@
           "min_off_time": "Wie lange muss das Gerät mindestens ausgeschaltet bleiben (Sekunden)? Nützlich für Kompressoren, Lüfter mit Nachlauf. Standard: 60s.",
           "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
           "condition_value": "Schwellwert für den Bedingungs-Sensor.",
-          "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf."
+          "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf.",
+          "ignore_low_soc": "Macht den Zeitplan dieses Geräts vollständig unabhängig vom Akkustand: umgeht sowohl AURUMs Notabschaltung bei niedrigem Akkustand als auch die nächtliche PV-Budgetdeckelung, die ein Gerät sonst erst befreit, wenn der SOC unter dessen EIGENEN „Minimaler Akkustand\" fällt – Geräte mit niedrigem Schwellwert bleiben dadurch in Cheap-Grid-Nächten viel häufiger blockiert als Geräte mit hohem Schwellwert. Für ein Cheap-Grid-Gerät (z.B. Poolpumpe), das zuverlässig im günstigen Tarif-Fenster laufen muss, unabhängig vom Akkustand. Standard: aus."
         }
       },
       "edit_device_select": {
@@ -223,7 +225,8 @@
           "condition_entity": "Bedingungs-Sensor (optional)",
           "condition_op": "Bedingung",
           "condition_value": "Grenzwert",
-          "day_start_hour": "Reset-Stunde (täglich)"
+          "day_start_hour": "Reset-Stunde (täglich)",
+          "ignore_low_soc": "Akku-SOC ignorieren"
         },
         "data_description": {
           "name": "Eindeutiger Gerätename, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'.",
@@ -252,7 +255,8 @@
           "min_off_time": "Mindestzeit die das Gerät ausgeschaltet bleibt (Sekunden).",
           "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
           "condition_value": "Schwellwert für den Bedingungs-Sensor.",
-          "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf."
+          "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf.",
+          "ignore_low_soc": "Umgeht die Notabschaltung bei niedrigem Akkustand und die nächtliche Budgetdeckelung, damit der Cheap-Grid-Zeitplan dieses Geräts nicht vom SOC abhängt. Standard: aus."
         }
       },
       "remove_device": {
