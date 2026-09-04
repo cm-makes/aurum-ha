@@ -64,6 +64,7 @@ from .const import (
     CONF_DEV_STOP_AFTER_RUNTIME,
     CONF_DEV_DAY_START_HOUR,
     CONF_DEV_INTERRUPTIBLE,
+    CONF_DEV_IGNORE_LOW_SOC,
     CONF_DEV_RESIDUAL_POWER,
     CONF_DEV_CONDITION_ENTITY,
     CONF_DEV_CONDITION_OP,
@@ -411,6 +412,19 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
         vol.Optional(
             CONF_DEV_INTERRUPTIBLE,
             default=d.get(CONF_DEV_INTERRUPTIBLE, True),
+        ): selector.BooleanSelector(),
+        # Makes this device's schedule fully SOC-independent: bypasses both
+        # the emergency battery-protection shutoff (SOC <= min_soc, which
+        # normally force-stops/blocks every device) and the nightly PV
+        # budget cap (which otherwise only exempts a device once SOC falls
+        # below ITS OWN soc_threshold — so a high-soc_threshold device gets
+        # exempted most nights while a low-soc_threshold one rarely does,
+        # even on the same price_mode). Intended for cheap_grid/
+        # cheap_grid_soc devices that must reliably start on a fixed cheap
+        # tariff window regardless of battery state.
+        vol.Optional(
+            CONF_DEV_IGNORE_LOW_SOC,
+            default=d.get(CONF_DEV_IGNORE_LOW_SOC, False),
         ): selector.BooleanSelector(),
         # Note: manual_override and muss_heute are now auto-created as
         # switch entities (switch.aurum_{slug}_override / _muss_heute).

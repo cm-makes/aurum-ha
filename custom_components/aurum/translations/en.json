@@ -147,7 +147,8 @@
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
           "condition_value": "Condition limit",
-          "day_start_hour": "Daily reset hour"
+          "day_start_hour": "Daily reset hour",
+          "ignore_low_soc": "Ignore battery SOC"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'. This name will appear as a sensor in Home Assistant.",
@@ -179,7 +180,8 @@
           "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s.",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
           "condition_value": "Threshold for the run condition sensor.",
-          "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
+          "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset.",
+          "ignore_low_soc": "Make this device's schedule fully independent of battery SOC: bypasses both AURUM's emergency low-battery shutoff and the nightly PV budget cap, which otherwise only exempts a device once SOC falls below its OWN 'Minimum battery level' above — so devices with a low threshold stay blocked on cheap-grid nights far more often than ones with a high threshold. Use for a cheap-grid device (e.g. pool pump) that must reliably run in its cheap tariff window no matter the battery state. Default: off."
         }
       },
       "edit_device_select": {
@@ -223,7 +225,8 @@
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
           "condition_value": "Condition limit",
-          "day_start_hour": "Daily reset hour"
+          "day_start_hour": "Daily reset hour",
+          "ignore_low_soc": "Ignore battery SOC"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'.",
@@ -252,7 +255,8 @@
           "min_off_time": "Minimum time the device stays off after being turned off (seconds).",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
           "condition_value": "Threshold for the run condition sensor.",
-          "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
+          "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset.",
+          "ignore_low_soc": "Bypasses the emergency low-battery shutoff and the nightly budget cap so this device's cheap-grid schedule doesn't depend on SOC. Default: off."
         }
       },
       "remove_device": {
