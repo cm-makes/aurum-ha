@@ -420,10 +420,20 @@ class DeviceManager:
                 # exempt it from the budget cap (which reserves solar for
                 # battery charging), same as the grid-only case.
                 pv_gate = self._pv_gate_ok(dev, battery_soc, soc_threshold)
+                # A price-granted (cheap_grid) start runs on grid, not on
+                # solar, so the PV budget has no say either. Without this
+                # exemption the after-sunset budget (0 W, not None) capped
+                # every cheap_grid device overnight unless its OWN SOC had
+                # dropped below its OWN soc_threshold — so a cautious low
+                # threshold silently disabled cheap-grid runs while a high
+                # one enabled them. Found by @psecker in #25.
+                price_grant = self._price_grant(
+                    dev, battery_soc, soc_threshold)
                 budget_cap = (
                     device_budget_w is not None
                     and not in_grid_only_mode
                     and not pv_gate
+                    and not price_grant
                     and newly_allocated + dev["nominal_power"] > device_budget_w
                 )
                 if budget_cap:
@@ -547,6 +557,28 @@ class DeviceManager:
             return False
         return dev["runtime_today_s"] >= target_min * 60
 
+    def _price_grant(self, dev, battery_soc, soc_threshold):
+        """True when a cheap-grid start is currently granted for this device.
+
+        Single definition of the price-based start condition, shared by
+        _should_turn_on (the grant itself) and the budget cap in update()
+        (which must not block it: a price-granted start runs on grid, not
+        on solar, so the PV budget – which reserves solar for battery
+        charging – has no say). cheap_grid_soc additionally requires SOC
+        at/above the device soc_threshold; unknown SOC (<0) is treated as
+        OK, matching the existing grant semantics.
+        """
+        if dev.get("price_mode") not in (
+                PRICE_MODE_CHEAP_GRID, PRICE_MODE_CHEAP_GRID_SOC):
+            return False
+        if not self.pricing or self.pricing.should_run_on_grid(dev) is not True:
+            return False
+        return (
+            dev.get("price_mode") != PRICE_MODE_CHEAP_GRID_SOC
+            or battery_soc < 0
+            or battery_soc >= soc_threshold
+        )
+
     def _pv_gate_ok(self, dev, battery_soc, soc_threshold):
         """True when the raw-PV gate is satisfied for this device.
 
@@ -595,18 +627,9 @@ class DeviceManager:
         # cheap_grid_soc additionally requires SOC >= soc_threshold before
         # a price-based start is granted; below threshold it falls through
         # to the PV-gate/surplus checks below (same as solar_only).
-        if (dev.get("price_mode") in (
-                PRICE_MODE_CHEAP_GRID, PRICE_MODE_CHEAP_GRID_SOC)
-                and self.pricing
-                and self.pricing.should_run_on_grid(dev) is True):
-            price_soc_ok = (
-                dev.get("price_mode") != PRICE_MODE_CHEAP_GRID_SOC
-                or battery_soc < 0
-                or battery_soc >= soc_threshold
-            )
-            if price_soc_ok:
-                dev["_scheduling_reason"] = SCHED_REASON_CHEAP_GRID
-                return True
+        if self._price_grant(dev, battery_soc, soc_threshold):
+            dev["_scheduling_reason"] = SCHED_REASON_CHEAP_GRID
+            return True
 
         # ── PV-power gate: raw solar above threshold + healthy SOC ──
         # Runs on actual PV generation regardless of computed surplus, so a

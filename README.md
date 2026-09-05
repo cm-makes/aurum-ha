@@ -181,6 +181,12 @@ A device with `cheap_grid` mode turns on when **any** of these is true:
 
 Debounce timers still apply to prevent flapping on price edges.
 
+A price-based start (2–4) is independent of the daily PV budget: the budget
+reserves *solar* for battery charging, and a cheap-grid run uses grid, so an
+exhausted budget — including the always-zero budget after sunset — never
+blocks it. (Before 1.15.1 it did, unless the device's own `soc_threshold`
+happened to be above the current SOC.)
+
 **`cheap_grid` vs. `cheap_grid_soc`:** in plain `cheap_grid`, conditions 2–4
 start the device regardless of battery SOC — the device's `soc_threshold` is
 never consulted on the price path. That is the right behaviour for a load

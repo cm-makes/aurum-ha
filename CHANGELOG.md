@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-09-05
+
+### Fixed
+- **PV budget cap blocked cheap-grid starts overnight** — The budget module returns `device_budget_w = 0` after sunset (a real zero, not `None`), so the cap in `DeviceManager.update()` stayed active all night. It sits *before* `_should_turn_on`, so a `cheap_grid` device never reached its price check unless it was exempt via the grid-only fallback — which is `battery_soc < soc_threshold`, the device's *own* threshold. Result: a water heater at `soc_threshold: 60` was exempt most nights (battery usually below 60 %) and ran on cheap grid as documented, while a pool pump at `soc_threshold: 25` on the identical `cheap_grid` mode was capped and silently never started in a live cheap-tariff window. The cautious setting disabled the feature; the generous one enabled it. Now a live price grant exempts the device from the budget cap — the same treatment `deadline_forced` and the PV gate already had. The budget reserves *solar* for the battery; a price-granted run uses grid, so the budget has no say in it. The exemption is scoped to a live grant: with an expensive price, or unavailable price data, or in `solar_only` mode, the cap applies exactly as before, and `cheap_grid_soc` keeps its battery floor (no grant below the device threshold). The price predicate is now a single helper, `_price_grant`, shared by the grant itself and the cap so the two can't drift. 13 new tests; the three bug tests fail on 1.15.0.
+
+  Found and diagnosed by [@psecker](https://github.com/psecker) in [#25](https://github.com/cm-makes/aurum-ha/pull/25). Thank you.
+
 ## [1.15.0] - 2026-08-22
 
 ### Added
