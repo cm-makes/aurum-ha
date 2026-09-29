@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-09-29
+
+### Fixed
+- **Raw translation keys in the options menu and the price-mode dropdown** — The *Configure* menu showed `menu_edit_energy`, `menu_add_device`, … and the device dialog's *Price mode* showed `price_mode_solar_only`, `price_mode_cheap_grid`, `price_mode_cheap_grid_soc` instead of readable text, in every language. HA's frontend looks up select-option translations by the option's *value* (`add_device`, `solar_only`, …), but the `action` and `price_mode` entries in `strings.json` / `en.json` / `de.json` were keyed by the option's *label*, so the lookup missed and the label was shown as-is. `condition_op` was keyed correctly, which is why its dropdown always worked. The translation keys now match the values; no config or behaviour changes. A new test reads every `SelectSelector` from `config_flow.py` and asserts its translation keys equal its option values, in all three files.
+
 ## [1.15.1] - 2026-09-05
 
 ### Fixed
