@@ -278,17 +278,17 @@
   "selector": {
     "action": {
       "options": {
-        "menu_edit_energy": "Energie- & Batterie-Einstellungen bearbeiten",
-        "menu_add_device": "Gerät hinzufügen",
-        "menu_edit_device": "Gerät bearbeiten",
-        "menu_remove_device": "Gerät entfernen"
+        "settings": "Energie- & Batterie-Einstellungen bearbeiten",
+        "add_device": "Gerät hinzufügen",
+        "edit_device": "Gerät bearbeiten",
+        "remove_device": "Gerät entfernen"
       }
     },
     "price_mode": {
       "options": {
-        "price_mode_solar_only": "Nur Solar – läuft ausschließlich mit PV-Überschuss (Standard)",
-        "price_mode_cheap_grid": "Solar + günstiges Netz – läuft auch, wenn der Strom günstig ist, selbst ohne Solar",
-        "price_mode_cheap_grid_soc": "Solar + günstiges Netz (SOC-abhängig) – läuft auch bei günstigem Netzstrom, aber nur solange der Akku-SOC mindestens dem SOC-Schwellwert dieses Geräts entspricht"
+        "solar_only": "Nur Solar – läuft ausschließlich mit PV-Überschuss (Standard)",
+        "cheap_grid": "Solar + günstiges Netz – läuft auch, wenn der Strom günstig ist, selbst ohne Solar",
+        "cheap_grid_soc": "Solar + günstiges Netz (SOC-abhängig) – läuft auch bei günstigem Netzstrom, aber nur solange der Akku-SOC mindestens dem SOC-Schwellwert dieses Geräts entspricht"
       }
     },
     "condition_op": {

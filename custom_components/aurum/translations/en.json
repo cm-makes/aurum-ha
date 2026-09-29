@@ -278,17 +278,17 @@
   "selector": {
     "action": {
       "options": {
-        "menu_edit_energy": "Edit energy & battery settings",
-        "menu_add_device": "Add a device",
-        "menu_edit_device": "Edit a device",
-        "menu_remove_device": "Remove a device"
+        "settings": "Edit energy & battery settings",
+        "add_device": "Add a device",
+        "edit_device": "Edit a device",
+        "remove_device": "Remove a device"
       }
     },
     "price_mode": {
       "options": {
-        "price_mode_solar_only": "Solar only – runs only on PV surplus (default)",
-        "price_mode_cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar",
-        "price_mode_cheap_grid_soc": "Solar + cheap grid (SOC-gated) – also runs on cheap grid, but only while battery SOC is at or above this device's SOC threshold"
+        "solar_only": "Solar only – runs only on PV surplus (default)",
+        "cheap_grid": "Solar + cheap grid – also runs when electricity is cheap, even without solar",
+        "cheap_grid_soc": "Solar + cheap grid (SOC-gated) – also runs on cheap grid, but only while battery SOC is at or above this device's SOC threshold"
       }
     },
     "condition_op": {
