@@ -100,10 +100,19 @@ Du landest auf dem Standard-Dashboard „Übersicht".
 
 Für preisbewusstes Scheduling (günstigen Netzstrom nutzen, wenn wenig PV):
 
-- **Tibber:** Integration „Tibber" → API-Token aus tibber.com.
+- **Tibber:** HACS-Integration [„Tibber Prices"](https://github.com/jpawlowski/hass.tibber_prices)
+  (empfohlen) – liefert Preis, Preisstufe, Bestpreis-Zeitraum und Countdown.
+  Die eingebaute HA-Integration „Tibber" liefert nur einen Preis-Sensor.
 - **aWATTar:** HACS-Integration „aWATTar".
 - **Nord Pool:** HACS-Integration „Nord Pool".
 - **EPEX Spot:** HACS-Integration „EPEX Spot Price".
+
+> ⚠️ **Einheit prüfen:** AURUM erwartet den Strompreis in **ct/kWh**. Viele
+> Sensoren (auch die eingebaute Tibber-Integration) liefern **EUR/kWh**, also
+> z. B. `0.28` statt `28`. Dann gilt jeder Preis als „günstig“ und das Gerät
+> läuft rund um die Uhr mit Netzstrom. Abhilfe: Template-Sensor mit `× 100`,
+> oder beim Gerät den Maximalpreis auf `0` lassen und nur Preisstufe /
+> Bestpreis-Zeitraum nutzen.
 
 ---
 
@@ -125,9 +134,10 @@ Nur falls AURUM noch fehlt (z. B. bei einer Standard-HAOS-Installation):
 
 ### 4b. AURUM über HACS installieren
 
-1. HACS → „Integrationen" → ⋮ → „Benutzerdefinierte Repositories".
-2. URL `https://github.com/cm-makes/aurum-ha`, Kategorie „Integration" → Hinzufügen.
-3. AURUM suchen, Download, HA neu starten.
+AURUM ist im HACS-Standard-Store – kein benutzerdefiniertes Repository nötig.
+
+1. HACS öffnen → nach **AURUM** suchen.
+2. **Download**, dann HA neu starten.
 
 **Alternativ – eine einzige Zeile für alles (HACS + AURUM + Theme + Dashboard):**
 
@@ -169,6 +179,7 @@ Pro Gerät:
 | Switch-Entität | `switch.shelly_waschmaschine` |
 | Nominalleistung | `2200` (W) |
 | Priorität | `50` (0-100, höher = wichtiger) |
+| Preis-Modus | `Nur Solar` (Standard) – oder `Solar + günstiges Netz` |
 
 **Empfohlene Priorities:**
 - Warmwasser / Heizstab: **90**
@@ -177,6 +188,13 @@ Pro Gerät:
 - Spül-/Waschmaschine: **50**
 - Pool-Pumpe: **30**
 - E-Bike laden: **20**
+
+**Preis-Modus** (nur mit Strompreis-Sensor aus Schritt 3d):
+- **Nur Solar** – läuft ausschließlich mit PV-Überschuss.
+- **Solar + günstiges Netz** – läuft zusätzlich, wenn der Strom günstig ist,
+  auch nachts und unabhängig vom Akku (z. B. Heizstab).
+- **Solar + günstiges Netz (SOC-abhängig)** – wie oben, aber nur solange der
+  Akku über der SOC-Schwelle des Geräts liegt.
 
 ---
 
@@ -216,12 +234,3 @@ erscheint) und folgt deinem HA-Theme (Deutsch bei deutscher HA-Oberfläche).
 
 - GitHub Issues: https://github.com/cm-makes/aurum-ha/issues
 - GitHub Discussions: https://github.com/cm-makes/aurum-ha/discussions
-
----
-
-## Was kommt als Nächstes
-
-Die nächste Version (Phase 2 des P&P-Plans) bringt einen **AURUM Onboarding
-Wizard** als eigenes Panel in der HA-Seitenleiste, der die Schritte 3-6 zu
-einem ≤10-Minuten-Klick-Flow zusammenfasst – inkl. Auto-Discovery von
-Invertern und Smart Plugs.

@@ -5,7 +5,7 @@
 <h3 align="center">Automatically route your PV surplus to household devices.<br>Zero YAML. Battery-aware. Forecast-smart. Price-aware.</h3>
 
 <p align="center">
-  <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Compatible-41BDF5.svg" alt="HACS"></a>
+  <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg" alt="HACS Default"></a>
   <a href="https://github.com/cm-makes/aurum-ha/releases"><img src="https://img.shields.io/github/v/release/cm-makes/aurum-ha?style=flat" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
   <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg" alt="HA Version"></a>
@@ -31,7 +31,7 @@
 <p align="center">
   <img src="docs/dashboard.png" alt="AURUM Dashboard" width="900">
   <br>
-  <em>Live dashboard with battery gauge, device states, runtimes, and diagnostics</em>
+  <em>Built-in AURUM sidebar panel: the Advisor banner, live energy chips, and one card per device</em>
 </p>
 
 ---
@@ -79,7 +79,7 @@
 2. Search for **AURUM** and click **Download**
 3. Restart Home Assistant
 
-> **Until [HACS PR #6653](https://github.com/hacs/default/pull/6653) is merged**, AURUM isn't in the HACS default store yet. As a fallback: HACS → ⋮ → *Custom repositories* → add `https://github.com/cm-makes/aurum-ha` as **Integration**, then continue with step 2.
+AURUM is in the HACS default store — no custom repository needed.
 
 ### Manual
 
@@ -127,9 +127,9 @@ In the integration options (Configure), click **Add a device** and fill in:
 > battery-charging power may be diverted to devices.
 
 <p align="center">
-  <img src="docs/device-config.png" alt="AURUM Device Configuration" width="400">
+  <img src="docs/device-config.png" alt="AURUM Device Configuration" width="800">
   <br>
-  <em>Device configuration — all settings via UI, no YAML needed</em>
+  <em>Device configuration — all settings via UI, including price mode and max price. No YAML needed</em>
 </p>
 
 ### PV Forecast Budget (optional)
@@ -161,6 +161,14 @@ In **Configure > Energy & Battery**, set one or more of these:
 | `cheap_period_starts_in_entity` | Minutes until next cheap period (for dashboard countdown) | `sensor.tibber_bestpreis_startet_in` |
 
 > All fields are optional. You only need one price source — AURUM checks them in order: max_price threshold → cheap period → price level.
+
+> ⚠️ **Unit trap: `price_entity` must be in ct/kWh.** AURUM compares it
+> against `max_price` as-is, without converting. Many price sensors —
+> including the native Home Assistant *Tibber* integration — report
+> **EUR/kWh** (e.g. `0.28`), which makes every price look cheap, so the
+> device runs on grid around the clock. Either wrap the sensor in a template
+> sensor that multiplies by 100, or leave `max_price` at `0` and rely on the
+> price level / cheap period instead.
 
 **Step 2: Configure devices**
 
@@ -202,7 +210,7 @@ device to `cheap_grid_soc` when you want price-awareness *and* a battery
 floor; leave it on `cheap_grid` when price should always win.
 
 **Works with:**
-- [Tibber Prices](https://github.com/jpawlowski/hass.tibber_prices) — provides best price periods, countdown, price levels
+- [Tibber Prices](https://github.com/jpawlowski/hass.tibber_prices) — provides best price periods, countdown, price levels (recommended over the native Tibber integration, which only supplies a price sensor, in EUR/kWh)
 - [Nordpool](https://github.com/custom-components/nordpool) — price sensor + price level
 - [aWATTar](https://github.com/home-assistant-libs/awattar) — hourly price data
 - [EPEX Spot](https://github.com/mampfes/hacs_epex_spot) — day-ahead prices
@@ -410,6 +418,8 @@ The file contains: energy values, battery state, budget info, device states, ove
 - [x] Battery-priority surplus mode
 - [x] Per-device run conditions (sensor prerequisite)
 - [x] Per-device daily reset hour
+- [x] Advisor: "Current Decision" sensor explaining what AURUM does and why
+- [x] SOC-gated cheap-grid price mode
 - [ ] Cost tracking (import/export/autarky per device)
 - [ ] Multi-battery support
 
