@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.3] - 2026-11-05
+
+### Changed
+- **Ready for Home Assistant 2026.11 and the built-in Marketplace** — Nothing in 2026.11 breaks AURUM; this release removes the two things that would otherwise warn or age badly. `manifest.json` now declares `"categories": ["energy.solar_batteries"]`: the Marketplace (HACS is built into HA as of 2026.11) browses integrations by category and warns about a manifest without one. The hub's device info is now built with `DeviceInfo(...)` keyword fields instead of a plain dict: `DeviceInfo` became a dataclass in 2026.11 and dict-style access is slated for deprecation. The keyword form works on every supported HA version (min. 2024.1). No config or behaviour changes.
+
 ## [1.15.2] - 2026-11-04
 
 ### Fixed

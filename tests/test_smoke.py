@@ -128,6 +128,14 @@ class TestManifest:
         missing = required - manifest.keys()
         assert not missing, f"manifest.json missing keys: {missing}"
 
+    def test_manifest_has_valid_categories(self):
+        """HA 2026.11 Marketplace browses by category and warns without one."""
+        manifest = _load_json(MANIFEST_PATH)
+        categories = manifest.get("categories")
+        assert isinstance(categories, list) and 1 <= len(categories) <= 3
+        assert len(set(categories)) == len(categories)
+        assert all(re.fullmatch(r"[a-z_]+(\.[a-z_]+)?", c) for c in categories)
+
     def test_manifest_domain_matches_const(self):
         manifest = _load_json(MANIFEST_PATH)
         assert manifest["domain"] == _const_value(CONST_PATH, "DOMAIN")
@@ -293,3 +301,26 @@ class TestTranslations:
                     f"{lang_file.name} / {flow_class}: missing {sorted(missing)}"
                 )
         assert not problems, "\n".join(problems)
+
+
+class TestHubDeviceInfo:
+    """DeviceInfo is a dataclass since HA 2026.11: keyword fields only."""
+
+    def test_hub_device_info_is_keyword_device_info(self):
+        tree = ast.parse((COMPONENT_DIR / "sensor.py").read_text(encoding="utf-8"))
+        func = next(
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef) and n.name == "_hub_device_info"
+        )
+        ret = next(n for n in ast.walk(func) if isinstance(n, ast.Return))
+        call = ret.value
+        assert isinstance(call, ast.Call) and getattr(call.func, "id", None) == "DeviceInfo", (
+            "_hub_device_info must return DeviceInfo(...), not a plain dict"
+        )
+        assert not call.args, "DeviceInfo({...}) raises TypeError on HA 2026.11"
+        allowed = {
+            "identifiers", "name", "manufacturer", "model", "sw_version",
+            "hw_version", "serial_number", "suggested_area", "entry_type",
+            "configuration_url", "connections", "model_id", "via_device",
+        }
+        assert {k.arg for k in call.keywords} <= allowed
