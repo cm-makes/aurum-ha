@@ -23,6 +23,7 @@ _HA_SUBMODULES = [
     "homeassistant.exceptions",
     "homeassistant.helpers",
     "homeassistant.helpers.entity_registry",
+    "homeassistant.helpers.device_registry",
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.update_coordinator",
     "homeassistant.helpers.selector",
@@ -44,6 +45,8 @@ sys.modules["homeassistant.core"].callback = lambda f: f
 sys.modules["homeassistant.config_entries"].ConfigEntry = type("ConfigEntry", (), {})
 sys.modules["homeassistant.exceptions"].ConfigEntryNotReady = type(
     "ConfigEntryNotReady", (Exception,), {})
+
+sys.modules["homeassistant.helpers.device_registry"].DeviceInfo = dict
 
 huc = sys.modules["homeassistant.helpers.update_coordinator"]
 huc.DataUpdateCoordinator = type("DataUpdateCoordinator", (), {})

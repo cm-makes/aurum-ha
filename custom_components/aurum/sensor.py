@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -48,13 +49,15 @@ def _device_icon(name: str) -> str:
 
 def _hub_device_info(entry_id):
     """Return device info for the AURUM hub."""
-    return {
-        "identifiers": {(DOMAIN, "aurum_hub")},
-        "name": "AURUM",
-        "manufacturer": "AURUM Community",
-        "model": "Solar Surplus Optimizer",
-        "sw_version": VERSION,
-    }
+    # Keyword form works both where DeviceInfo is a TypedDict (< 2026.11)
+    # and where it is a dataclass (>= 2026.11, dict access deprecated).
+    return DeviceInfo(
+        identifiers={(DOMAIN, "aurum_hub")},
+        name="AURUM",
+        manufacturer="AURUM Community",
+        model="Solar Surplus Optimizer",
+        sw_version=VERSION,
+    )
 
 
 async def async_setup_entry(
