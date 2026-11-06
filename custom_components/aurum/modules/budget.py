@@ -26,7 +26,7 @@ Source: HELIOS BudgetManager (v1.3.2) -> 1:1 port
 import logging
 from datetime import datetime
 
-from .helpers import get_float
+from .helpers import get_float, get_energy_kwh
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ class BudgetManager:
         hourly_forecast = self._get_hourly_forecast()
         pv_actual_kwh = self._get_pv_today_kwh()
 
-        remaining_kwh = get_float(
+        remaining_kwh = get_energy_kwh(
             self.hass, self.pv_forecast_entity, default=None)
 
         # Fill shared state (always, even if budget disabled)
@@ -264,7 +264,7 @@ class BudgetManager:
             return None, info
 
         # Get remaining PV forecast
-        remaining_kwh = get_float(
+        remaining_kwh = get_energy_kwh(
             self.hass, self.pv_forecast_entity, default=None)
         if remaining_kwh is None:
             info["reason"] = "no_forecast"
@@ -593,8 +593,20 @@ class BudgetManager:
 
         unit = self.hass.get_state(
             self.pv_actual_today_entity, attribute="unit_of_measurement")
+        if unit == "MWh":
+            # The config flow accepts MWh (e.g. lifetime counters shown in
+            # MWh); continue in kWh so the lifetime detection (>100) works.
+            raw = raw * 1000.0
+            unit = "kWh"
         is_wh = (unit == "Wh" or (unit is None and raw > 500))
 
+        if (self._pv_total_midnight is not None
+                and self._pv_total_midnight > 0
+                and raw > self._pv_total_midnight * 100):
+            # Snapshot from another unit (1.15.3 kept MWh counters in MWh):
+            # no daily production is 100x the lifetime total. Re-snapshot.
+            self._pv_total_midnight = raw
+            return 0.0
         if self._pv_total_midnight is not None:
             daily_val = raw - self._pv_total_midnight
             if daily_val < 0:
@@ -628,9 +640,9 @@ class BudgetManager:
         if actual_kwh is None or actual_kwh < 0.1:
             return 1.0
 
-        total_forecast_kwh = get_float(
+        total_forecast_kwh = get_energy_kwh(
             self.hass, self.pv_forecast_today_entity, default=None)
-        remaining_kwh = get_float(
+        remaining_kwh = get_energy_kwh(
             self.hass, self.pv_forecast_entity, default=None)
         if total_forecast_kwh is None or remaining_kwh is None:
             return 1.0

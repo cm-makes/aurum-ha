@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.4] - 2026-11-06
+
+Fixes from the audit of 2026-11-05 (`docs/CODE_AUDIT_2026-11-05.md`). Every fix has a regression test in `tests/test_audit_2026_11.py`; the bug tests fail on 1.15.3.
+
+### Fixed
+- **Deadline force-start ignored the runtime already done and then held the device on grid until midnight** — `_deadline_urgent` sized the start window from the full *Estimated runtime* and never looked at the runtime. A device that had already run its target on PV was still force-started at the deadline, and its force-start immunity only ended at the next daily reset. Without *Stop after runtime* (the default) *Must run today* never reset either, so this repeated every day. Reproduced: a 1.5 kW device that ran 3 h on PV was force-started at 16:55 and ran on grid until 00:10, about 11 kWh. *Must run today* now works as a job for regular devices: the runtime counted is the runtime since the switch was turned on (PV runs count; an earlier load or the previous *Daily reset hour* cycle does not). The deadline window only covers what is still missing; once the job is done, *Must run today* resets (with or without *Stop after runtime*) and the force-start immunity ends, as it does when you switch *Must run today* off. An open job keeps its progress across the daily reset and across a restart. With *Stop after runtime* the daily cap wins: the window covers whichever is smaller, the job or the daily remainder, and a job switched on after today's cap was reached runs in the next daily cycle. Startup-detection devices are unchanged: their deadline is about the pending program.
+- **Startup detection paused a program that was still running after a *max runtime* finish** — the default *Max runtime* is 3 h, shorter than many eco programmes. On that finish the device went straight back to standby monitoring with the plug on, saw the still-running program as a new start and switched the plug off mid-cycle. After a *max runtime* finish, detection now waits until the power has stayed at standby for *Finish time* (needs a power sensor; quiet time already seen before the finish counts, and the hold ends if the plug is switched off). After a normal smart finish the next program is detected at once, as before. Not covered: a smart finish that fires too early during a long low-power phase (e.g. a dishwasher's passive drying); set *Finish time* longer than the appliance's longest quiet phase.
+- **Battery priority could not see battery discharge, so running devices drained the battery down to minimum SOC** — with *Battery priority* on, only grid power counted. A hybrid inverter holds grid near 0 W by discharging, so a device started on export kept running after sunset until the battery hit `min_soc`. Discharge now counts as a deficit in this mode (charge power still does not count as surplus). Without battery power sensors AURUM still cannot see discharge; the README now says so.
+- **A running cheap-grid or PV-gate device lost its scheduling reason at the daily reset and on restart** — the reason was cleared at the daily reset and not persisted, so the device was then treated as a plain surplus run and shed (and possibly restarted). The reason is now kept while the device is on, persisted, and restored only if the switch is still on after the restart. A restart across the daily boundary also no longer restores yesterday's `force_started`.
+- **Power, energy and price sensors in other units were read as W / kWh / ct** — the config flow accepted kW, MW, Wh and MWh sensors, but the runtime used the raw number, so a kW grid sensor made the surplus 1000x too small. AURUM now converts by `unit_of_measurement`: kW/MW/mW → W, Wh/MWh → kWh (forecast and PV-today sensors), and **EUR/kWh or €/kWh → ct/kWh** (the native Tibber integration). Sensors without a unit are used as-is, as before.
+
+### Known limitations
+- A legacy *Must run today* entity (input_boolean) that is briefly `unavailable` is read as off for that cycle, which restarts the job count.
+- A device that is already on when the deadline window opens is still treated as a surplus run until it is shed; it is then force-started (unchanged from 1.15.3).
+
+### Upgrade note
+- If you followed the old advice and wrapped your EUR price sensor in a template that multiplies by 100, check the wrapper's unit: with `ct/kWh` (or no unit) nothing changes; if it still says `EUR/kWh`, AURUM now scales it a second time (28 → 2800 ct). Set the unit to `ct/kWh`, or point AURUM at the original EUR/kWh sensor.
+- The AURUM price sensor of EUR/kWh users now shows ct (e.g. `28` instead of `0.28`), so its history steps by 100x at the upgrade.
+
 ## [1.15.3] - 2026-11-05
 
 ### Changed

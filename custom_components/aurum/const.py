@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.15.3"
+VERSION = "1.15.4"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -26,8 +26,10 @@ CONF_UPDATE_INTERVAL = "update_interval"
 # Battery-priority surplus semantics (community request, discussion #9):
 #   False (default/legacy): excess = -grid - battery_power_net
 #     → battery charging power counts as redirectable device surplus
-#   True: excess = -grid
-#     → batteries charge first; only genuine grid export is device surplus
+#   True: excess = -grid - max(0, battery_power_net)
+#     → batteries charge first; only genuine grid export is device surplus,
+#       and battery discharge counts as a deficit (since 1.15.4). Without
+#       battery power sensors: excess = -grid
 CONF_BATTERY_PRIORITY = "battery_priority"
 
 # ── Config keys: Notifications ──────────────────────────────────

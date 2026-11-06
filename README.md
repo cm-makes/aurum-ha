@@ -115,7 +115,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **SOC threshold** | Device only runs when battery is above this level |
 | **Startup detection** | Enable for appliances with programs (washers, dishwashers). AURUM keeps the plug on in standby, detects when you press Start, pauses immediately, and resumes when PV surplus is sufficient. If a deadline is set and PV never arrives, AURUM starts on grid power as a fallback. |
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
-| **Deadline** | Time by which the device must have run (e.g. `18:00`) |
+| **Deadline** | Time by which the device must have run (e.g. `18:00`). Only active while the device's *Must run today* switch is on. Regular devices: AURUM starts the device on grid just in time to reach *Estimated runtime* by the deadline, counting the runtime since *Must run today* was switched on (PV runs count); once that is reached, *Must run today* resets. With *Stop after runtime* the daily cap wins. With *Startup detection*, the deadline is sized for the pending program and *Must run today* resets when that program finishes. |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
 | **Run condition sensor** | Optional prerequisite: a sensor that must be **below** / **above** a limit for the device to run (e.g. water heater only while `sensor.boiler_temp` is below `55`). Blocks all start paths; an unavailable sensor fails open. |
 | **Daily reset hour** | Hour (0–23) when this device's runtime counter resets. `0` = midnight (default). Set to `9` so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight. |
@@ -123,8 +123,10 @@ In the integration options (Configure), click **Add a device** and fill in:
 
 > **Battery priority** (in *Configure → Energy & Battery*) is a global toggle:
 > when enabled, only genuine grid **export** counts as surplus for devices, so
-> the battery charges first. Off (default) keeps the previous behaviour where
-> battery-charging power may be diverted to devices.
+> the battery charges first, and battery **discharge** counts as a deficit, so
+> a running device is shed once the battery starts feeding it (this needs the
+> battery charge/discharge power sensors). Off (default) keeps the previous
+> behaviour where battery-charging power may be diverted to devices.
 
 <p align="center">
   <img src="docs/device-config.png" alt="AURUM Device Configuration" width="800">
@@ -162,13 +164,17 @@ In **Configure > Energy & Battery**, set one or more of these:
 
 > All fields are optional. You only need one price source — AURUM checks them in order: max_price threshold → cheap period → price level.
 
-> ⚠️ **Unit trap: `price_entity` must be in ct/kWh.** AURUM compares it
-> against `max_price` as-is, without converting. Many price sensors —
-> including the native Home Assistant *Tibber* integration — report
-> **EUR/kWh** (e.g. `0.28`), which makes every price look cheap, so the
-> device runs on grid around the clock. Either wrap the sensor in a template
-> sensor that multiplies by 100, or leave `max_price` at `0` and rely on the
-> price level / cheap period instead.
+> ⚠️ **Price unit: AURUM works in ct/kWh.** Since v1.15.4 a `price_entity`
+> whose unit is **EUR/kWh** or **€/kWh** (e.g. the native Home Assistant
+> *Tibber* integration, `0.28`) is converted to ct automatically. A sensor
+> without a unit, or in another currency, is used as-is — if it reports
+> `0.28` instead of `28`, every price looks cheap and the device runs on grid
+> around the clock. Wrap such a sensor in a template sensor that multiplies
+> by 100, or leave `max_price` at `0` and rely on the price level / cheap
+> period instead.
+>
+> Power and energy sensors are converted the same way: kW / MW are read as W,
+> Wh / MWh as kWh.
 
 **Step 2: Configure devices**
 

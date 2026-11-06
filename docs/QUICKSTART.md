@@ -107,12 +107,13 @@ Für preisbewusstes Scheduling (günstigen Netzstrom nutzen, wenn wenig PV):
 - **Nord Pool:** HACS-Integration „Nord Pool".
 - **EPEX Spot:** HACS-Integration „EPEX Spot Price".
 
-> ⚠️ **Einheit prüfen:** AURUM erwartet den Strompreis in **ct/kWh**. Viele
-> Sensoren (auch die eingebaute Tibber-Integration) liefern **EUR/kWh**, also
-> z. B. `0.28` statt `28`. Dann gilt jeder Preis als „günstig“ und das Gerät
-> läuft rund um die Uhr mit Netzstrom. Abhilfe: Template-Sensor mit `× 100`,
-> oder beim Gerät den Maximalpreis auf `0` lassen und nur Preisstufe /
-> Bestpreis-Zeitraum nutzen.
+> ⚠️ **Einheit prüfen:** AURUM rechnet in **ct/kWh**. Seit v1.15.4 wird ein
+> Sensor mit der Einheit **EUR/kWh** oder **€/kWh** (z. B. die eingebaute
+> Tibber-Integration) automatisch umgerechnet. Hat der Sensor gar keine
+> Einheit und liefert `0.28` statt `28`, gilt jeder Preis als „günstig“ und
+> das Gerät läuft rund um die Uhr mit Netzstrom. Abhilfe: Template-Sensor mit
+> `× 100`, oder beim Gerät den Maximalpreis auf `0` lassen und nur
+> Preisstufe / Bestpreis-Zeitraum nutzen.
 
 ---
 

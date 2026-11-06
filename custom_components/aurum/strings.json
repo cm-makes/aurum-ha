@@ -42,7 +42,7 @@
           "target_soc": "At what charge level should all devices be allowed to run? Default: 80%. While the battery is below this, AURUM only runs devices with special permission.",
           "min_soc": "Below what charge level should ALL devices be turned off? Protects your battery from deep discharge. Default: 10%.",
           "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed.",
-          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first. When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
+          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
         }
       }
     },
@@ -106,11 +106,11 @@
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
           "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
           "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
-          "price_entity": "Current electricity price in ct/kWh. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
+          "price_entity": "Current electricity price in ct/kWh (a sensor reporting EUR/kWh is converted automatically). Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
           "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
           "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty.",
           "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Can be left empty.",
-          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first. When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
+          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
         }
       },
       "add_device": {

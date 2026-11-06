@@ -13,7 +13,7 @@ Supports three data sources (all optional, user picks via entity selector):
 
 import logging
 
-from .helpers import get_float, get_state_safe
+from .helpers import get_float, get_price_ct, get_state_safe
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class PricingManager:
         # ── Current price (ct/kWh) ──
         current_price = None
         if self.price_entity:
-            raw = get_float(self.hass, self.price_entity, None)
+            raw = get_price_ct(self.hass, self.price_entity, None)
             if raw is not None:
                 current_price = raw
                 data_available = True

@@ -6,7 +6,8 @@ Calculates excess power and EMA-smoothed values.
 """
 
 import logging
-from .helpers import get_float, ema_update, ema_update_asymmetric
+from .helpers import (
+    get_float, get_power_w, ema_update, ema_update_asymmetric)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class EnergyManager:
     def update(self, shared):
         """Read sensors, calculate excess, update shared dict."""
         # Grid power (positive = import, negative = export)
-        grid_raw = get_float(self.hass, self.grid_power_entity, 0)
+        grid_raw = get_power_w(self.hass, self.grid_power_entity, 0)
 
         # Symmetric EMA (alpha=0.3) – used for battery decisions
         self._grid_ema = ema_update(self._grid_ema, grid_raw, self.ema_alpha)
@@ -58,7 +59,7 @@ class EnergyManager:
 
         # PV power (optional)
         if self.pv_power_entity:
-            shared["pv_power"] = get_float(
+            shared["pv_power"] = get_power_w(
                 self.hass, self.pv_power_entity, 0)
         else:
             shared["pv_power"] = 0
@@ -90,10 +91,10 @@ class EnergyManager:
         bat_charge = 0
         bat_discharge = 0
         if self.battery_charge_power_entity:
-            bat_charge = get_float(
+            bat_charge = get_power_w(
                 self.hass, self.battery_charge_power_entity, 0)
         if self.battery_discharge_power_entity:
-            bat_discharge = get_float(
+            bat_discharge = get_power_w(
                 self.hass, self.battery_discharge_power_entity, 0)
         battery_power_net = bat_discharge - bat_charge
         shared["battery_power_net"] = round(battery_power_net, 1)
@@ -118,10 +119,21 @@ class EnergyManager:
                 -self._grid_ema_asym - battery_power_net, 1)
             shared["excess_raw"] = round(
                 -grid_raw - battery_power_net, 1)
+        elif has_battery_power:
+            # battery_priority=True: the battery absorbs PV first and ONLY
+            # genuine grid export is offered to devices (community request,
+            # discussion #9) — so charge power is NOT surplus. Discharge,
+            # however, IS a deficit: a hybrid inverter holds grid near 0 W
+            # by discharging, and a grid-only view never saw that, so a
+            # running device drained the battery down to min_soc instead
+            # of being shed when PV faded.
+            discharge = max(0.0, battery_power_net)
+            shared["excess"] = round(-self._grid_ema_asym - discharge, 1)
+            shared["excess_raw"] = round(-grid_raw - discharge, 1)
         else:
-            # Grid-only surplus: with battery_priority=True the battery
-            # absorbs PV first and ONLY genuine grid export is offered to
-            # devices (community request, discussion #9). Also the fallback
-            # when no battery power sensors are configured.
+            # No battery power sensors: grid-only surplus. AURUM cannot see
+            # battery discharge here; configure the battery power sensors
+            # so running devices are shed when the battery starts feeding
+            # them.
             shared["excess"] = round(-self._grid_ema_asym, 1)
             shared["excess_raw"] = round(-grid_raw, 1)
