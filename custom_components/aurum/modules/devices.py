@@ -12,7 +12,7 @@ Ported 1:1 from HELIOS logic (without thermal model, comfort temps, TRV).
 import logging
 from datetime import datetime, timedelta
 
-from .helpers import get_float, get_state_safe, slugify
+from .helpers import get_float, get_power_w, get_state_safe, slugify
 from ..const import (
     CONF_DEVICES,
     MODE_NORMAL,
@@ -164,6 +164,10 @@ class DeviceManager:
             "stop_after_runtime": cfg.get("stop_after_runtime", False),
             "force_started": False,
             "_scheduling_reason": None,
+            # "Must run today" as a job: runtime_today_s when muss_heute was
+            # switched on. Only runtime after that counts towards the job.
+            "_mh_runtime_base": 0,
+            "_mh_prev": None,      # last seen muss_heute state (edge detect)
 
             # Daily-reset hour for the runtime/energy counters (0-23).
             # 0 = midnight (default). See const.CONF_DEV_DAY_START_HOUR.
@@ -188,6 +192,12 @@ class DeviceManager:
             "sd_power_above_since": None,
             "sd_power_below_since": None,
             "sd_power_samples": [],
+            # Set when a program is finished by max_runtime while it still
+            # draws power. Blocks re-detection until the power has stayed
+            # at standby for sd_finish_time, so the still-running program
+            # is not detected as a new start and paused mid-cycle.
+            "sd_rearm_pending": False,
+            "_sd_rearm_below_since": None,
 
             # Runtime & energy state
             "on_since": None,
@@ -241,6 +251,9 @@ class DeviceManager:
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
+                # The SD state machine is skipped this cycle: quiet time for
+                # a pending re-arm hold must be observed again afterwards.
+                dev["_sd_rearm_below_since"] = None
                 # Manual override → AURUM must not touch the device in ANY
                 # cycle, including this emergency (contract of the override
                 # switch). Keeps externally-driven cycles (e.g. an
@@ -281,11 +294,27 @@ class DeviceManager:
                         or dev["sd_state"] == SD_STATE_RUNNING):
                     self._accumulate_runtime(dev, now, actual_power)
 
+            # ── 0a. "Must run today" job bookkeeping (regular devices) ──
+            # The job is the estimated_runtime counted from when muss_heute
+            # was switched on. Once done, muss_heute auto-resets (with or
+            # without stop_after_runtime). A deadline force-start keeps its
+            # shedding immunity only while the job is open: before 1.15.4 a
+            # forced device stayed on grid until the next daily reset and
+            # muss_heute never reset, so it repeated every day.
+            if not dev["startup_detection"]:
+                mh_on = self._track_muss_heute(dev)
+                if mh_on and self._muss_heute_job_done(dev):
+                    self._reset_muss_heute(dev)
+                    mh_on = False
+                if dev["force_started"] and not mh_on:
+                    dev["force_started"] = False
+
             # ── 0. Disable (force-off) → hard kill-switch ───────
             # Beats manual override, deadline and PV logic. Keeps the
             # device off every cycle until the disable switch is cleared.
             if self._is_disabled(dev):
                 dev["_pending_off"] = None
+                dev["_sd_rearm_below_since"] = None
                 if was_on:
                     self._turn_off(dev, now, excess, battery_soc,
                                    "device_disabled")
@@ -296,6 +325,7 @@ class DeviceManager:
 
             # ── 1. Manual override → skip device ────────────────
             if self._is_manual_override(dev):
+                dev["_sd_rearm_below_since"] = None
                 if was_on:
                     dev["_pending_off"] = None
                     if dev["on_since"] is None:
@@ -557,6 +587,32 @@ class DeviceManager:
             return False
         return dev["runtime_today_s"] >= target_min * 60
 
+    def _track_muss_heute(self, dev):
+        """Read muss_heute and snapshot the runtime on its OFF→ON edge.
+
+        Runtime accrued before the switch was turned on (an earlier load,
+        or the previous day_start_hour cycle) does not count towards the
+        job. The first observation after a start (prev None) is not an
+        edge: the persisted base is kept.
+        """
+        mh_on = self._is_muss_heute(dev)
+        if mh_on and dev.get("_mh_prev") is False:
+            dev["_mh_runtime_base"] = dev["runtime_today_s"]
+        dev["_mh_prev"] = mh_on
+        return mh_on
+
+    def _muss_heute_job_runtime_s(self, dev):
+        """Runtime counted towards the current muss_heute job."""
+        return max(0, dev["runtime_today_s"] - dev.get("_mh_runtime_base", 0))
+
+    def _muss_heute_job_done(self, dev):
+        """True when the job has reached estimated_runtime. False without
+        a runtime target (nothing to measure)."""
+        target_min = dev.get("estimated_runtime", 0) or 0
+        if target_min <= 0:
+            return False
+        return self._muss_heute_job_runtime_s(dev) >= target_min * 60
+
     def _price_grant(self, dev, battery_soc, soc_threshold):
         """True when a cheap-grid start is currently granted for this device.
 
@@ -814,10 +870,39 @@ class DeviceManager:
                 self.hass.turn_on(dev["switch_entity"])
                 dev["managed_on"] = True
                 dev["on_since"] = now
+                # The plug was off, so any program still running after a
+                # max_runtime finish has been cut already: nothing to hold.
+                dev["sd_rearm_pending"] = False
+                dev["_sd_rearm_below_since"] = None
             elif dev["on_since"] is None:
                 # Already ON (e.g. restored after HA restart) — anchor
                 # on_since so min_on_time protection works.
                 dev["on_since"] = now
+
+            # Finished by max_runtime while still drawing power (eco
+            # programmes run 3.5-4 h, the default max is 3 h): wait until
+            # the power has stayed at standby for sd_finish_time — the same
+            # criterion as a smart finish — before detecting the next
+            # program. Otherwise the still-running program is re-detected
+            # and paused mid-cycle.
+            if dev.get("sd_rearm_pending") and not dev.get("power_entity"):
+                # Power sensor removed while a hold was pending (restored
+                # from persistence): the nominal fallback can never drop.
+                dev["sd_rearm_pending"] = False
+                dev["_sd_rearm_below_since"] = None
+            if dev.get("sd_rearm_pending"):
+                dev["sd_power_above_since"] = None
+                if actual_power > dev["sd_power_threshold"]:
+                    dev["_sd_rearm_below_since"] = None
+                    return False, 0
+                if dev.get("_sd_rearm_below_since") is None:
+                    dev["_sd_rearm_below_since"] = now
+                    return False, 0
+                below_s = (now - dev["_sd_rearm_below_since"]).total_seconds()
+                if below_s < dev["sd_finish_time"]:
+                    return False, 0
+                dev["sd_rearm_pending"] = False
+                dev["_sd_rearm_below_since"] = None
 
             if actual_power > dev["sd_power_threshold"]:
                 if dev["sd_power_above_since"] is None:
@@ -984,7 +1069,25 @@ class DeviceManager:
                     f"AURUM SD [{dev['name']}]: Program complete "
                     f"({reason}, {actual_power:.0f}W, "
                     f"{runtime_min}min)")
+                quiet_since = dev.get("sd_power_below_since")
                 self._sd_reset(dev)
+                # Only a max_runtime finish can leave the program running.
+                # A smart finish has already seen sd_finish_time at standby,
+                # so the next program must be detected at once (back-to-back
+                # loads). Without a power sensor the reading is the nominal
+                # fallback and could never drop, so never hold there. The
+                # hold does not trust the single reading at the finish tick
+                # (it may land in a drum pause): quiet time already observed
+                # while running seeds it, so a program that really ended is
+                # released no later than a smart finish would have been.
+                dev["sd_rearm_pending"] = bool(
+                    max_expired and not smart_finish
+                    and dev.get("power_entity"))
+                dev["_sd_rearm_below_since"] = (
+                    quiet_since
+                    if (dev["sd_rearm_pending"]
+                        and actual_power <= dev["sd_power_threshold"])
+                    else None)
                 self._accumulate_runtime(dev, now)
                 dev["on_since"] = None
                 dev["_runtime_tick"] = None
@@ -1113,8 +1216,8 @@ class DeviceManager:
     def _get_device_power(self, dev):
         """Read current power or fall back to nominal."""
         if dev["power_entity"]:
-            return get_float(self.hass, dev["power_entity"],
-                             dev["nominal_power"])
+            return get_power_w(self.hass, dev["power_entity"],
+                               dev["nominal_power"])
         return dev["nominal_power"]
 
     def _turn_on(self, dev, now, excess, soc,
@@ -1180,6 +1283,25 @@ class DeviceManager:
         if not self._is_muss_heute(dev):
             return False
 
+        # Regular devices: only the job runtime still missing counts, so a
+        # device that already ran on PV since muss_heute was switched on is
+        # not force-started on grid. SD devices are excluded: their deadline
+        # is about the pending program, and muss_heute resets when it
+        # finishes.
+        runtime_needed = est_runtime * 60
+        if not dev.get("startup_detection"):
+            runtime_needed -= self._muss_heute_job_runtime_s(dev)
+            if dev.get("stop_after_runtime"):
+                # The daily cap (block 1c) stops the run once the daily
+                # total reaches the target, so start no earlier than that
+                # remainder needs. A cap already reached blocks today's run
+                # (1c); the open job then carries over to the next cycle.
+                daily_left = est_runtime * 60 - dev["runtime_today_s"]
+                if daily_left > 0:
+                    runtime_needed = min(runtime_needed, daily_left)
+            if runtime_needed <= 0:
+                return False
+
         try:
             parts = deadline_str.split(":")
             deadline_hour = int(parts[0])
@@ -1198,7 +1320,6 @@ class DeviceManager:
                 return False
 
             time_remaining = (deadline_today - now).total_seconds()
-            runtime_needed = est_runtime * 60
             buffer = 300  # 5 min safety buffer
 
             return time_remaining <= (runtime_needed + buffer)
@@ -1339,6 +1460,9 @@ class DeviceManager:
         Turns off both the native switch and any legacy entity.
         """
         slug = dev["slug"]
+        # AURUM switched it off itself: record that, so a re-arm before the
+        # next device cycle is still seen as a new job (OFF→ON edge).
+        dev["_mh_prev"] = False
         # 1. Reset native switch
         try:
             native_id = muss_heute_entity_id(slug)
@@ -1427,11 +1551,20 @@ class DeviceManager:
             f"AURUM daily {dev['name']}: "
             f"{dev['runtime_today_s'] / 60:.1f} min, "
             f"{dev['energy_today_wh'] / 1000:.3f} kWh")
+        # An open "must run today" job keeps the runtime it already has:
+        # base = -done, so job runtime = 0 - base = done after the reset.
+        job_s = (self._muss_heute_job_runtime_s(dev)
+                 if self._is_muss_heute(dev) else 0)
         dev["runtime_today_s"] = 0
+        dev["_mh_runtime_base"] = -job_s
         dev["energy_today_wh"] = 0.0
         dev["total_switches"] = 0
         dev["_switch_times"] = []
-        dev["_scheduling_reason"] = None
+        # Keep the reason of a device that is running across the boundary
+        # (cheap-grid / PV-gate holds would otherwise be lost and the device
+        # shed and restarted at midnight). Off devices start fresh.
+        if not self._is_device_on(dev):
+            dev["_scheduling_reason"] = None
         # Force-started immunity must not survive the daily reset; a device
         # that was deadline-forced yesterday should be sheddable again today.
         dev["force_started"] = False

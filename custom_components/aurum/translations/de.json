@@ -42,7 +42,7 @@
           "target_soc": "Ab welchem Ladestand dürfen alle Geräte laufen? Standardmäßig 80%. Solange die Batterie darunter liegt, lässt AURUM nur Geräte mit besonderer Freigabe laufen.",
           "min_soc": "Unter welchem Ladestand sollen ALLE Geräte abgeschaltet werden? Schützt deine Batterie vor Tiefentladung. Standard: 10%.",
           "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden.",
-          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst. Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
+          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
         }
       }
     },
@@ -106,11 +106,11 @@
           "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
           "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s.",
           "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_christian'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
-          "price_entity": "Aktueller Strompreis in ct/kWh. Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
+          "price_entity": "Aktueller Strompreis in ct/kWh (ein Sensor in EUR/kWh wird automatisch umgerechnet). Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
           "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
           "cheap_period_entity": "Binärsensor, der während günstiger Preisphasen EIN ist (z.B. tibber_prices Bestpreis-Phase). Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Kann leer bleiben.",
           "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Kann leer bleiben.",
-          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst. Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
+          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
         }
       },
       "add_device": {

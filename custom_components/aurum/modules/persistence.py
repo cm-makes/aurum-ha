@@ -24,6 +24,16 @@ _DATETIME_FIELDS = (
 _VALUE_FIELDS = (
     "runtime_today_s", "energy_today_wh", "total_switches",
     "sd_state", "managed_on", "force_started",
+    # Why a running device was started (cheap_grid / solar_pv / ...).
+    # Without it a cheap-grid or PV-gate run was treated as a plain
+    # surplus run after a restart and shed. Cleared below if the switch
+    # is off.
+    "_scheduling_reason",
+    "sd_rearm_pending",
+    "_mh_runtime_base",
+    # Last seen muss_heute state: without it, an arm made after the last
+    # save (or right after a restart) was not seen as a new job.
+    "_mh_prev",
 )
 
 
@@ -146,8 +156,13 @@ class PersistenceManager:
                 if field in saved:
                     if rolled_over and field in ("runtime_today_s",
                                                  "energy_today_wh",
-                                                 "total_switches"):
+                                                 "total_switches",
+                                                 "_mh_runtime_base"):
                         dev[field] = 0
+                    elif rolled_over and field == "force_started":
+                        # Same as daily_reset: forced immunity must not
+                        # survive the day boundary (audit #4).
+                        dev[field] = False
                     else:
                         dev[field] = saved[field]
 
@@ -211,6 +226,7 @@ class PersistenceManager:
                 dev["managed_on"] = False
                 dev["on_since"] = None
                 dev["_runtime_tick"] = None
+                dev["_scheduling_reason"] = None
 
             # Set runtime tick for all devices that have on_since
             if dev.get("on_since"):

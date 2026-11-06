@@ -22,6 +22,47 @@ def get_float(hass, entity_id, default=0.0):
         return default
 
 
+# Scale factors to AURUM's internal units, keyed by the sensor's
+# unit_of_measurement. The config flow accepts all of these units, so the
+# runtime must honour them too — a kW grid sensor read as W made the
+# surplus 1000x too small. Unknown / missing units pass through unchanged
+# (the pre-1.15.4 behaviour).
+_POWER_TO_W = {"W": 1.0, "kW": 1000.0, "MW": 1_000_000.0, "mW": 0.001}
+_ENERGY_TO_KWH = {"Wh": 0.001, "kWh": 1.0, "MWh": 1000.0}
+# Price entities are documented as ct/kWh. The native Tibber integration
+# (and most EUR sources) report EUR/kWh, which made every price look cheap.
+_PRICE_TO_CT = {"EUR/kWh": 100.0, "€/kWh": 100.0}
+
+
+def _get_scaled(hass, entity_id, default, factors):
+    value = get_float(hass, entity_id, default=None)
+    if value is None:
+        return default
+    unit = hass.get_state(entity_id, attribute="unit_of_measurement")
+    if isinstance(unit, str):
+        factor = factors.get(unit.strip())
+        if factor is not None:
+            # Round away float noise: 0.28 EUR * 100 must compare equal to
+            # a max_price of 28 ct, not as 28.000000000000004.
+            return round(value * factor, 6)
+    return value
+
+
+def get_power_w(hass, entity_id, default=0.0):
+    """Read a power sensor in W, converting kW / MW / mW."""
+    return _get_scaled(hass, entity_id, default, _POWER_TO_W)
+
+
+def get_energy_kwh(hass, entity_id, default=0.0):
+    """Read an energy sensor in kWh, converting Wh / MWh."""
+    return _get_scaled(hass, entity_id, default, _ENERGY_TO_KWH)
+
+
+def get_price_ct(hass, entity_id, default=None):
+    """Read a price sensor in ct/kWh, converting EUR/kWh."""
+    return _get_scaled(hass, entity_id, default, _PRICE_TO_CT)
+
+
 def get_state_safe(hass, entity_id, default=None):
     """Safely read an entity state as string."""
     raw = hass.get_state(entity_id)

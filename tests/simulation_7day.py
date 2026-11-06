@@ -546,7 +546,11 @@ class MockHass:
         self.logs = []
         self.actions = []
 
-    def get_state(self, entity_id, default=None):
+    def get_state(self, entity_id, attribute=None, default=None):
+        # Same signature as hass_bridge.HassAccess.get_state.
+        if attribute:
+            return getattr(self, "attributes", {}).get(
+                entity_id, {}).get(attribute, default)
         return self.states.get(entity_id, default)
 
     def set_state(self, entity_id, value, **kwargs):
