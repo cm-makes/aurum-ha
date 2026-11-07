@@ -61,7 +61,10 @@ class AurumDeviceActiveSensor(CoordinatorEntity, BinarySensorEntity):
         for ds in (self.coordinator.device_states or []):
             if ds["name"] == self._dev_name:
                 state = ds.get("state", "off")
-                self._attr_is_on = state not in ("off", "done", "standby")
+                # 'unavailable': AURUM cannot read the switch, so it does
+                # not claim the device runs.
+                self._attr_is_on = state not in (
+                    "off", "done", "standby", "unavailable")
                 self.async_write_ha_state()
                 return
         self._attr_is_on = False

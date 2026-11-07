@@ -181,8 +181,10 @@ class EnergyManager:
         else:
             what = "is unavailable"
         # A sensor that has not delivered a value since start is usually
-        # an integration still loading: log that quietly.
-        log = _LOGGER.warning if rec["seen"] else _LOGGER.info
+        # an integration still loading, and many inverters take their PV
+        # sensor offline every night: log those quietly.
+        log = (_LOGGER.warning if rec["seen"] and key != "pv"
+               else _LOGGER.info)
         log("AURUM: %s sensor %s %s – %s",
             key, rec["entity"], what, _CONSEQUENCE.get(key, "ignored"))
 

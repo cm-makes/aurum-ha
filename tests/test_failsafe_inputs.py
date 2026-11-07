@@ -526,7 +526,7 @@ class TestRestoreUnavailableSwitch:
         dev = mgr.devices[0]
         assert dev["managed_on"] is True
         assert dev["_scheduling_reason"] == "cheap_grid"
-        assert dev["_restore_check"] is True
+        assert dev["_switch_recheck"] is True
 
     def test_reports_on_later_stays_managed(
             self, hass, make_manager, make_device, tmp_path):
@@ -538,7 +538,7 @@ class TestRestoreUnavailableSwitch:
         mgr.update(sh)
         assert sh["device_states"][0]["state"] == "on"
         assert mgr.devices[0]["_scheduling_reason"] == "cheap_grid"
-        assert mgr.devices[0]["_restore_check"] is False
+        assert mgr.devices[0]["_switch_recheck"] is False
 
     def test_reports_off_later_is_cleared(
             self, hass, make_manager, make_device, tmp_path):
@@ -769,3 +769,180 @@ class TestRestartHelpers:
         ds = initial_device_states(mgr.devices)[0]
         assert ds["energy_today_wh"] == 3500.0
         assert ds["runtime_today_s"] == 5400
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Review round 1 (adversarial review of the 1.16.0 diff)
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestReviewRound1:
+    def _sd_running(self, hass, make_manager, make_device):
+        mgr = make_manager([make_device(
+            startup_detection=True, power_entity="sensor.washer_power",
+            switch_entity="switch.dw", name="Dishwasher")])
+        dev = mgr.devices[0]
+        dev["sd_state"] = SD_STATE_RUNNING
+        dev["sd_running_since"] = T0 - timedelta(hours=1)
+        dev["sd_lockout_until"] = T0 + timedelta(hours=3)
+        dev["managed_on"] = True
+        hass.states["switch.dw"] = "on"
+        hass.states[muss_heute_entity_id("dishwasher")] = "on"
+        return mgr, dev
+
+    @pytest.mark.parametrize("outage", ["power", "plug"])
+    def test_quiet_time_before_an_outage_does_not_finish_the_program(
+            self, hass, make_manager, make_device, outage):
+        mgr, dev = self._sd_running(hass, make_manager, make_device)
+        hass.states["sensor.washer_power"] = "1"     # short pause
+        run(mgr, T0, 1, lambda t: dev_shared(t, 0))
+        assert dev["sd_power_below_since"] is not None
+        if outage == "power":
+            hass.states["sensor.washer_power"] = "unavailable"
+        else:
+            hass.states["switch.dw"] = "unavailable"
+        run(mgr, T0 + timedelta(minutes=2), 15, lambda t: dev_shared(t, 0))
+        hass.states["switch.dw"] = "on"
+        hass.states["sensor.washer_power"] = "1"     # back in a pause
+        mgr.update(dev_shared(T0 + timedelta(minutes=18), 0))
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        assert hass.states[muss_heute_entity_id("dishwasher")] == "on"
+        # A real finish still needs finish_time of observed quiet.
+        run(mgr, T0 + timedelta(minutes=19), 11, lambda t: dev_shared(t, 0))
+        assert dev["sd_state"] == SD_STATE_STANDBY
+
+    def test_switch_outage_is_not_counted_as_runtime(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device(power_entity="sensor.p")])
+        dev = mgr.devices[0]
+        hass.states[SW] = "on"
+        hass.states["sensor.p"] = "800"
+        running(dev, T0)
+        dev["runtime_today_s"] = 3600
+        mgr.update(dev_shared(T0, 2000))
+        hass.states[SW] = "unavailable"
+        run(mgr, T0 + timedelta(seconds=30), 180, lambda t: dev_shared(t, 2000))
+        hass.states[SW] = "on"
+        mgr.update(dev_shared(T0 + timedelta(hours=3, minutes=1), 2000))
+        assert dev["runtime_today_s"] < 3600 + 120
+        assert dev["energy_today_wh"] < 800 * 2 / 60 + 1
+
+    def test_switch_back_off_after_an_outage_clears_the_run(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device()])
+        dev = mgr.devices[0]
+        hass.states[SW] = "on"
+        running(dev, T0, reason="cheap_grid")
+        hass.states[SW] = "unavailable"
+        mgr.update(dev_shared(T0, 0))
+        hass.states[SW] = "off"
+        mgr.update(dev_shared(T0 + timedelta(minutes=30), 0))
+        assert dev["managed_on"] is False
+        assert dev["on_since"] is None
+        assert dev["_scheduling_reason"] is None
+
+    def test_unknown_switch_is_still_commanded(
+            self, hass, make_manager, make_device):
+        # MQTT switch without retained state: 'unknown' until commanded.
+        mgr = make_manager([make_device(debounce_on=0)])
+        hass.states[SW] = "unknown"
+        run(mgr, T0, 2, lambda t: dev_shared(t, 3000))
+        assert ("ON", SW) in hass.actions
+
+    def test_restore_defers_an_unknown_switch(
+            self, hass, make_manager, make_device, tmp_path):
+        sf = str(tmp_path / "state.json")
+        cfg = make_device()
+        mgr = make_manager([cfg])
+        hass.states[SW] = "on"
+        running(mgr.devices[0], datetime.now())
+        PersistenceManager(hass, {"state_file": sf}).save(mgr)
+        mgr2 = make_manager([cfg])
+        hass.states[SW] = "unknown"
+        PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
+        assert mgr2.devices[0]["managed_on"] is True
+        assert mgr2.devices[0]["_switch_recheck"] is True
+
+    def test_user_started_device_stays_the_users_after_a_restart(
+            self, hass, make_manager, make_device, tmp_path):
+        sf = str(tmp_path / "state.json")
+        cfg = make_device()
+        mgr = make_manager([cfg])
+        hass.states[SW] = "on"                       # switched on by hand
+        sh = dev_shared(datetime.now(), 0)
+        mgr.update(sh)
+        assert sh["device_states"][0]["state"] == "manual_override"
+        PersistenceManager(hass, {"state_file": sf}).save(mgr)
+        mgr2 = make_manager([cfg])
+        PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
+        assert mgr2.devices[0]["managed_on"] is False
+        start = datetime.now()
+        run(mgr2, start, 30, lambda t: dev_shared(t, 0, blind=True))
+        assert hass.states[SW] == "on"
+
+    def test_restore_without_a_saved_record_keeps_the_old_rule(
+            self, hass, make_manager, make_device, tmp_path):
+        sf = str(tmp_path / "state.json")
+        PersistenceManager(hass, {"state_file": sf}).save(
+            make_manager([]))
+        mgr = make_manager([make_device()])
+        hass.states[SW] = "on"
+        PersistenceManager(hass, {"state_file": sf}).restore(mgr)
+        assert mgr.devices[0]["managed_on"] is True
+
+    def test_pv_gate_starts_although_the_surplus_is_short(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device(
+            nominal_power=800, pv_power_threshold=2500, debounce_on=60)])
+        def sh(t):
+            s = dev_shared(t, 300)
+            s["pv_power"] = 4000
+            return s
+        run(mgr, T0, 2, sh)
+        assert hass.states[SW] == "on"
+        assert mgr.devices[0]["_scheduling_reason"] == "solar_pv"
+
+    def test_cached_summary_ignores_unavailable_devices(self):
+        from custom_components.aurum.coordinator import (
+            summarize_cached_states)
+        on, power, cheap = summarize_cached_states([
+            {"state": "unavailable", "scheduling_reason": "cheap_grid",
+             "power": 0},
+            {"state": "on", "scheduling_reason": "surplus_available",
+             "power": 500},
+        ])
+        assert (on, power, cheap) == (1, 500, False)
+
+
+class TestRepairIssueInputs:
+    @pytest.fixture
+    def ir(self, monkeypatch):
+        calls = []
+        mod = types.ModuleType("homeassistant.helpers.issue_registry")
+        mod.IssueSeverity = types.SimpleNamespace(WARNING="warning")
+        mod.async_create_issue = (
+            lambda hass, domain, issue_id, **kw:
+            calls.append(("create", issue_id)))
+        mod.async_delete_issue = (
+            lambda hass, domain, issue_id: calls.append(("delete", issue_id)))
+        monkeypatch.setitem(
+            sys.modules, "homeassistant.helpers.issue_registry", mod)
+        monkeypatch.setattr(
+            sys.modules["homeassistant.helpers"], "issue_registry", mod,
+            raising=False)
+        return calls
+
+    def test_pv_outage_raises_no_issue(self, hass, ir):
+        # Inverters take their PV sensor offline every night.
+        c = _coordinator(hass)
+        c._update_repair_issues({"now": T0, "input_faults": [
+            {"input": "pv", "status": "unavailable", "entity": "sensor.pv",
+             "since": T0 - timedelta(hours=8)}]})
+        assert ir == []
+
+    def test_soc_outage_raises_an_issue(self, hass, ir):
+        c = _coordinator(hass)
+        c._update_repair_issues({"now": T0, "input_faults": [
+            {"input": "soc", "status": "unavailable", "entity": "sensor.soc",
+             "since": T0 - timedelta(hours=1)}]})
+        assert ir == [("create", "input_soc")]

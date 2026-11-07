@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN
+from .const import DOMAIN, INPUT_UNAVAILABLE
 from .hass_bridge import HassAccess
 from .modules.energy import EnergyManager
 from .modules.battery import BatteryManager
@@ -28,6 +28,25 @@ from .modules.helpers import CSVLogger, get_float
 from .modules.persistence import PersistenceManager
 
 _LOGGER = logging.getLogger(__name__)
+
+# Inputs whose failure puts AURUM into safe mode and raises a repair issue.
+# A failed PV reading already counts as 0 W (the safe value), and many
+# inverters go unavailable every night, so PV gets no repair issue.
+_ISSUE_INPUTS = ("grid", "battery_charge", "battery_discharge", "soc")
+
+
+def summarize_cached_states(states):
+    """devices_on, device_power_total and cheap_grid_active from a cached
+    device_states list (odd cycles). Must agree with what DeviceManager
+    publishes on even cycles: an 'unavailable' switch is not on."""
+    inactive = ("off", "", "unavailable")
+    devices_on = sum(1 for d in states if d.get("state") not in inactive)
+    power = sum(d.get("power", 0) for d in states)
+    cheap = any(
+        d.get("scheduling_reason") == "cheap_grid"
+        and d.get("state") not in inactive + ("standby", "done")
+        for d in states)
+    return devices_on, power, cheap
 
 
 def budget_day_state_is_stale(saved_at, now):
@@ -145,12 +164,17 @@ class AurumCoordinator(DataUpdateCoordinator):
                         # the budget to 0 W for the whole day. Learned
                         # values (safety factor, weather) are kept.
                         saved_at = self.persistence.last_saved_at
-                        if budget_day_state_is_stale(
-                                saved_at, datetime.now()):
+                        now = datetime.now()
+                        if budget_day_state_is_stale(saved_at, now):
                             self.budget.daily_reset()
                             _LOGGER.info(
                                 "AURUM budget: state from %s, day values "
                                 "reset", saved_at or "unknown date")
+                        # The restored day values belong to today now: a
+                        # startup that ends after midnight must still run
+                        # the midnight reset (it was skipped while this was
+                        # -1 on the first cycle).
+                        self._last_daily_reset = now.timetuple().tm_yday
                     except Exception as be:
                         _LOGGER.warning("Budget state restore failed: %s", be)
             except Exception as e:
@@ -199,12 +223,16 @@ class AurumCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.warning("Advisor error: %s", e)
 
+    def _grid_ready(self):
+        """The grid meter reports a number."""
+        grid = self.config.get("grid_power_entity")
+        return bool(grid) and get_float(self.bridge, grid, None) is not None
+
     def _entities_ready(self):
         """The grid meter (and the SOC sensor, when configured) report a
         number. Without the SOC wait, a slow cloud SOC integration made
         every restart run on an unknown SOC."""
-        grid = self.config.get("grid_power_entity")
-        if not grid or get_float(self.bridge, grid, None) is None:
+        if not self._grid_ready():
             return False
         soc = self.config.get("battery_soc_entity")
         if soc and get_float(self.bridge, soc, None) is None:
@@ -245,6 +273,8 @@ class AurumCoordinator(DataUpdateCoordinator):
             now = shared["now"]
             wanted = {}
             for fault in shared.get("input_faults") or []:
+                if fault.get("input") not in _ISSUE_INPUTS:
+                    continue
                 since = fault.get("since")
                 if (since is None or (now - since).total_seconds()
                         < self.ISSUE_DELAY_S):
@@ -289,17 +319,22 @@ class AurumCoordinator(DataUpdateCoordinator):
         shared = {"now": datetime.now(), "cycle": self.cycle}
         try:
             # ── Startup guard ──────────────────────────────────────
-            startup_mode, ready = self._is_startup(shared["now"])
-            if startup_mode:
-                if not ready:
-                    if self.cycle == 1:
-                        _LOGGER.info(
-                            "AURUM: Waiting for sensors (%d/%d)...",
-                            self.cycle, self.STARTUP_GRACE_CYCLES)
-                    shared["battery_mode"] = "startup"
-                    shared["devices_on"] = 0
-                    shared["excess"] = 0
-                    return shared
+            startup_mode, _ready = self._is_startup(shared["now"])
+            if startup_mode and not self._grid_ready():
+                # No grid reading yet: skip the energy step, and mark the
+                # surplus unknown so the mirror sensors are unavailable
+                # rather than a live-looking 0 W. With the grid ready and
+                # only the SOC missing, the energy step runs (warm-up).
+                if self.cycle == 1:
+                    _LOGGER.info(
+                        "AURUM: Waiting for sensors (%d/%d)...",
+                        self.cycle, self.STARTUP_GRACE_CYCLES)
+                shared["battery_mode"] = "startup"
+                shared["devices_on"] = 0
+                shared["excess"] = 0
+                shared["surplus_blind"] = True
+                shared["input_health"] = {"grid": INPUT_UNAVAILABLE}
+                return shared
 
             # ── Step 1: Energy sensors ─────────────────────────────
             try:
@@ -386,18 +421,11 @@ class AurumCoordinator(DataUpdateCoordinator):
                     _LOGGER.warning("Devices error: %s", e)
             else:
                 shared["device_states"] = self._cached_device_states
-                shared["devices_on"] = sum(
-                    1 for d in self._cached_device_states
-                    if d.get("state") not in ("off", ""))
-                shared["device_power_total"] = sum(
-                    d.get("power", 0)
-                    for d in self._cached_device_states)
-                # Derive cheap_grid_active from cached states so the
-                # binary sensor doesn't flap to off on odd cycles.
-                shared["cheap_grid_active"] = any(
-                    d.get("scheduling_reason") == "cheap_grid"
-                    and d.get("state") not in ("off", "standby", "done", "")
-                    for d in self._cached_device_states)
+                # Derive the summary from cached states so the binary
+                # sensor doesn't flap on odd cycles.
+                (shared["devices_on"], shared["device_power_total"],
+                 shared["cheap_grid_active"]) = summarize_cached_states(
+                    self._cached_device_states)
 
             # ── Step 4: Update device_states cache ─────────────────
             # Keep the previous list when the device step failed: an empty

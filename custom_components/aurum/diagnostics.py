@@ -69,7 +69,10 @@ async def async_get_config_entry_diagnostics(
     health_map = data.get("input_health") or {}
     inputs: dict[str, Any] = {
         "surplus_blind": data.get("surplus_blind", False),
-        "sensor_timeout_min": cfg.get("sensor_timeout"),
+        # Effective value (upgraded entries have no key: default 10).
+        "sensor_timeout_min": (
+            coordinator.energy.stale_s / 60
+            if coordinator.energy.stale_s else 0),
     }
     for key, conf_key in (
             ("grid", "grid_power_entity"),

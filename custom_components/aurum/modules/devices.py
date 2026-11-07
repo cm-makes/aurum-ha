@@ -231,10 +231,10 @@ class DeviceManager:
             # Manual override
             "managed_on": False,
 
-            # Restore found the switch unavailable (not loaded yet at
-            # boot): the saved state is kept and cross-checked on the first
-            # cycle the switch reports again.
-            "_restore_check": False,
+            # The switch could not be read (unavailable at restore, or
+            # during a cycle): the control state is kept and cross-checked
+            # against the switch on the first cycle it reports again.
+            "_switch_recheck": False,
         }
 
     # ══════════════════════════════════════════════════════════════
@@ -322,17 +322,24 @@ class DeviceManager:
         for dev in self.devices:
             switch = self._switch_state(dev)
             if switch is None:
-                # Switch unavailable/unknown (plug offline, integration not
-                # loaded): AURUM cannot tell whether the device is on. Send
-                # no command (HA drops it anyway), allocate no power, count
-                # no runtime; timers and the SD state machine stay frozen
-                # until the switch reports again.
+                # Switch unavailable or missing (plug offline, integration
+                # not loaded): AURUM cannot tell whether the device is on.
+                # Send no command (HA drops it anyway), allocate no power,
+                # count no runtime (the tick moves with the clock), and keep
+                # the SD state. Quiet/standby timers restart: time nobody
+                # observed must not finish or detect a program.
                 dev["_cached_on"] = False
                 dev["_pending_off"] = None
                 dev["_sd_rearm_below_since"] = None
+                dev["sd_power_below_since"] = None
+                dev["sd_power_above_since"] = None
+                if dev.get("_runtime_tick") or dev.get("on_since"):
+                    dev["_runtime_tick"] = now
+                dev["_switch_recheck"] = True
                 continue
-            if dev.get("_restore_check"):
-                self._apply_switch_crosscheck(dev, switch == "on", now)
+            if dev.get("_switch_recheck"):
+                self._apply_switch_crosscheck(
+                    dev, switch == "on", now, keep_managed=True)
             was_on = switch == "on"
             dev["_cached_on"] = was_on
             actual_power, power_known = (
@@ -554,7 +561,11 @@ class DeviceManager:
                     # Clear excess timer if not enough surplus
                     needed = (dev["nominal_power"] + dev["hysteresis_on"]
                               + dev["residual_power"])
-                    if turnon_excess < needed:
+                    # The PV gate debounces on its own timer (excess_since)
+                    # and is independent of the surplus: wiping it here
+                    # meant the gate could never start a device whose
+                    # surplus was short, its documented purpose.
+                    if turnon_excess < needed and not pv_gate:
                         dev["excess_since"] = None
 
         # ── Priority-based shedding ──────────────────────────────
@@ -942,9 +953,10 @@ class DeviceManager:
                 dev["on_since"] = now
 
             if not power_known:
-                # No reading: detect nothing, and quiet time for a pending
-                # re-arm hold must be observed again afterwards.
+                # No reading: detect nothing; detection and re-arm quiet
+                # time must be observed again afterwards.
                 dev["_sd_rearm_below_since"] = None
+                dev["sd_power_above_since"] = None
                 return False, 0
 
             # Finished by max_runtime while still drawing power (eco
@@ -1117,8 +1129,11 @@ class DeviceManager:
                 if dev["sd_lockout_until"] else False)
 
             # B) Smart finish: power < finish_power for finish_time.
-            # Without a reading the quiet timer neither starts nor resets;
-            # only the max_runtime cap can end the program meanwhile.
+            # Without a reading the quiet timer restarts: finish_time must
+            # be observed, not assumed. Only max_runtime can end the
+            # program meanwhile.
+            if not power_known:
+                dev["sd_power_below_since"] = None
             smart_finish = False
             if power_known and runtime_s >= dev["sd_min_runtime"]:
                 if actual_power < dev["sd_finish_power"]:
@@ -1287,23 +1302,29 @@ class DeviceManager:
         return state == "on"
 
     def _switch_state(self, dev):
-        """'on', 'off', or None when the switch is unavailable, unknown
-        or missing (AURUM cannot tell whether the device runs)."""
-        state = get_state_safe(self.hass, dev["switch_entity"])
-        if state is None:
+        """'on', 'off', or None when the switch is unavailable or missing
+        (AURUM cannot reach it). 'unknown' counts as off, as before 1.16:
+        some switches (MQTT without retained state, assumed-state RF) only
+        report a state once they have been commanded."""
+        state = self.hass.get_state(dev["switch_entity"])
+        if state is None or state == "unavailable":
             return None
         return "on" if state == "on" else "off"
 
-    def _apply_switch_crosscheck(self, dev, is_on, now):
+    def _apply_switch_crosscheck(self, dev, is_on, now, keep_managed=False):
         """Align restored control state with the real switch.
 
         Called by PersistenceManager.restore, or on the first cycle the
-        switch reports when it was unavailable at restore. The saved state
-        may be stale: ON → managed by AURUM; OFF → nothing is running.
+        switch reports after it could not be read. OFF → nothing is
+        running. ON → keep who started it (keep_managed: the saved or
+        current managed_on), so a device the user switched on stays the
+        user's after a restart; without a saved state it counts as
+        AURUM's (pre-1.16 behaviour).
         """
-        dev["_restore_check"] = False
+        dev["_switch_recheck"] = False
         if is_on:
-            dev["managed_on"] = True
+            if not keep_managed:
+                dev["managed_on"] = True
             # Only restore on_since for SD devices if in running state
             sd_ok = (
                 not dev.get("startup_detection")

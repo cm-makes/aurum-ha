@@ -216,13 +216,19 @@ class PersistenceManager:
         now = datetime.now()
         for dev in devices.devices:
             dev["_runtime_tick"] = None
-            switch = devices._switch_state(dev)
-            if switch is None:
-                dev["_restore_check"] = True
+            # 'unknown' is deferred too: MQTT switches report it until
+            # their retained state arrives.
+            raw = self.hass.get_state(dev["switch_entity"])
+            if raw is None or raw in ("unavailable", "unknown"):
+                dev["_switch_recheck"] = True
                 if dev.get("on_since"):
                     dev["_runtime_tick"] = now
                 continue
-            devices._apply_switch_crosscheck(dev, switch == "on", now)
+            saved = state.get(dev["name"])
+            devices._apply_switch_crosscheck(
+                dev, raw == "on", now,
+                keep_managed=isinstance(saved, dict)
+                and "managed_on" in saved)
 
         _LOGGER.info("AURUM state restored from %s", self.state_file)
         return state.get("_budget")  # return budget state for coordinator

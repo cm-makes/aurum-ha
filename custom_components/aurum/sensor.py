@@ -668,8 +668,10 @@ class AurumHouseConsumptionSensor(
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
+        # A failed PV reading already counts as 0 W (inverters sleep at
+        # night), so only the grid and battery terms gate this sensor.
         self._attr_available = _inputs_ok(
-            data, "grid", "pv", "battery_charge", "battery_discharge")
+            data, "grid", "battery_charge", "battery_discharge")
         if not self._attr_available:
             self._attr_native_value = None
             self.async_write_ha_state()
