@@ -32,6 +32,7 @@ const DECISION_META = {
   running: { icon: "▶️", color: "var(--success-color,#43a047)" },
   waiting: { icon: "⌛", color: "var(--secondary-text-color,#888)" },
   idle: { icon: "💤", color: "var(--secondary-text-color,#888)" },
+  input_fault: { icon: "⚠️", color: "var(--error-color,#db4437)" },
   unknown: { icon: "❔", color: "var(--secondary-text-color,#888)" },
 };
 
@@ -60,6 +61,7 @@ const STATE_COLOR = {
   done: "var(--secondary-text-color, #888)",
   off: "var(--secondary-text-color, #888)",
   disabled: "var(--error-color, #db4437)",
+  unavailable: "var(--error-color, #db4437)",
 };
 
 // UI strings — English default, German when the HA UI language is de.
@@ -80,7 +82,7 @@ const STRINGS = {
     mussHeuteTitle: "Activate the deadline — the device will finish today",
     socThreshold: "SOC threshold", maxPrice: "Max price (ct/kWh)",
     pvThreshold: "Solar power ≥ (W)",
-    deadline: "Finish by", stateOff: "off",
+    deadline: "Finish by", stateOff: "off", stateUnavailable: "unreachable",
     devicesOn: "active",
     // Advisor decision headline — FALLBACK ONLY. The banner prefers
     // hass.formatEntityState() (backend translations, all HA languages);
@@ -93,6 +95,7 @@ const STRINGS = {
     decision_waiting: "Waiting for surplus",
     decision_idle: "Idle – no devices",
     decision_unknown: "Unknown",
+    decision_input_fault: "Sensor fault – safe mode",
     // Advisor per-device reason codes (attributes – no backend translation)
     reason_solar_surplus: "solar surplus",
     reason_solar_pv: "solar power ≥ threshold",
@@ -109,6 +112,8 @@ const STRINGS = {
     reason_condition_not_met: "run condition not met",
     reason_disabled: "disabled (force-off)",
     reason_waiting_surplus: "waiting for surplus",
+    reason_switch_unavailable: "switch unreachable",
+    reason_input_fault: "sensor fault – safe mode",
   },
   de: {
     solar: "Solar", grid: "Netz", battery: "Akku", surplus: "Überschuss",
@@ -125,6 +130,7 @@ const STRINGS = {
     socThreshold: "SOC-Schwelle", maxPrice: "Max. Preis (ct/kWh)",
     pvThreshold: "Solarleistung ≥ (W)",
     deadline: "Fertig bis", stateOff: "aus",
+    stateUnavailable: "nicht erreichbar",
     devicesOn: "aktiv",
     // Advisor-Entscheidung — NUR FALLBACK (siehe EN-Kommentar).
     decision_startup: "Startet …",
@@ -135,6 +141,7 @@ const STRINGS = {
     decision_waiting: "Wartet auf Überschuss",
     decision_idle: "Leerlauf – keine Geräte",
     decision_unknown: "Unbekannt",
+    decision_input_fault: "Sensorstörung – Sicherheitsmodus",
     // Advisor-Begründungen pro Gerät (Attribute – keine Backend-Übersetzung)
     reason_solar_surplus: "Solar-Überschuss",
     reason_solar_pv: "Solarleistung ≥ Schwelle",
@@ -151,6 +158,8 @@ const STRINGS = {
     reason_condition_not_met: "Bedingung nicht erfüllt",
     reason_disabled: "deaktiviert (Aus-Schalter)",
     reason_waiting_surplus: "wartet auf Überschuss",
+    reason_switch_unavailable: "Schalter nicht erreichbar",
+    reason_input_fault: "Sensorstörung – Sicherheitsmodus",
   },
 };
 
@@ -648,8 +657,9 @@ class AurumPanel extends HTMLElement {
     // Store updater for this card
     this._refs["dev_" + d.slug] = () => {
       let state = (this._st(e.status) || "off").toLowerCase();
-      if (state === "unavailable" || state === "unknown") state = "off";
-      badge.textContent = state;
+      if (state === "unknown") state = "off";
+      badge.textContent =
+        state === "unavailable" ? this._t("stateUnavailable") : state;
       badge.style.background = STATE_COLOR[state] || "var(--secondary-text-color,#888)";
 
       const disabled = this._st(e.disable) === "on";

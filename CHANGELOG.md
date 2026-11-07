@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-11-07
+
+Safe mode for failed sensors, and cleaner restarts. From the audit of 2026-11-05 (`docs/CODE_AUDIT_2026-11-05.md`, finding numbers in brackets). Regression tests: `tests/test_failsafe_inputs.py`; the bug tests fail on 1.15.4.
+
+### Added
+- **Safe mode when a sensor fails.** AURUM now checks its hub inputs on every cycle. When the grid meter is unavailable for more than about a minute or frozen (no new reading within *Sensor timeout*), or a configured battery power sensor is unavailable for more than about a minute, AURUM starts nothing on surplus and switches off devices it started on surplus after their *Debounce OFF* time. Programs, deadline jobs, cheap-grid and PV-gate runs and devices you switched on yourself keep running. Before, an unavailable meter read as 0 W, so nothing was ever shed (#24, #99); with battery power sensors, a meter outage during grid charging even started devices (#40); and a frozen meter value started one device after another (#41). See README → *When a sensor fails*.
+- **Sensor timeout** setting (*Configure → Energy & Battery*, default 10 min, 0 = off) for the frozen-value check of the grid and PV power sensors.
+- **Faults are visible** (#44): Advisor decision `input_fault` (grid meter, battery power sensor or SOC failed) with an `input_faults` attribute listing every failed input, per-device reasons `input_fault` and `switch_unavailable`, AURUM's grid, PV, battery charge/discharge and excess sensors go `unavailable` with their source (house consumption too, except for a PV sensor that is merely offline at night, which counts as 0 W), an HA repair issue after 15 minutes (grid meter, battery power sensors, SOC; not PV, which many inverters take offline every night), one log line on loss and one on recovery, and the input health with raw source state and age in the diagnostics.
+
+### Fixed
+- **A missing SOC forced the battery-reserve emergency after restarts** (#16) — a SOC sensor still unavailable after the 90 s warm-up was read as 0 %, which switched off non-interruptible, cheap-grid and deadline devices. Startup now waits for the SOC sensor (up to 5 min). A SOC that becomes unknown later (sensor down for more than 30 min) makes new starts treat the battery as low, without the emergency and without switching running devices off.
+- **`nan` / `inf` readings poisoned the surplus until the next restart** (#43) — they now count as unavailable, and the smoothing recovers from a bad value.
+- **Unavailable device switches were commanded every cycle** (#35 in part, #38, #42) — AURUM read them as off, so it re-sent ON (with a push in the deadline window), reserved their power, which starved lower-priority devices, and inflated the switch penalty. A device whose switch is unavailable is now left alone and shown as `unavailable`; the time it is unreachable is not counted as runtime, and when the switch reports off again the run counts as ended. A switch in state `unknown` is still commanded, as before.
+- **Startup detection with an offline plug or power sensor** (#36 in part, #10 in part) — an unavailable plug during a program was read as 0 W, so the program was reported finished, *Must run today* was cleared and the program was cut when the plug came back; an unavailable power sensor made standby look like a program start. Both now hold the state machine until the reading is back, and the finish then needs *Finish time* of observed standby power.
+- **Restart with a switch that has not loaded yet** (#71) — AURUM read it as off and later showed its own run as `manual_override`. The saved state is now kept and checked once the switch reports.
+- **State was not saved when Home Assistant stops** (#22) — HA does not unload integrations on a restart, so the state file could be 5 minutes old, and a program started in that window was restored as paused and cut. AURUM now saves on stop.
+- **Energy Today sensors dropped to 0 after every restart and reload** (#21, #25), so the Energy Dashboard counted today's energy twice. They now start from the restored values, and a failed device cycle keeps the previous values.
+- **A restart across midnight restored yesterday's budget anchor** (#23, #63), which could set the budget to 0 W for the whole day. Day values are now reset when the saved state is from an earlier day; learned values are kept.
+- **A price outage held a cheap-grid run indefinitely** (#56) — after 30 minutes without price data the price counts as not cheap.
+- **Frozen PV power held PV-gate devices on** (#100) — a PV reading above 0 W with no new value within *Sensor timeout* counts as 0 W.
+- **The PV gate never started a device whose surplus was short** — its debounce timer was cleared every cycle in which the surplus did not cover the device, so the gate only fired when the plain surplus would have started the device anyway. It now starts the device on PV power alone, as documented (found in the review of this release).
+- README: the sign-flip template used `float(0)`, which turns a meter outage into a live 0 W (#102); it now has an `availability` line. The troubleshooting note that a missing SOC sensor means charging mode was wrong (#62).
+
+### Changed
+- After a restart, a device you switched on yourself stays yours (`manual_override`). Before, every device found switched on was taken over by AURUM. With the state now saved on stop, the saved owner is reliable. A device AURUM has no saved state for (newly added or renamed) is still taken over when it is found on.
+- Startup detection restarts its quiet and standby timers after any time it did not observe: a switch or power sensor gap, the battery-reserve emergency, manual override, the disable switch, and a Home Assistant restart. A finish always needs *Finish time* of observed standby power.
+
+### Upgrade notes
+- If your grid meter updates less often than every 10 minutes (some cloud integrations), the Advisor shows *Sensor fault* between updates and surplus starts pause; if the gap is longer than *Sensor timeout* plus *Debounce OFF*, devices running on surplus are also switched off and on again with every update. Raise *Sensor timeout* above the meter's update interval, or set it to 0.
+- A device whose switch entity does not exist (renamed or deleted) is now treated as unavailable instead of off: AURUM leaves it alone and shows it as `unavailable`. Pick the new entity in the device settings.
+
+### Known limitations
+- A meter that freezes at exactly 0 W is not detected, because zero-export inverters legitimately sit at 0 W.
+- Battery power sensors are checked for availability only, not for frozen values (they legitimately sit at 0 W for hours).
+- A device that the user switches off during a deadline window is still started again, and an SD plug switched off externally during a program still ends it as finished (#35, #36, unchanged).
+
 ## [1.15.4] - 2026-11-06
 
 Fixes from the audit of 2026-11-05 (`docs/CODE_AUDIT_2026-11-05.md`). Every fix has a regression test in `tests/test_audit_2026_11.py`; the bug tests fail on 1.15.3.

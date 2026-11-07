@@ -46,6 +46,9 @@ class PersistenceManager:
         self.state_file = config.get(
             "state_file",
             os.path.join(str(config_dir), "aurum_state.json"))
+        # When the restored file was written (None: no file, no stamp).
+        # The coordinator uses it to drop yesterday's budget day state.
+        self.last_saved_at = None
 
     def save(self, devices, budget=None):
         """Save device state (and optional budget state) to JSON (atomic write)."""
@@ -122,6 +125,7 @@ class PersistenceManager:
                 saved_at = datetime.fromisoformat(saved_at_str)
             except (ValueError, TypeError):
                 saved_at = None
+        self.last_saved_at = saved_at
         now = datetime.now()
 
         def _cycle_start(dev):
@@ -195,6 +199,11 @@ class PersistenceManager:
                     "resetting to standby", name)
                 dev["sd_state"] = "standby"
 
+            # Quiet and standby timers covered HA's downtime, which nobody
+            # observed: a finish or a detection must be seen again.
+            dev["sd_power_below_since"] = None
+            dev["sd_power_above_since"] = None
+
             # Same for "detected" state
             if dev.get("sd_state") == "detected":
                 dev["sd_state"] = "standby"
@@ -203,34 +212,28 @@ class PersistenceManager:
                     "resetting to standby", name)
 
         # ── HELIOS pattern: verify against actual HA switch state ────
-        # Saved state may be stale — always cross-check with real switch.
-        # If switch is ON  → managed_on=True, restore on_since
-        # If switch is OFF → managed_on=False, clear on_since
+        # Saved state may be stale — always cross-check with real switch
+        # (DeviceManager._apply_switch_crosscheck). At boot the switch is
+        # often still unavailable (integration not connected yet): reading
+        # that as OFF made an AURUM-managed device a "manual override"
+        # once it reported ON. Keep the saved state then; DeviceManager
+        # cross-checks on the first cycle the switch reports.
         now = datetime.now()
         for dev in devices.devices:
-            is_on = devices._is_device_on(dev)
-
-            if is_on:
-                dev["managed_on"] = True
-                # Only restore on_since for SD devices if in running state
-                sd_ok = (
-                    not dev.get("startup_detection")
-                    or dev.get("sd_state") == "running")
-                if not sd_ok:
-                    dev["on_since"] = None
-                elif not dev.get("on_since"):
-                    # Device is on but no timestamp saved → use now
-                    dev["on_since"] = now
-            else:
-                # Device is off → clear managed state
-                dev["managed_on"] = False
-                dev["on_since"] = None
-                dev["_runtime_tick"] = None
-                dev["_scheduling_reason"] = None
-
-            # Set runtime tick for all devices that have on_since
-            if dev.get("on_since"):
-                dev["_runtime_tick"] = now
+            dev["_runtime_tick"] = None
+            # 'unknown' is deferred too: MQTT switches report it until
+            # their retained state arrives.
+            raw = self.hass.get_state(dev["switch_entity"])
+            if raw is None or raw in ("unavailable", "unknown"):
+                dev["_switch_recheck"] = True
+                if dev.get("on_since"):
+                    dev["_runtime_tick"] = now
+                continue
+            saved = state.get(dev["name"])
+            devices._apply_switch_crosscheck(
+                dev, raw == "on", now,
+                keep_managed=isinstance(saved, dict)
+                and "managed_on" in saved)
 
         _LOGGER.info("AURUM state restored from %s", self.state_file)
         return state.get("_budget")  # return budget state for coordinator
