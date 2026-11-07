@@ -24,16 +24,51 @@ from .modules.budget import BudgetManager
 from .modules.devices import DeviceManager
 from .modules.pricing import PricingManager
 from .modules.advisor import AdvisorManager
-from .modules.helpers import CSVLogger
+from .modules.helpers import CSVLogger, get_float
 from .modules.persistence import PersistenceManager
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def budget_day_state_is_stale(saved_at, now):
+    """True when restored budget day values (trajectory anchor, PV-counter
+    midnight snapshot) belong to an earlier calendar day or to an unknown
+    date. Learned values are not affected."""
+    return saved_at is None or saved_at.date() < now.date()
+
+
+def initial_device_states(devices):
+    """Placeholder device_states published until the first device cycle.
+
+    The counters come from the restored state: the energy sensors are
+    TOTAL_INCREASING, and publishing 0 until the first device cycle made
+    the recorder count today's energy twice after every restart/reload.
+    """
+    return [
+        {
+            "name": dev["name"],
+            "slug": dev["slug"],
+            "state": "off",
+            "power": 0,
+            "runtime_today_s": round(dev.get("runtime_today_s", 0)),
+            "energy_today_wh": round(dev.get("energy_today_wh", 0.0), 1),
+            "sd_state": dev.get("sd_state", ""),
+            "price_mode": dev.get("price_mode", "solar_only"),
+        }
+        for dev in devices
+    ]
 
 
 class AurumCoordinator(DataUpdateCoordinator):
     """AURUM coordinator – orchestrates all modules every N seconds."""
 
     STARTUP_GRACE_CYCLES = 6  # 6 × 15s = 90s sensor warmup
+    # After the grace, startup waits at most this long for the grid meter
+    # and the SOC sensor. Then AURUM runs with the fail-safe input
+    # handling (energy.py) instead of waiting forever.
+    STARTUP_MAX_WAIT_S = 300
+    # A failed hub input becomes an HA repair issue after this long.
+    ISSUE_DELAY_S = 900
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry):
         """Initialize coordinator and all modules."""
@@ -56,6 +91,9 @@ class AurumCoordinator(DataUpdateCoordinator):
         self.cycle = 0
         self.device_states: list[dict] = []
         self._last_daily_reset: int = -1  # day of year
+        self._first_cycle_at = None   # wall clock of cycle 1
+        self._in_startup = True       # latched off when startup ends
+        self._issues: dict = {}       # repair issue id -> (status, entity)
 
         # ── Create modules ─────────────────────────────────────────
         self.energy = EnergyManager(self.bridge, self.config)
@@ -101,6 +139,18 @@ class AurumCoordinator(DataUpdateCoordinator):
                     try:
                         self.budget.restore_state(budget_state)
                         _LOGGER.info("AURUM budget state restored")
+                        # The trajectory anchor and the PV-counter midnight
+                        # snapshot belong to the day they were saved; after
+                        # a restart across midnight yesterday's anchor set
+                        # the budget to 0 W for the whole day. Learned
+                        # values (safety factor, weather) are kept.
+                        saved_at = self.persistence.last_saved_at
+                        if budget_day_state_is_stale(
+                                saved_at, datetime.now()):
+                            self.budget.daily_reset()
+                            _LOGGER.info(
+                                "AURUM budget: state from %s, day values "
+                                "reset", saved_at or "unknown date")
                     except Exception as be:
                         _LOGGER.warning("Budget state restore failed: %s", be)
             except Exception as e:
@@ -108,32 +158,29 @@ class AurumCoordinator(DataUpdateCoordinator):
 
         await self.hass.async_add_executor_job(_init_io)
 
-        # Pre-populate device_states for entity setup
-        self.device_states = []
-        for dev in self.devices.devices:
-            self.device_states.append({
-                "name": dev["name"],
-                "slug": dev["slug"],
-                "state": "off",
-                "power": 0,
-                "runtime_today_s": 0,
-                "sd_state": dev.get("sd_state", ""),
-                "price_mode": dev.get("price_mode", "solar_only"),
-            })
+        # Pre-populate device_states for entity setup (restored counters).
+        self.device_states = initial_device_states(self.devices.devices)
         # Seed the odd-cycle cache with the placeholders: the first
         # post-startup cycle is odd (grace=6 → cycle 7), and an empty
         # cache would make the advisor report "idle – no devices" for
         # one cycle on every restart even with devices configured.
         self._cached_device_states = list(self.device_states)
 
-    async def async_shutdown(self):
-        """Save state, then run base coordinator teardown."""
+    async def async_save_state(self):
+        """Write the state file now (executor). Never raises."""
         try:
             await self.hass.async_add_executor_job(
                 self.persistence.save, self.devices, self.budget)
-            _LOGGER.info("AURUM state saved on shutdown")
+            return True
         except Exception as e:
-            _LOGGER.warning("State save on shutdown failed: %s", e)
+            _LOGGER.warning("State save failed: %s", e)
+            return False
+
+    async def async_shutdown(self):
+        """Save state, then run base coordinator teardown."""
+        if await self.async_save_state():
+            _LOGGER.info("AURUM state saved on shutdown")
+        self._clear_repair_issues()
         # Let the base DataUpdateCoordinator cancel its refresh timer,
         # unsubscribe the EVENT_HOMEASSISTANT_STOP listener and shut down the
         # debouncer. Skipping this leaked one bus listener per reload.
@@ -153,13 +200,88 @@ class AurumCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("Advisor error: %s", e)
 
     def _entities_ready(self):
-        """Check if critical sensors are available."""
+        """The grid meter (and the SOC sensor, when configured) report a
+        number. Without the SOC wait, a slow cloud SOC integration made
+        every restart run on an unknown SOC."""
         grid = self.config.get("grid_power_entity")
-        if not grid:
+        if not grid or get_float(self.bridge, grid, None) is None:
             return False
-        state = self.hass.states.get(grid)
-        return state is not None and state.state not in (
-            "unavailable", "unknown")
+        soc = self.config.get("battery_soc_entity")
+        if soc and get_float(self.bridge, soc, None) is None:
+            return False
+        return True
+
+    def _is_startup(self, now):
+        """Startup guard: the grace cycles, then until the sensors are
+        ready, at most STARTUP_MAX_WAIT_S. Latched off once it ends, so a
+        sensor that fails later is handled by the fail-safe logic.
+
+        Returns (startup_mode, ready)."""
+        if not self._in_startup:
+            return False, True
+        ready = self._entities_ready()
+        if self._first_cycle_at is None:
+            self._first_cycle_at = now
+        waited = (now - self._first_cycle_at).total_seconds()
+        if self.cycle <= self.STARTUP_GRACE_CYCLES or (
+                not ready and waited < self.STARTUP_MAX_WAIT_S):
+            return True, ready
+        self._in_startup = False
+        if not ready:
+            _LOGGER.warning(
+                "AURUM: grid or SOC sensor still not available after %d s "
+                "– starting in fail-safe mode", int(waited))
+        return False, ready
+
+    def _update_repair_issues(self, shared):
+        """Raise an HA repair issue for a hub input that has failed for
+        ISSUE_DELAY_S, and delete it when the input recovers. Best effort:
+        never raises into the control loop."""
+        try:
+            from homeassistant.helpers import issue_registry as ir
+        except ImportError:
+            return
+        try:
+            now = shared["now"]
+            wanted = {}
+            for fault in shared.get("input_faults") or []:
+                since = fault.get("since")
+                if (since is None or (now - since).total_seconds()
+                        < self.ISSUE_DELAY_S):
+                    continue
+                wanted[f"input_{fault['input']}"] = fault
+            for issue_id in list(self._issues):
+                if issue_id not in wanted:
+                    ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+                    del self._issues[issue_id]
+            for issue_id, fault in wanted.items():
+                key = (fault["status"], fault["entity"])
+                if self._issues.get(issue_id) == key:
+                    continue
+                ir.async_create_issue(
+                    self.hass, DOMAIN, issue_id,
+                    is_fixable=False,
+                    is_persistent=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key=f"input_{fault['status']}",
+                    translation_placeholders={
+                        "entity": fault["entity"] or "?"},
+                )
+                self._issues[issue_id] = key
+        except Exception as e:  # noqa: BLE001 – issues are best effort
+            _LOGGER.debug("AURUM repair issue update failed: %s", e)
+
+    def _clear_repair_issues(self):
+        """Delete every repair issue this coordinator raised."""
+        if not self._issues:
+            return
+        try:
+            from homeassistant.helpers import issue_registry as ir
+            for issue_id in list(self._issues):
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("AURUM repair issue cleanup failed: %s", e)
+        self._issues = {}
 
     async def _async_update_data(self):
         """Orchestrate: Energy → Battery → Devices → Persist."""
@@ -167,9 +289,9 @@ class AurumCoordinator(DataUpdateCoordinator):
         shared = {"now": datetime.now(), "cycle": self.cycle}
         try:
             # ── Startup guard ──────────────────────────────────────
-            startup_mode = self.cycle <= self.STARTUP_GRACE_CYCLES
+            startup_mode, ready = self._is_startup(shared["now"])
             if startup_mode:
-                if not self._entities_ready():
+                if not ready:
                     if self.cycle == 1:
                         _LOGGER.info(
                             "AURUM: Waiting for sensors (%d/%d)...",
@@ -190,6 +312,8 @@ class AurumCoordinator(DataUpdateCoordinator):
                 shared["devices_on"] = 0
                 shared["excess"] = shared.get("excess", 0)
                 return shared
+
+            self._update_repair_issues(shared)
 
             # ── Step 2: Battery mode ───────────────────────────────
             try:
@@ -276,7 +400,10 @@ class AurumCoordinator(DataUpdateCoordinator):
                     for d in self._cached_device_states)
 
             # ── Step 4: Update device_states cache ─────────────────
-            self.device_states = shared.get("device_states", [])
+            # Keep the previous list when the device step failed: an empty
+            # list dropped every per-device sensor (energy too) to 0.
+            if "device_states" in shared:
+                self.device_states = shared["device_states"]
 
             # ── Step 5: CSV flush ──────────────────────────────────
             if self.action_csv and self.cycle % 2 == 0:

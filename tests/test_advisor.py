@@ -230,7 +230,8 @@ def test_decision_options_cover_all_codes():
     """Every decision the aggregate can emit must be a valid ENUM option."""
     from custom_components.aurum.modules import advisor as adv
     emitted = {
-        adv.DECISION_STARTUP, adv.DECISION_BATTERY_CHARGING,
+        adv.DECISION_STARTUP, adv.DECISION_INPUT_FAULT,
+        adv.DECISION_BATTERY_CHARGING,
         adv.DECISION_RUNNING_SOLAR, adv.DECISION_RUNNING_CHEAP_GRID,
         adv.DECISION_RUNNING, adv.DECISION_WAITING, adv.DECISION_IDLE,
         "unknown",

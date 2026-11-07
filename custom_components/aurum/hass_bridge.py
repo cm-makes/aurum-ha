@@ -7,6 +7,8 @@ This bridge translates those to HA Core equivalents.
 """
 
 import logging
+from datetime import datetime, timezone
+
 from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,6 +36,25 @@ class HassAccess:
             return state.attributes.get(attribute, default)
 
         return state.state
+
+    def get_age(self, entity_id):
+        """Seconds since the entity last reported a reading, or None.
+
+        Uses last_reported (HA 2024.3+), which also moves when a sensor
+        reports an unchanged value; falls back to last_updated on older
+        cores. None when the entity does not exist.
+        """
+        state = self._hass.states.get(entity_id)
+        if state is None:
+            return None
+        stamps = [
+            ts for ts in (getattr(state, "last_reported", None),
+                          getattr(state, "last_updated", None))
+            if ts is not None]
+        if not stamps:
+            return None
+        return max(0.0, (datetime.now(timezone.utc)
+                         - max(stamps)).total_seconds())
 
     def set_state(self, entity_id, state, attributes=None):
         """Set an entity state (for virtual sensors)."""

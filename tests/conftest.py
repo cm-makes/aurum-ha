@@ -67,6 +67,7 @@ class MockHass:
 
     def __init__(self):
         self.states = {}
+        self.ages = {}             # entity_id -> seconds since last report
         self.logs = []
         self.actions = []          # list of (action, entity_id)
         self.services = []         # list of (service, kwargs)
@@ -79,15 +80,22 @@ class MockHass:
                 entity_id, {}).get(attribute, default)
         return self.states.get(entity_id, default)
 
+    def get_age(self, entity_id):
+        # Same contract as hass_bridge.HassAccess.get_age: None = unknown.
+        return self.ages.get(entity_id)
+
     def set_state(self, entity_id, value):
         self.states[entity_id] = value
 
     def turn_on(self, entity_id):
-        self.states[entity_id] = "on"
+        # HA drops service calls to an unavailable entity: state unchanged.
+        if self.states.get(entity_id) not in ("unavailable", "unknown"):
+            self.states[entity_id] = "on"
         self.actions.append(("ON", entity_id))
 
     def turn_off(self, entity_id):
-        self.states[entity_id] = "off"
+        if self.states.get(entity_id) not in ("unavailable", "unknown"):
+            self.states[entity_id] = "off"
         self.actions.append(("OFF", entity_id))
 
     def log(self, msg, level="INFO"):
@@ -180,7 +188,13 @@ def make_manager(hass, make_device):
     def _factory(device_configs=None, **global_config):
         cfg = {"devices": device_configs or []}
         cfg.update(global_config)
-        return DeviceManager(hass, cfg)
+        mgr = DeviceManager(hass, cfg)
+        # A configured switch exists and is off unless a test says
+        # otherwise. A missing entity reads as unavailable (since 1.16),
+        # which freezes the device.
+        for dev in mgr.devices:
+            hass.states.setdefault(dev["switch_entity"], "off")
+        return mgr
 
     return _factory
 

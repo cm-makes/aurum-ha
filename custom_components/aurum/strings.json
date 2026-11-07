@@ -35,6 +35,7 @@
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
           "update_interval": "Update speed",
+          "sensor_timeout": "Sensor timeout",
           "battery_priority": "Battery priority"
         },
         "data_description": {
@@ -42,6 +43,7 @@
           "target_soc": "At what charge level should all devices be allowed to run? Default: 80%. While the battery is below this, AURUM only runs devices with special permission.",
           "min_soc": "Below what charge level should ALL devices be turned off? Protects your battery from deep discharge. Default: 10%.",
           "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed.",
+          "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen. AURUM then starts nothing on surplus and switches off devices running on surplus after their turn-off delay; programs, deadline jobs and cheap-grid runs continue. An unavailable sensor is always detected. 0 = off. Default: 10 min. Raise it if your meter updates less often (e.g. a cloud integration).",
           "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
         }
       }
@@ -84,6 +86,7 @@
           "target_soc": "Charge target",
           "min_soc": "Battery reserve",
           "update_interval": "Update speed",
+          "sensor_timeout": "Sensor timeout",
           "notify_service": "Mobile push notifications (optional)",
           "price_entity": "Electricity price sensor (optional)",
           "price_level_entity": "Price level sensor (optional)",
@@ -105,6 +108,7 @@
           "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
           "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
+          "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen (safe mode). 0 = off. Default: 10 min.",
           "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
           "price_entity": "Current electricity price in ct/kWh (a sensor reporting EUR/kWh is converted automatically). Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
           "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
@@ -299,11 +303,22 @@
       }
     }
   },
+  "issues": {
+    "input_unavailable": {
+      "title": "AURUM: {entity} is unavailable",
+      "description": "AURUM has had no valid reading from **{entity}** for 15 minutes or more. Until it reports again, AURUM runs in safe mode:\n\n- Grid meter or battery power sensor: no device is started on surplus, and devices running on surplus are switched off after their turn-off delay. Programs, deadline jobs and cheap-grid runs continue.\n- Battery SOC: the battery is treated as low (no new battery use), without the battery-reserve emergency.\n- Solar power: counts as 0 W, so the solar power threshold stays closed.\n\nCheck the device or integration behind this sensor. This message clears itself when the sensor reports again."
+    },
+    "input_stale": {
+      "title": "AURUM: {entity} reports no new values",
+      "description": "**{entity}** still shows a value, but has not reported a new reading within the *Sensor timeout*. A frozen feed (an MQTT sensor without expiry, a stalled cloud connection) looks like a live value, so AURUM runs in safe mode until the sensor reports again:\n\n- Grid meter: no device is started on surplus, and devices running on surplus are switched off after their turn-off delay. Programs, deadline jobs and cheap-grid runs continue.\n- Solar power: counts as 0 W, so the solar power threshold stays closed.\n\nCheck the device or integration behind this sensor. If it normally updates less often, raise *Sensor timeout* in the AURUM settings, or set it to 0 to turn this check off. This message clears itself when the sensor reports again."
+    }
+  },
   "entity": {
     "sensor": {
       "advisor_decision": {
         "state": {
           "startup": "Starting up",
+          "input_fault": "Sensor fault – safe mode",
           "battery_charging": "Battery below reserve – devices paused",
           "running_solar": "Running on solar surplus",
           "running_cheap_grid": "Running on cheap grid power",

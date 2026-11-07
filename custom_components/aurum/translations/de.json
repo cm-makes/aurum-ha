@@ -35,6 +35,7 @@
           "target_soc": "Ladeziel",
           "min_soc": "Batterie-Reserve",
           "update_interval": "Aktualisierung",
+          "sensor_timeout": "Sensor-Zeitlimit",
           "battery_priority": "Batterie-Vorrang"
         },
         "data_description": {
@@ -42,6 +43,7 @@
           "target_soc": "Ab welchem Ladestand dürfen alle Geräte laufen? Standardmäßig 80%. Solange die Batterie darunter liegt, lässt AURUM nur Geräte mit besonderer Freigabe laufen.",
           "min_soc": "Unter welchem Ladestand sollen ALLE Geräte abgeschaltet werden? Schützt deine Batterie vor Tiefentladung. Standard: 10%.",
           "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden.",
+          "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt. AURUM startet dann nichts mehr auf Überschuss und schaltet Geräte, die auf Überschuss laufen, nach ihrer Ausschaltverzögerung ab; Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter. Ein nicht verfügbarer Sensor wird immer erkannt. 0 = aus. Standard: 10 min. Erhöhe den Wert, wenn dein Zähler seltener aktualisiert (z. B. eine Cloud-Integration).",
           "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
         }
       }
@@ -84,6 +86,7 @@
           "target_soc": "Ladeziel",
           "min_soc": "Batterie-Reserve",
           "update_interval": "Aktualisierung",
+          "sensor_timeout": "Sensor-Zeitlimit",
           "notify_service": "Mobile Push-Benachrichtigungen (optional)",
           "price_entity": "Strompreis-Sensor (optional)",
           "price_level_entity": "Preisstufen-Sensor (optional)",
@@ -105,6 +108,7 @@
           "target_soc": "Ab diesem Ladestand dürfen alle Geräte laufen. Darunter gelten die individuellen Schwellen pro Gerät.",
           "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
           "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s.",
+          "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt (Sicherheitsmodus). 0 = aus. Standard: 10 min.",
           "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_christian'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
           "price_entity": "Aktueller Strompreis in ct/kWh (ein Sensor in EUR/kWh wird automatisch umgerechnet). Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
           "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
@@ -298,11 +302,22 @@
       }
     }
   },
+  "issues": {
+    "input_unavailable": {
+      "title": "AURUM: {entity} ist nicht verfügbar",
+      "description": "AURUM hat von **{entity}** seit mindestens 15 Minuten keinen gültigen Wert erhalten. Bis der Sensor wieder meldet, läuft AURUM im Sicherheitsmodus:\n\n- Netzzähler oder Batterie-Leistungssensor: Kein Gerät wird auf Überschuss gestartet, und Geräte, die auf Überschuss laufen, werden nach ihrer Ausschaltverzögerung abgeschaltet. Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter.\n- Akku-SOC: Der Akku gilt als niedrig (keine neue Akkunutzung), ohne Notabschaltung an der Akku-Reserve.\n- Solarleistung: zählt als 0 W, die Solarleistungs-Schwelle bleibt also zu.\n\nPrüfe das Gerät oder die Integration hinter diesem Sensor. Die Meldung verschwindet von selbst, sobald der Sensor wieder meldet."
+    },
+    "input_stale": {
+      "title": "AURUM: {entity} liefert keine neuen Werte",
+      "description": "**{entity}** zeigt noch einen Wert, hat aber innerhalb des *Sensor-Zeitlimits* keinen neuen gemeldet. Ein eingefrorener Wert (MQTT-Sensor ohne Ablaufzeit, hängende Cloud-Verbindung) sieht aus wie ein Live-Wert, deshalb läuft AURUM im Sicherheitsmodus, bis der Sensor wieder meldet:\n\n- Netzzähler: Kein Gerät wird auf Überschuss gestartet, und Geräte, die auf Überschuss laufen, werden nach ihrer Ausschaltverzögerung abgeschaltet. Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter.\n- Solarleistung: zählt als 0 W, die Solarleistungs-Schwelle bleibt also zu.\n\nPrüfe das Gerät oder die Integration hinter diesem Sensor. Aktualisiert er normalerweise seltener, erhöhe das *Sensor-Zeitlimit* in den AURUM-Einstellungen oder setze es auf 0, um diese Prüfung abzuschalten. Die Meldung verschwindet von selbst, sobald der Sensor wieder meldet."
+    }
+  },
   "entity": {
     "sensor": {
       "advisor_decision": {
         "state": {
           "startup": "Startet …",
+          "input_fault": "Sensorstörung – Sicherheitsmodus",
           "battery_charging": "Akku unter Reserve – Geräte pausiert",
           "running_solar": "Läuft mit Solar-Überschuss",
           "running_cheap_grid": "Läuft mit günstigem Netzstrom",

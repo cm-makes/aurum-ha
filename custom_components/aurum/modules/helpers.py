@@ -5,6 +5,7 @@ Safe state reading, EMA smoothing, CSV logging.
 """
 
 import csv
+import math
 import os
 import logging
 
@@ -12,14 +13,22 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def get_float(hass, entity_id, default=0.0):
-    """Safely read a numeric entity state, returning default on failure."""
+    """Safely read a numeric entity state, returning default on failure.
+
+    'nan' and 'inf' parse as floats but are not readings: one NaN grid
+    sample used to poison the EMAs until the next restart, so non-finite
+    values count as missing too.
+    """
     raw = hass.get_state(entity_id)
     if raw is None or raw in ("unavailable", "unknown", ""):
         return default
     try:
-        return float(raw)
+        value = float(raw)
     except (ValueError, TypeError):
         return default
+    if not math.isfinite(value):
+        return default
+    return value
 
 
 # Scale factors to AURUM's internal units, keyed by the sensor's
@@ -73,7 +82,7 @@ def get_state_safe(hass, entity_id, default=None):
 
 def ema_update(old_ema, new_value, alpha=0.3):
     """Exponential moving average: alpha * new + (1-alpha) * old."""
-    if old_ema is None:
+    if old_ema is None or not math.isfinite(old_ema):
         return new_value
     return alpha * new_value + (1 - alpha) * old_ema
 
@@ -87,7 +96,7 @@ def ema_update_asymmetric(current_ema, raw, alpha_down=0.7, alpha_up=0.2):
     This prevents false starts from brief excess spikes while allowing
     fast reaction to genuine PV surplus.
     """
-    if current_ema is None:
+    if current_ema is None or not math.isfinite(current_ema):
         return raw
     alpha = alpha_down if raw < current_ema else alpha_up
     return alpha * raw + (1.0 - alpha) * current_ema

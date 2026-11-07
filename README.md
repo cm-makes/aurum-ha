@@ -92,7 +92,7 @@ AURUM is in the HACS default store — no custom repository needed.
 
 1. Go to **Settings > Integrations > Add Integration > AURUM**
 2. **Energy & Battery:** Select your grid power sensor (and optionally PV, battery SOC, battery charge/discharge power, PV forecast)
-3. **Battery settings:** Set capacity, target SOC, minimum SOC, and update interval
+3. **Battery settings:** Set capacity, target SOC, minimum SOC, update interval and sensor timeout (see [When a sensor fails](#when-a-sensor-fails-safe-mode))
 4. After setup: Go to **AURUM > Configure** to add devices
 
 <p align="center">
@@ -255,6 +255,25 @@ Every 15 seconds:
 | **low_soc** | min < SOC < target | Devices run if surplus is sufficient; per-device SOC thresholds apply |
 | **charging** | SOC <= min | All devices off (battery protection) |
 
+### When a sensor fails (safe mode)
+
+A meter that drops out or freezes must not leave devices running on grid power. AURUM checks its inputs on every cycle and switches to a defined safe state per input:
+
+| Input fails | What AURUM does |
+|---|---|
+| **Grid meter**, or a configured **battery power** sensor: unavailable for more than about a minute, or frozen (no new reading within *Sensor timeout*, default 10 min) | Starts nothing on surplus. Devices AURUM started on surplus are switched off after their *Debounce OFF* time. Running programs (startup detection), deadline jobs, cheap-grid runs, PV-gate runs and devices you switched on yourself keep running; cheap-grid and deadline starts still happen. |
+| **Battery SOC**: unavailable for more than 30 min, or not reported yet after a restart | New starts treat the battery as low: only genuine grid export, no `cheap_grid_soc` grant, no PV gate. No battery-reserve emergency, and running devices are not switched off because of the SOC. |
+| **PV power**: unavailable, or frozen above 0 W | Counts as 0 W, so the solar power threshold (PV gate) stays closed. |
+| **Price** sensors: no data for 30 min | The price counts as not cheap: cheap-grid runs end and none start. Shorter gaps keep the current state. |
+| A device's **switch**: unavailable | No commands, no power reserved, no runtime counted; startup detection pauses. Shown as `unavailable` with reason `switch_unavailable`. |
+| A startup-detection device's **power sensor**: unavailable | No new program is detected, and a running program is not marked finished (only *Max runtime* can end it meanwhile). |
+
+Details:
+- A single missed reading is bridged with the last value. `nan` and `inf` count as unavailable.
+- While an input has failed, the Advisor shows `input_fault` (*Sensor fault – safe mode*) and lists it in the `input_faults` attribute, and AURUM's own sensor for that input is `unavailable`. After 15 minutes Home Assistant also shows a repair issue (*Settings → System → Repairs*); it clears itself when the sensor reports again.
+- *Sensor timeout* applies to the grid and PV power sensors. A reading at 0 W is not age-checked, because zero-export inverters and PV at night legitimately sit at 0 W for hours, so a meter that freezes at exactly 0 W is not detected. If your meter normally updates less often than every 10 minutes (some cloud integrations), raise the timeout, or set it to 0 to turn this check off. An unavailable sensor is always detected.
+- At startup AURUM waits for the grid meter and the SOC sensor, up to 5 minutes, before it controls devices.
+
 ### Manual Override vs. Manually-On
 
 | Situation | AURUM behavior |
@@ -345,7 +364,8 @@ Zero configuration — it's always active.
 | `running` | Running for another reason (manual override, deadline) |
 | `waiting` | Devices configured, none running — waiting for surplus |
 | `battery_charging` | Battery below your `min_soc` reserve — devices paused |
-| `startup` | Sensor warm-up after a restart (~90 s) |
+| `input_fault` | A sensor AURUM needs has failed — safe mode (see [When a sensor fails](#when-a-sensor-fails-safe-mode)); the failed inputs are in the `input_faults` attribute |
+| `startup` | Sensor warm-up after a restart (~90 s, up to 5 min while the grid or SOC sensor is not reporting) |
 | `idle` | No devices configured |
 
 ### Per-device reasons (attributes)
@@ -366,6 +386,8 @@ The `devices` attribute lists every device with a machine-readable `reason`:
 | `below_soc_threshold` | Battery below this device's SOC threshold |
 | `condition_not_met` | Run condition blocks it (e.g. boiler already hot) |
 | `disabled` | Force-off switch is on |
+| `switch_unavailable` | The device's switch is unavailable — AURUM sends it nothing until it reports again |
+| `input_fault` | Waiting because the surplus or the SOC is unknown (sensor failure) |
 | `waiting_surplus` | Not enough surplus right now |
 
 > Reason codes in attributes are untranslated by design (HA only translates
@@ -472,6 +494,10 @@ If the decision genuinely doesn't match what you expected, that's worth an [issu
 
 Most remaining setup issues fall into one of these. Before opening an issue, check whether your symptom matches.
 
+### Advisor says *Sensor fault – safe mode*
+
+One of AURUM's input sensors is unavailable or has stopped reporting new values. The `input_faults` attribute of `sensor.aurum_current_decision` names it, and *Settings → System → Repairs* shows it after 15 minutes. Check the device or integration behind that sensor. If it is a slow cloud meter that only updates every 10–15 minutes, raise *Sensor timeout* in *Configure → Energy & Battery*, or set it to 0. See [When a sensor fails](#when-a-sensor-fails-safe-mode) for what AURUM does meanwhile.
+
 ### `sensor.aurum_excess_power` is always 0 (or always huge) — devices never react
 
 **Grid sign convention is wrong.** AURUM expects: positive grid power = drawing from grid, negative = feeding in. Many inverters report this the other way around (or only positive values).
@@ -485,17 +511,18 @@ template:
         unit_of_measurement: "W"
         device_class: power
         state_class: measurement
-        state: "{{ -1 * states('sensor.your_grid_sensor') | float(0) }}"
+        state: "{{ -1 * states('sensor.your_grid_sensor') | float }}"
+        availability: "{{ has_value('sensor.your_grid_sensor') }}"
 ```
 
-Then point AURUM at `sensor.grid_power_signed`.
+Then point AURUM at `sensor.grid_power_signed`. The `availability` line keeps a meter outage visible as `unavailable`, so AURUM can go into safe mode; `float(0)` would turn the outage into a live-looking 0 W.
 
 ### Battery mode stuck on `charging`, all devices off
 
 Two possible causes:
 
 1. **Battery SOC sensor below `min_soc`** — check `sensor.aurum_battery_soc` vs. the **Battery reserve** slider. If SOC is reported as e.g. `42` but you expected `42%`, you're fine. If it's `0.42`, your sensor reports a fraction — AURUM's config flow now catches this at setup, but old configs won't be re-validated. Replace with a Template sensor that multiplies by 100.
-2. **No battery configured, but `min_soc` > 0** — without a battery SOC sensor, AURUM treats SOC as 0 and goes straight into charging mode. Leave the battery SOC empty *and* set `min_soc` to 0.
+2. **An unavailable SOC sensor is no longer a cause.** Up to 1.15 a SOC sensor that was still unavailable after a restart was read as 0 % and forced charging mode. Since 1.16 the Advisor shows *Sensor fault* instead (see [When a sensor fails](#when-a-sensor-fails-safe-mode)). Without a battery SOC sensor configured, AURUM runs without battery logic (mode `normal`).
 
 ### Surplus seems too low when the sun is bright
 

@@ -21,6 +21,7 @@ next-action sensors are intentionally out of scope for this first version.
 
 from ..const import (
     DEVICE_ACTIVE_STATES,
+    DEVICE_STATE_UNAVAILABLE,
     MODE_CHARGING,
     MODE_LOW_SOC,
     SCHED_REASON_CHEAP_GRID,
@@ -35,6 +36,10 @@ from ..const import (
 
 # ── Aggregate decision codes (sensor state, translated in HA) ────────
 DECISION_STARTUP = "startup"
+# A hub input AURUM needs has failed (grid meter or battery power sensor
+# unavailable/stale → surplus unknown, or SOC unknown). Beats every other
+# headline except startup: it changes what AURUM may do.
+DECISION_INPUT_FAULT = "input_fault"
 DECISION_BATTERY_CHARGING = "battery_charging"
 DECISION_RUNNING_SOLAR = "running_solar"
 DECISION_RUNNING_CHEAP_GRID = "running_cheap_grid"
@@ -45,6 +50,7 @@ DECISION_IDLE = "idle"
 # Full vocabulary for the ENUM sensor ("unknown" = advisor data missing).
 DECISION_OPTIONS = [
     DECISION_STARTUP,
+    DECISION_INPUT_FAULT,
     DECISION_BATTERY_CHARGING,
     DECISION_RUNNING_SOLAR,
     DECISION_RUNNING_CHEAP_GRID,
@@ -86,18 +92,34 @@ class AdvisorManager:
         battery_soc = shared.get("battery_soc", -1)
         device_states = shared.get("device_states", []) or []
 
+        # Failed hub inputs (energy.py). Only identity and status – no
+        # timestamps, so the attribute changes on transitions only.
+        input_faults = [
+            {"input": f.get("input"), "status": f.get("status"),
+             "entity": f.get("entity")}
+            for f in (shared.get("input_faults") or [])
+        ]
+        # Faults that change what AURUM may do: surplus unknown, or SOC
+        # unknown (sensor configured, battery_soc None).
+        control_fault = bool(shared.get("surplus_blind")) or (
+            battery_soc is None)
+
         devices = [
-            self._device_view(d, battery_mode, battery_soc)
+            self._device_view(d, battery_mode, battery_soc, control_fault)
             for d in device_states
         ]
         running = [d for d in devices if d["state"] in DEVICE_ACTIVE_STATES]
 
+        decision = self._aggregate(battery_mode, devices, running)
+        if control_fault:
+            decision = DECISION_INPUT_FAULT
         data = {
-            "decision": self._aggregate(battery_mode, devices, running),
+            "decision": decision,
             "mode": battery_mode,
             "devices_on": len(running),
             "devices_total": len(devices),
             "devices": devices,
+            "input_faults": input_faults,
         }
         # Price context only when a price sensor feeds the pipeline.
         # shared["current_price"] is already ct/kWh (see pricing.py).
@@ -111,21 +133,28 @@ class AdvisorManager:
 
     # ── per-device reason ────────────────────────────────────────────
 
-    def _device_view(self, d, battery_mode, battery_soc):
+    def _device_view(self, d, battery_mode, battery_soc,
+                     control_fault=False):
         state = d.get("state", "off")
         return {
             "name": d.get("name", ""),
             "slug": d.get("slug", ""),
             "state": state,
-            "reason": self._device_reason(d, state, battery_mode, battery_soc),
+            "reason": self._device_reason(
+                d, state, battery_mode, battery_soc, control_fault),
         }
 
-    def _device_reason(self, d, state, battery_mode, battery_soc):
+    def _device_reason(self, d, state, battery_mode, battery_soc,
+                       control_fault=False):
         """Map a device's state + published flags to a stable reason code.
 
         Prefers flags DeviceManager publishes (disabled, condition_met,
         scheduling_reason, …) over re-deriving its logic here.
         """
+        if state == DEVICE_STATE_UNAVAILABLE:
+            # AURUM cannot reach the switch: it sends nothing until the
+            # switch reports again.
+            return "switch_unavailable"
         if state == "manual_override":
             return "manual_override"
 
@@ -161,6 +190,10 @@ class AdvisorManager:
             return "condition_not_met"
         if battery_mode == MODE_CHARGING:
             return "battery_charging"
+        if control_fault:
+            # Surplus or SOC unknown: AURUM starts nothing that depends on
+            # them (see the decision's input_faults attribute).
+            return "input_fault"
         threshold = d.get("soc_threshold", 0) or 0
         if (battery_mode == MODE_LOW_SOC and battery_soc is not None
                 and battery_soc >= 0 and battery_soc < threshold):

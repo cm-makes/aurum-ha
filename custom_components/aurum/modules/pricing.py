@@ -12,6 +12,7 @@ Supports three data sources (all optional, user picks via entity selector):
 """
 
 import logging
+from datetime import datetime
 
 from .helpers import get_float, get_price_ct, get_state_safe
 
@@ -25,6 +26,12 @@ _LEVEL_ORDER = {
     "expensive": 3,
     "very_expensive": 4,
 }
+
+# How long a price outage holds a running cheap-grid device. A flaky
+# price sensor must not toggle devices, but before 1.16 the hold had no
+# end: a device started on cheap grid ran on grid for as long as the
+# outage lasted. After this, the price counts as not cheap.
+PRICE_OUTAGE_HOLD_S = 1800
 
 
 class PricingManager:
@@ -56,6 +63,10 @@ class PricingManager:
         # configured price source. False means the price sensor(s) are
         # unavailable/unknown – callers must hold device state, not toggle.
         self._last_data_available = False
+        # Start of the current price-data outage (None while data is
+        # available). Starts at the first snapshot without data.
+        self._outage_since = None
+        self._outage_expired = False
 
         if self._active:
             _LOGGER.info(
@@ -163,13 +174,14 @@ class PricingManager:
 
         Returns:
             True  – grid power is currently cheap; device may run on grid.
-            False – price data is available and grid is NOT cheap.
+            False – price data is available and grid is NOT cheap, or it
+                    has been unavailable for PRICE_OUTAGE_HOLD_S.
             None  – price data is unavailable; caller should hold state.
         """
         if dev.get("price_mode", "solar_only") == "solar_only":
             return False
         if not self._last_data_available:
-            return None
+            return False if self._outage_expired else None
         return self.is_price_ok(dev)
 
     def snapshot(self, shared):
@@ -179,3 +191,20 @@ class PricingManager:
         self._last_cheap_period = shared.get("cheap_period", False)
         self._last_cheap_starts_in = shared.get("cheap_period_starts_in_min")
         self._last_data_available = shared.get("price_data_available", False)
+
+        if self._last_data_available:
+            if self._outage_since is not None:
+                _LOGGER.info("AURUM: price data available again")
+            self._outage_since = None
+            self._outage_expired = False
+            return
+        now = shared.get("now") or datetime.now()
+        if self._outage_since is None:
+            self._outage_since = now
+        if (not self._outage_expired
+                and (now - self._outage_since).total_seconds()
+                >= PRICE_OUTAGE_HOLD_S):
+            self._outage_expired = True
+            _LOGGER.warning(
+                "AURUM: no price data for %d min – cheap-grid runs are "
+                "released until it returns", PRICE_OUTAGE_HOLD_S // 60)

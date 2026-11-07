@@ -27,6 +27,29 @@ from .const import (
 from .modules.advisor import DECISION_OPTIONS
 
 
+class _AttrAvailabilityMixin:
+    """Restore _attr_available-based availability for CoordinatorEntity.
+
+    CoordinatorEntity.available only reflects coordinator.last_update_success
+    and ignores _attr_available, so subclasses that toggle _attr_available to
+    signal a missing underlying value would otherwise stay 'available' and
+    report state 'unknown' instead of 'unavailable'. Placing this mixin first
+    in the MRO makes its available combine both signals.
+    """
+
+    @property
+    def available(self):
+        return super().available and getattr(self, "_attr_available", True)
+
+
+def _inputs_ok(data, *keys):
+    """True unless one of the hub inputs has failed (energy.py health).
+    Mirror sensors go unavailable then instead of showing a held or
+    substituted value that looks live."""
+    health = data.get("input_health") or {}
+    return all(health.get(key, "ok") == "ok" for key in keys)
+
+
 def _device_icon(name: str) -> str:
     """Guess icon from device name."""
     lower = name.lower()
@@ -100,8 +123,10 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class AurumExcessSensor(CoordinatorEntity, SensorEntity):
-    """Sensor showing available excess power."""
+class AurumExcessSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
+    """Sensor showing available excess power (unavailable while AURUM
+    cannot see the surplus)."""
 
     _attr_device_class = SensorDeviceClass.POWER
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -117,7 +142,9 @@ class AurumExcessSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        self._attr_native_value = data.get("excess", 0)
+        self._attr_available = not data.get("surplus_blind", False)
+        self._attr_native_value = (
+            data.get("excess", 0) if self._attr_available else None)
         self.async_write_ha_state()
 
 
@@ -349,7 +376,8 @@ class AurumDeviceEnergyTotalSensor(CoordinatorEntity, SensorEntity):
 # ══════════════════════════════════════════════════════════════════
 
 
-class AurumGridPowerSensor(CoordinatorEntity, SensorEntity):
+class AurumGridPowerSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Current grid power (positive = import, negative = export)."""
 
     _attr_device_class = SensorDeviceClass.POWER
@@ -366,11 +394,14 @@ class AurumGridPowerSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        self._attr_native_value = data.get("grid_power_raw", 0)
+        self._attr_available = _inputs_ok(data, "grid")
+        self._attr_native_value = (
+            data.get("grid_power_raw", 0) if self._attr_available else None)
         self.async_write_ha_state()
 
 
-class AurumPVPowerSensor(CoordinatorEntity, SensorEntity):
+class AurumPVPowerSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Current PV production."""
 
     _attr_device_class = SensorDeviceClass.POWER
@@ -387,23 +418,10 @@ class AurumPVPowerSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        self._attr_native_value = data.get("pv_power", 0)
+        self._attr_available = _inputs_ok(data, "pv")
+        self._attr_native_value = (
+            data.get("pv_power", 0) if self._attr_available else None)
         self.async_write_ha_state()
-
-
-class _AttrAvailabilityMixin:
-    """Restore _attr_available-based availability for CoordinatorEntity.
-
-    CoordinatorEntity.available only reflects coordinator.last_update_success
-    and ignores _attr_available, so subclasses that toggle _attr_available to
-    signal a missing underlying value would otherwise stay 'available' and
-    report state 'unknown' instead of 'unavailable'. Placing this mixin first
-    in the MRO makes its available combine both signals.
-    """
-
-    @property
-    def available(self):
-        return super().available and getattr(self, "_attr_available", True)
 
 
 class AurumBatterySOCSensor(
@@ -435,7 +453,8 @@ class AurumBatterySOCSensor(
         self.async_write_ha_state()
 
 
-class AurumBatteryChargeSensor(CoordinatorEntity, SensorEntity):
+class AurumBatteryChargeSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Power flowing into the battery."""
 
     _attr_device_class = SensorDeviceClass.POWER
@@ -452,11 +471,15 @@ class AurumBatteryChargeSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        self._attr_native_value = data.get("battery_charge_w", 0)
+        self._attr_available = _inputs_ok(data, "battery_charge")
+        self._attr_native_value = (
+            data.get("battery_charge_w", 0)
+            if self._attr_available else None)
         self.async_write_ha_state()
 
 
-class AurumBatteryDischargeSensor(CoordinatorEntity, SensorEntity):
+class AurumBatteryDischargeSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Power flowing out of the battery."""
 
     _attr_device_class = SensorDeviceClass.POWER
@@ -473,7 +496,10 @@ class AurumBatteryDischargeSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        self._attr_native_value = data.get("battery_discharge_w", 0)
+        self._attr_available = _inputs_ok(data, "battery_discharge")
+        self._attr_native_value = (
+            data.get("battery_discharge_w", 0)
+            if self._attr_available else None)
         self.async_write_ha_state()
 
 
@@ -624,7 +650,8 @@ class AurumElectricityPriceSensor(
         self.async_write_ha_state()
 
 
-class AurumHouseConsumptionSensor(CoordinatorEntity, SensorEntity):
+class AurumHouseConsumptionSensor(
+        _AttrAvailabilityMixin, CoordinatorEntity, SensorEntity):
     """Calculated house consumption = PV + grid + battery_net."""
 
     _attr_device_class = SensorDeviceClass.POWER
@@ -641,6 +668,12 @@ class AurumHouseConsumptionSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
+        self._attr_available = _inputs_ok(
+            data, "grid", "pv", "battery_charge", "battery_discharge")
+        if not self._attr_available:
+            self._attr_native_value = None
+            self.async_write_ha_state()
+            return
         pv = data.get("pv_power", 0)
         grid = data.get("grid_power_raw", 0)
         bat_charge = data.get("battery_charge_w", 0)

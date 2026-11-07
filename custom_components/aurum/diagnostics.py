@@ -63,6 +63,38 @@ async def async_get_config_entry_diagnostics(
         "battery_discharge_w": bat_discharge,
     }
 
+    # ── Hub inputs: health, raw source state and age ──────────────
+    # The energy values above are what AURUM used (held or 0 for a failed
+    # input); these show what the source sensors really report.
+    health_map = data.get("input_health") or {}
+    inputs: dict[str, Any] = {
+        "surplus_blind": data.get("surplus_blind", False),
+        "sensor_timeout_min": cfg.get("sensor_timeout"),
+    }
+    for key, conf_key in (
+            ("grid", "grid_power_entity"),
+            ("pv", "pv_power_entity"),
+            ("soc", "battery_soc_entity"),
+            ("battery_charge", "battery_charge_power_entity"),
+            ("battery_discharge", "battery_discharge_power_entity")):
+        entity_id = cfg.get(conf_key)
+        if not entity_id:
+            continue
+        st = hass.states.get(entity_id)
+        age = None
+        try:
+            age = coordinator.bridge.get_age(entity_id)
+        except Exception:  # noqa: BLE001 – diagnostics are best effort
+            pass
+        inputs[key] = {
+            "entity_id": entity_id,
+            "health": health_map.get(key),
+            "source_state": st.state if st else None,
+            "unit": (st.attributes.get("unit_of_measurement")
+                     if st else None),
+            "age_s": round(age) if age is not None else None,
+        }
+
     # ── Battery ────────────────────────────────────────────────────
     battery = {
         "mode": data.get("battery_mode"),
@@ -134,7 +166,7 @@ async def async_get_config_entry_diagnostics(
     health = {
         "last_update_success": coordinator.last_update_success,
         "startup_grace_cycles": coordinator.STARTUP_GRACE_CYCLES,
-        "startup_complete": coordinator.cycle > coordinator.STARTUP_GRACE_CYCLES,
+        "startup_complete": not getattr(coordinator, "_in_startup", False),
         "action_csv_active": coordinator.action_csv is not None,
         "budget_active": coordinator.budget is not None,
         "devices_configured": len(coordinator.devices.devices),
@@ -145,6 +177,7 @@ async def async_get_config_entry_diagnostics(
     return {
         "meta": meta,
         "energy": energy,
+        "inputs": inputs,
         "battery": battery,
         "budget": budget,
         "devices": devices_diag,
