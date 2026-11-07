@@ -287,9 +287,9 @@ class DeviceManager:
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
-                # The SD state machine is skipped this cycle: quiet time for
-                # a pending re-arm hold must be observed again afterwards.
-                dev["_sd_rearm_below_since"] = None
+                # The SD state machine is skipped this cycle: quiet and
+                # detection time must be observed again afterwards.
+                self._restart_sd_timers(dev)
                 # Manual override → AURUM must not touch the device in ANY
                 # cycle, including this emergency (contract of the override
                 # switch). Keeps externally-driven cycles (e.g. an
@@ -330,16 +330,26 @@ class DeviceManager:
                 # observed must not finish or detect a program.
                 dev["_cached_on"] = False
                 dev["_pending_off"] = None
-                dev["_sd_rearm_below_since"] = None
-                dev["sd_power_below_since"] = None
-                dev["sd_power_above_since"] = None
+                self._restart_sd_timers(dev)
+                dev["excess_since"] = None
+                dev["_excess_deficit_since"] = None
+                dev["_soc_grid_deficit_since"] = None
+                dev["_pv_gate_low_since"] = None
                 if dev.get("_runtime_tick") or dev.get("on_since"):
                     dev["_runtime_tick"] = now
                 dev["_switch_recheck"] = True
                 continue
             if dev.get("_switch_recheck"):
-                self._apply_switch_crosscheck(
-                    dev, switch == "on", now, keep_managed=True)
+                if self.hass.get_state(dev["switch_entity"]) == "unknown":
+                    # Not a real reading yet (an MQTT switch reloading):
+                    # keep the run and the pending check. The device is
+                    # handled as off meanwhile, so a start can still be
+                    # commanded; the clock moves without counting runtime.
+                    if dev.get("_runtime_tick") or dev.get("on_since"):
+                        dev["_runtime_tick"] = now
+                else:
+                    self._apply_switch_crosscheck(
+                        dev, switch == "on", now, keep_managed=True)
             was_on = switch == "on"
             dev["_cached_on"] = was_on
             actual_power, power_known = (
@@ -371,7 +381,7 @@ class DeviceManager:
             # device off every cycle until the disable switch is cleared.
             if self._is_disabled(dev):
                 dev["_pending_off"] = None
-                dev["_sd_rearm_below_since"] = None
+                self._restart_sd_timers(dev)
                 if was_on:
                     self._turn_off(dev, now, excess, battery_soc,
                                    "device_disabled")
@@ -382,7 +392,7 @@ class DeviceManager:
 
             # ── 1. Manual override → skip device ────────────────
             if self._is_manual_override(dev):
-                dev["_sd_rearm_below_since"] = None
+                self._restart_sd_timers(dev)
                 if was_on:
                     dev["_pending_off"] = None
                     if dev["on_since"] is None:
@@ -1188,6 +1198,13 @@ class DeviceManager:
 
         return False, 0
 
+    def _restart_sd_timers(self, dev):
+        """The SD state machine did not observe this cycle: quiet, standby
+        and re-arm time must be seen again, not assumed."""
+        dev["_sd_rearm_below_since"] = None
+        dev["sd_power_below_since"] = None
+        dev["sd_power_above_since"] = None
+
     def _sd_reset(self, dev):
         """Reset all SD state fields to standby."""
         dev["sd_state"] = SD_STATE_STANDBY
@@ -1520,6 +1537,10 @@ class DeviceManager:
                 "max_price": dev.get("max_price", 0),
                 "stop_after_runtime": dev.get("stop_after_runtime", False),
                 "runtime_target_reached": self._runtime_target_reached(dev),
+                # Physical switch state, so odd-cycle summaries count the
+                # same devices as this cycle (an SD device in 'waiting' is
+                # off; an 'unavailable' one is unknown).
+                "switch_on": is_on,
                 # Authoritative off-reasons for the advisor: the manager
                 # knows WHY a device is off; consumers must not re-derive.
                 "disabled": self._is_disabled(dev),
@@ -1707,7 +1728,9 @@ class DeviceManager:
         # Keep the reason of a device that is running across the boundary
         # (cheap-grid / PV-gate holds would otherwise be lost and the device
         # shed and restarted at midnight). Off devices start fresh.
-        if not self._is_device_on(dev):
+        # Only a switch known to be off: an unreachable one is checked when
+        # it reports again (_switch_recheck).
+        if self._switch_state(dev) == "off":
             dev["_scheduling_reason"] = None
         # Force-started immunity must not survive the daily reset; a device
         # that was deadline-forced yesterday should be sheddable again today.

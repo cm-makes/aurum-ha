@@ -946,3 +946,95 @@ class TestRepairIssueInputs:
             {"input": "soc", "status": "unavailable", "entity": "sensor.soc",
              "since": T0 - timedelta(hours=1)}]})
         assert ir == [("create", "input_soc")]
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Review round 2
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestReviewRound2:
+    def test_unavailable_then_unknown_then_on_keeps_the_run(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device()])
+        dev = mgr.devices[0]
+        hass.states[SW] = "on"
+        running(dev, T0)
+        hass.states[SW] = "unavailable"
+        mgr.update(dev_shared(T0, 2000))
+        hass.states[SW] = "unknown"              # MQTT entity reloading
+        mgr.update(dev_shared(T0 + timedelta(seconds=30), 2000))
+        hass.states[SW] = "on"
+        sh = dev_shared(T0 + timedelta(seconds=60), 2000)
+        mgr.update(sh)
+        assert sh["device_states"][0]["state"] == "on"
+        assert dev["managed_on"] is True
+        assert dev["_scheduling_reason"] == "surplus_available"
+
+    def test_debounce_needs_fresh_samples_after_a_switch_gap(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device(debounce_on=300)])
+        mgr.update(dev_shared(T0, 3000))          # arms excess_since
+        hass.states[SW] = "unavailable"
+        run(mgr, T0 + timedelta(seconds=30), 60, lambda t: dev_shared(t, 0))
+        hass.states[SW] = "off"
+        mgr.update(dev_shared(T0 + timedelta(minutes=62), 3000))
+        assert hass.states[SW] == "off"           # no start on one sample
+
+    def test_daily_reset_during_a_gap_keeps_the_reason(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device(price_mode="cheap_grid")])
+        dev = mgr.devices[0]
+        hass.states[SW] = "on"
+        running(dev, T0, reason="cheap_grid")
+        hass.states[SW] = "unavailable"
+        mgr._reset_device_counters(dev)
+        assert dev["_scheduling_reason"] == "cheap_grid"
+
+    def test_emergency_restarts_the_sd_quiet_timer(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([make_device(
+            startup_detection=True, power_entity="sensor.washer_power")])
+        dev = mgr.devices[0]
+        dev["sd_state"] = SD_STATE_RUNNING
+        dev["sd_running_since"] = T0 - timedelta(hours=1)
+        dev["sd_lockout_until"] = T0 + timedelta(hours=3)
+        dev["sd_power_below_since"] = T0 - timedelta(minutes=5)
+        hass.states[SW] = "on"
+        mgr.update(dev_shared(T0, 0, soc=5, mode=MODE_CHARGING))
+        assert dev["sd_power_below_since"] is None
+
+    def test_restore_drops_the_sd_quiet_timer(
+            self, hass, make_manager, make_device, tmp_path):
+        sf = str(tmp_path / "state.json")
+        cfg = make_device(startup_detection=True,
+                          power_entity="sensor.washer_power")
+        mgr = make_manager([cfg])
+        dev = mgr.devices[0]
+        dev["sd_state"] = SD_STATE_RUNNING
+        dev["sd_running_since"] = datetime.now() - timedelta(hours=1)
+        dev["sd_power_below_since"] = datetime.now() - timedelta(minutes=9)
+        hass.states[SW] = "on"
+        PersistenceManager(hass, {"state_file": sf}).save(mgr)
+        mgr2 = make_manager([cfg])
+        PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
+        assert mgr2.devices[0]["sd_power_below_since"] is None
+        assert mgr2.devices[0]["sd_state"] == SD_STATE_RUNNING
+
+    def test_cached_summary_matches_the_switch_state(
+            self, hass, make_manager, make_device):
+        from custom_components.aurum.coordinator import (
+            summarize_cached_states)
+        mgr = make_manager([
+            make_device(name="Washer", switch_entity="switch.washer",
+                        startup_detection=True),
+            make_device(name="Heater", switch_entity="switch.heater"),
+        ])
+        mgr.devices[0]["sd_state"] = SD_STATE_WAITING   # plug off
+        mgr.devices[0]["sd_waiting_since"] = T0
+        hass.states["switch.heater"] = "on"
+        running(mgr.devices[1], T0)
+        sh = dev_shared(T0, 2000)
+        mgr.update(sh)
+        assert summarize_cached_states(sh["device_states"])[0] == \
+            sh["devices_on"] == 1

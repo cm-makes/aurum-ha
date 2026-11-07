@@ -199,6 +199,11 @@ class PersistenceManager:
                     "resetting to standby", name)
                 dev["sd_state"] = "standby"
 
+            # Quiet and standby timers covered HA's downtime, which nobody
+            # observed: a finish or a detection must be seen again.
+            dev["sd_power_below_since"] = None
+            dev["sd_power_above_since"] = None
+
             # Same for "detected" state
             if dev.get("sd_state") == "detected":
                 dev["sd_state"] = "standby"

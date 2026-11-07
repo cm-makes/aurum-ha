@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN, INPUT_UNAVAILABLE
+from .const import DOMAIN
 from .hass_bridge import HassAccess
 from .modules.energy import EnergyManager
 from .modules.battery import BatteryManager
@@ -39,12 +39,19 @@ def summarize_cached_states(states):
     """devices_on, device_power_total and cheap_grid_active from a cached
     device_states list (odd cycles). Must agree with what DeviceManager
     publishes on even cycles: an 'unavailable' switch is not on."""
-    inactive = ("off", "", "unavailable")
-    devices_on = sum(1 for d in states if d.get("state") not in inactive)
+    inactive = ("off", "", "unavailable", "standby", "done", "waiting")
+
+    def is_on(d):
+        # switch_on is published by DeviceManager; the startup
+        # placeholders don't have it.
+        if "switch_on" in d:
+            return bool(d["switch_on"])
+        return d.get("state") not in inactive
+
+    devices_on = sum(1 for d in states if is_on(d))
     power = sum(d.get("power", 0) for d in states)
     cheap = any(
-        d.get("scheduling_reason") == "cheap_grid"
-        and d.get("state") not in inactive + ("standby", "done")
+        d.get("scheduling_reason") == "cheap_grid" and is_on(d)
         for d in states)
     return devices_on, power, cheap
 
@@ -320,23 +327,13 @@ class AurumCoordinator(DataUpdateCoordinator):
         try:
             # ── Startup guard ──────────────────────────────────────
             startup_mode, _ready = self._is_startup(shared["now"])
-            if startup_mode and not self._grid_ready():
-                # No grid reading yet: skip the energy step, and mark the
-                # surplus unknown so the mirror sensors are unavailable
-                # rather than a live-looking 0 W. With the grid ready and
-                # only the SOC missing, the energy step runs (warm-up).
-                if self.cycle == 1:
-                    _LOGGER.info(
-                        "AURUM: Waiting for sensors (%d/%d)...",
-                        self.cycle, self.STARTUP_GRACE_CYCLES)
-                shared["battery_mode"] = "startup"
-                shared["devices_on"] = 0
-                shared["excess"] = 0
-                shared["surplus_blind"] = True
-                shared["input_health"] = {"grid": INPUT_UNAVAILABLE}
-                return shared
+            if startup_mode and self.cycle == 1 and not self._grid_ready():
+                _LOGGER.info("AURUM: Waiting for sensors...")
 
             # ── Step 1: Energy sensors ─────────────────────────────
+            # Also during startup: warms the EMAs, and a sensor that is not
+            # reporting yet gets its health, so AURUM's mirror sensors are
+            # unavailable instead of a live-looking 0 W.
             try:
                 self.energy.update(shared)
             except Exception as e:

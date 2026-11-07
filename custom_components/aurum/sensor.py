@@ -668,9 +668,15 @@ class AurumHouseConsumptionSensor(
     @callback
     def _handle_coordinator_update(self):
         data = self.coordinator.data or {}
-        # A failed PV reading already counts as 0 W (inverters sleep at
-        # night), so only the grid and battery terms gate this sensor.
-        self._attr_available = _inputs_ok(
+        # An unavailable PV reading counts as 0 W, which is right while
+        # the inverter sleeps at night. A frozen PV value (only happens
+        # above 0 W) or a PV outage while the grid exports means PV is
+        # producing unseen: then the sum would be wrong.
+        pv_health = (data.get("input_health") or {}).get("pv", "ok")
+        pv_unseen = pv_health == "stale" or (
+            pv_health == "unavailable"
+            and (data.get("grid_power_raw") or 0) < 0)
+        self._attr_available = not pv_unseen and _inputs_ok(
             data, "grid", "battery_charge", "battery_discharge")
         if not self._attr_available:
             self._attr_native_value = None

@@ -108,7 +108,7 @@
           "target_soc": "Above this level, all devices are allowed. Below, individual device thresholds apply.",
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
           "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
-          "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen (safe mode). 0 = off. Default: 10 min.",
+          "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen. A frozen grid meter puts AURUM in safe mode; a frozen solar sensor counts as 0 W. 0 = off. Default: 10 min.",
           "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
           "price_entity": "Current electricity price in ct/kWh (a sensor reporting EUR/kWh is converted automatically). Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
           "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",

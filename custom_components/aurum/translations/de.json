@@ -108,7 +108,7 @@
           "target_soc": "Ab diesem Ladestand dürfen alle Geräte laufen. Darunter gelten die individuellen Schwellen pro Gerät.",
           "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
           "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s.",
-          "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt (Sicherheitsmodus). 0 = aus. Standard: 10 min.",
+          "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt. Ein eingefrorener Netzzähler schaltet AURUM in den Sicherheitsmodus; ein eingefrorener Solarsensor zählt als 0 W. 0 = aus. Standard: 10 min.",
           "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_christian'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
           "price_entity": "Aktueller Strompreis in ct/kWh (ein Sensor in EUR/kWh wird automatisch umgerechnet). Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
           "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
