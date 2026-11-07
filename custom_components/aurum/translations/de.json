@@ -248,6 +248,7 @@
           "stop_after_runtime": "Schaltet ab, sobald die heutige Laufzeit den Wert oben erreicht. Reset um Mitternacht.",
           "interruptible": "Darf AURUM dieses Gerät abschalten wenn der Überschuss sinkt?",
           "residual_power": "Zusätzliche Sicherheitsmarge beim Einschalten (W).",
+          "pv_power_threshold": "Läuft, solange die Solarerzeugung mindestens so viele W beträgt und der Akku mindestens auf Geräte-Schwelle ist – unabhängig von Hausverbrauch und Tagesbudget. 0 = aus.",
           "hysteresis_on": "Zusätzlicher Überschuss über Nennverbrauch zum Einschalten (W).",
           "hysteresis_off": "Wie weit Überschuss unter Null fallen darf vor dem Abschalten (W).",
           "debounce_on": "Wie lange Überschuss ausreichen muss vor dem Einschalten (Sekunden).",
