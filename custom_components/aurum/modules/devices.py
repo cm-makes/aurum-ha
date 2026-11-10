@@ -42,9 +42,16 @@ from ..const import (
     override_entity_id,
     muss_heute_entity_id,
     disable_entity_id,
+    DEVICE_STATE_UNAVAILABLE,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Surplus used for decisions while the surplus is unknown (grid meter or a
+# battery power sensor failed, see energy.py): a deficit no device can
+# start on and every surplus run is shed for after debounce_off. Never
+# logged or published.
+_BLIND_DEFICIT_W = -1_000_000.0
 
 # User-facing push/persistent notification texts. The HA config-flow
 # strings live in strings.json/translations, but these runtime
@@ -95,6 +102,10 @@ class DeviceManager:
 
         # UI language for runtime notifications ("en" fallback).
         self.lang = getattr(hass, "language", "en") or "en"
+
+        # Fail-safe flags of the current cycle (set in update()).
+        self._surplus_blind = False
+        self._soc_unknown = False
 
         # Global settings
         self.excess_deficit_tolerance = config.get(
@@ -219,6 +230,11 @@ class DeviceManager:
 
             # Manual override
             "managed_on": False,
+
+            # The switch could not be read (unavailable at restore, or
+            # during a cycle): the control state is kept and cross-checked
+            # against the switch on the first cycle it reports again.
+            "_switch_recheck": False,
         }
 
     # ══════════════════════════════════════════════════════════════
@@ -233,6 +249,15 @@ class DeviceManager:
         battery_soc = shared.get("battery_soc", -1)
         battery_mode = shared.get("battery_mode", MODE_NORMAL)
 
+        # SOC unknown (sensor configured but down, see energy.py): starts
+        # treat it as below every device threshold, so nothing new uses
+        # the battery. Running devices are not shed on SOC grounds (an
+        # unknown SOC is not a low one): soc_off = -1 skips those checks.
+        self._soc_unknown = battery_soc is None
+        if self._soc_unknown:
+            battery_soc = 0.0
+        soc_off = -1 if self._soc_unknown else battery_soc
+
         # Raw PV generation (W) for the pv_power_threshold gate. Stashed on
         # self so _should_turn_on / _should_turn_off can read it without
         # threading it through every call site.
@@ -244,6 +269,17 @@ class DeviceManager:
         # Positive = exporting to grid (= usable), negative = importing.
         grid_excess = -shared.get("grid_power_ema_asym", 0)
 
+        # Fail-safe: grid meter or a battery power sensor failed, so the
+        # surplus is unknown. Decisions see a deficit instead: nothing
+        # starts on surplus and devices AURUM started on surplus are shed
+        # after debounce_off. Price grants, deadline starts, the PV gate
+        # and running programs don't depend on the surplus and continue.
+        # excess/excess_raw keep the published values for the action log.
+        self._surplus_blind = bool(shared.get("surplus_blind"))
+        dec_excess, dec_excess_raw = excess, excess_raw
+        if self._surplus_blind:
+            dec_excess = dec_excess_raw = grid_excess = _BLIND_DEFICIT_W
+
         # PV Budget cap: maximum power AURUM may allocate to devices today.
         # None when budget module is not active.
         device_budget_w = shared.get("device_budget_w")
@@ -251,9 +287,9 @@ class DeviceManager:
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
-                # The SD state machine is skipped this cycle: quiet time for
-                # a pending re-arm hold must be observed again afterwards.
-                dev["_sd_rearm_below_since"] = None
+                # The SD state machine is skipped this cycle: quiet and
+                # detection time must be observed again afterwards.
+                self._restart_sd_timers(dev)
                 # Manual override → AURUM must not touch the device in ANY
                 # cycle, including this emergency (contract of the override
                 # switch). Keeps externally-driven cycles (e.g. an
@@ -284,9 +320,40 @@ class DeviceManager:
         newly_allocated = 0.0
 
         for dev in self.devices:
-            was_on = self._is_device_on(dev)
+            switch = self._switch_state(dev)
+            if switch is None:
+                # Switch unavailable or missing (plug offline, integration
+                # not loaded): AURUM cannot tell whether the device is on.
+                # Send no command (HA drops it anyway), allocate no power,
+                # count no runtime (the tick moves with the clock), and keep
+                # the SD state. Quiet/standby timers restart: time nobody
+                # observed must not finish or detect a program.
+                dev["_cached_on"] = False
+                dev["_pending_off"] = None
+                self._restart_sd_timers(dev)
+                dev["excess_since"] = None
+                dev["_excess_deficit_since"] = None
+                dev["_soc_grid_deficit_since"] = None
+                dev["_pv_gate_low_since"] = None
+                if dev.get("_runtime_tick") or dev.get("on_since"):
+                    dev["_runtime_tick"] = now
+                dev["_switch_recheck"] = True
+                continue
+            if dev.get("_switch_recheck"):
+                if self.hass.get_state(dev["switch_entity"]) == "unknown":
+                    # Not a real reading yet (an MQTT switch reloading):
+                    # keep the run and the pending check. The device is
+                    # handled as off meanwhile, so a start can still be
+                    # commanded; the clock moves without counting runtime.
+                    if dev.get("_runtime_tick") or dev.get("on_since"):
+                        dev["_runtime_tick"] = now
+                else:
+                    self._apply_switch_crosscheck(
+                        dev, switch == "on", now, keep_managed=True)
+            was_on = switch == "on"
             dev["_cached_on"] = was_on
-            actual_power = self._get_device_power(dev) if was_on else 0
+            actual_power, power_known = (
+                self._read_device_power(dev) if was_on else (0, True))
 
             # Accumulate runtime + energy (SD: only count RUNNING state)
             if was_on:
@@ -314,7 +381,7 @@ class DeviceManager:
             # device off every cycle until the disable switch is cleared.
             if self._is_disabled(dev):
                 dev["_pending_off"] = None
-                dev["_sd_rearm_below_since"] = None
+                self._restart_sd_timers(dev)
                 if was_on:
                     self._turn_off(dev, now, excess, battery_soc,
                                    "device_disabled")
@@ -325,7 +392,7 @@ class DeviceManager:
 
             # ── 1. Manual override → skip device ────────────────
             if self._is_manual_override(dev):
-                dev["_sd_rearm_below_since"] = None
+                self._restart_sd_timers(dev)
                 if was_on:
                     dev["_pending_off"] = None
                     if dev["on_since"] is None:
@@ -398,9 +465,10 @@ class DeviceManager:
 
             # ── 2. Startup detection devices ─────────────────────
             if dev["startup_detection"]:
-                sd_turnon = excess - newly_allocated
+                sd_turnon = dec_excess - newly_allocated
                 counted, sd_new = self._handle_startup_detection(
-                    dev, sd_turnon, battery_soc, actual_power, now, excess)
+                    dev, sd_turnon, battery_soc, actual_power, now, excess,
+                    power_known=power_known)
                 if sd_new > 0:
                     newly_allocated += sd_new
                 if counted:
@@ -412,16 +480,21 @@ class DeviceManager:
 
             if was_on:
                 devices_on += 1
+                if self._surplus_blind and not dev["managed_on"]:
+                    # Started by the user: with the meter down there is no
+                    # evidence of a deficit, so leave it running.
+                    dev["_pending_off"] = None
+                    continue
                 # RAW excess for turn-off (fast response to clouds)
-                turnoff_excess = excess_raw - newly_allocated
+                turnoff_excess = dec_excess_raw - newly_allocated
 
                 should_off = self._should_turn_off(
-                    dev, turnoff_excess, battery_soc,
+                    dev, turnoff_excess, soc_off,
                     soc_threshold, now)
                 dev["_pending_off"] = should_off
             else:
                 # EMA excess for turn-on (stable, prevents flapping)
-                turnon_excess = excess - newly_allocated
+                turnon_excess = dec_excess - newly_allocated
                 # Grid-only fallback for SOC-below-threshold case
                 turnon_grid = grid_excess - newly_allocated
 
@@ -498,7 +571,11 @@ class DeviceManager:
                     # Clear excess timer if not enough surplus
                     needed = (dev["nominal_power"] + dev["hysteresis_on"]
                               + dev["residual_power"])
-                    if turnon_excess < needed:
+                    # The PV gate debounces on its own timer (excess_since)
+                    # and is independent of the surplus: wiping it here
+                    # meant the gate could never start a device whose
+                    # surplus was short, its documented purpose.
+                    if turnon_excess < needed and not pv_gate:
                         dev["excess_since"] = None
 
         # ── Priority-based shedding ──────────────────────────────
@@ -512,7 +589,7 @@ class DeviceManager:
             # Sort by priority ascending (lowest shed first)
             candidates.sort(key=lambda d: d["priority"])
 
-            deficit = -(excess_raw - newly_allocated)
+            deficit = -(dec_excess_raw - newly_allocated)
 
             # The deficit is measured (excess_raw), so account freed power
             # by each victim's *actual* draw (falling back to nominal when
@@ -851,8 +928,14 @@ class DeviceManager:
     # ══════════════════════════════════════════════════════════════
 
     def _handle_startup_detection(self, dev, turnon_excess,
-                                  battery_soc, actual_power, now, excess):
+                                  battery_soc, actual_power, now, excess,
+                                  power_known=True):
         """Handle startup detection state machine.
+
+        power_known is False while the configured power sensor is
+        unavailable: actual_power is then the nominal fallback, which must
+        not be read as a program start (STANDBY) or as a program still
+        drawing power (RUNNING).
 
         Returns (counted_as_on, newly_started_power).
         """
@@ -878,6 +961,13 @@ class DeviceManager:
                 # Already ON (e.g. restored after HA restart) — anchor
                 # on_since so min_on_time protection works.
                 dev["on_since"] = now
+
+            if not power_known:
+                # No reading: detect nothing; detection and re-arm quiet
+                # time must be observed again afterwards.
+                dev["_sd_rearm_below_since"] = None
+                dev["sd_power_above_since"] = None
+                return False, 0
 
             # Finished by max_runtime while still drawing power (eco
             # programmes run 3.5-4 h, the default max is 3 h): wait until
@@ -1035,7 +1125,7 @@ class DeviceManager:
         # ── RUNNING: Program active (lockout) ────────────────────
         if sd_state == SD_STATE_RUNNING:
             # Collect power sample
-            if actual_power > dev["sd_standby_power"]:
+            if power_known and actual_power > dev["sd_standby_power"]:
                 dev["sd_power_samples"].append(actual_power)
 
             running_since = dev["sd_running_since"]
@@ -1048,9 +1138,14 @@ class DeviceManager:
                 now >= dev["sd_lockout_until"]
                 if dev["sd_lockout_until"] else False)
 
-            # B) Smart finish: power < finish_power for finish_time
+            # B) Smart finish: power < finish_power for finish_time.
+            # Without a reading the quiet timer restarts: finish_time must
+            # be observed, not assumed. Only max_runtime can end the
+            # program meanwhile.
+            if not power_known:
+                dev["sd_power_below_since"] = None
             smart_finish = False
-            if runtime_s >= dev["sd_min_runtime"]:
+            if power_known and runtime_s >= dev["sd_min_runtime"]:
                 if actual_power < dev["sd_finish_power"]:
                     if dev["sd_power_below_since"] is None:
                         dev["sd_power_below_since"] = now
@@ -1103,6 +1198,13 @@ class DeviceManager:
 
         return False, 0
 
+    def _restart_sd_timers(self, dev):
+        """The SD state machine did not observe this cycle: quiet, standby
+        and re-arm time must be seen again, not assumed."""
+        dev["_sd_rearm_below_since"] = None
+        dev["sd_power_below_since"] = None
+        dev["sd_power_above_since"] = None
+
     def _sd_reset(self, dev):
         """Reset all SD state fields to standby."""
         dev["sd_state"] = SD_STATE_STANDBY
@@ -1121,6 +1223,9 @@ class DeviceManager:
 
         Returns watts freed.
         """
+        if self._surplus_blind:
+            # Surplus unknown: shedding others cannot be shown to help.
+            return 0
         if battery_soc >= 0 and battery_soc < soc_threshold:
             return 0
 
@@ -1212,6 +1317,59 @@ class DeviceManager:
         """Check if device switch is currently on."""
         state = get_state_safe(self.hass, dev["switch_entity"])
         return state == "on"
+
+    def _switch_state(self, dev):
+        """'on', 'off', or None when the switch is unavailable or missing
+        (AURUM cannot reach it). 'unknown' counts as off, as before 1.16:
+        some switches (MQTT without retained state, assumed-state RF) only
+        report a state once they have been commanded."""
+        state = self.hass.get_state(dev["switch_entity"])
+        if state is None or state == "unavailable":
+            return None
+        return "on" if state == "on" else "off"
+
+    def _apply_switch_crosscheck(self, dev, is_on, now, keep_managed=False):
+        """Align restored control state with the real switch.
+
+        Called by PersistenceManager.restore, or on the first cycle the
+        switch reports after it could not be read. OFF → nothing is
+        running. ON → keep who started it (keep_managed: the saved or
+        current managed_on), so a device the user switched on stays the
+        user's after a restart; without a saved state it counts as
+        AURUM's (pre-1.16 behaviour).
+        """
+        dev["_switch_recheck"] = False
+        if is_on:
+            if not keep_managed:
+                dev["managed_on"] = True
+            # Only restore on_since for SD devices if in running state
+            sd_ok = (
+                not dev.get("startup_detection")
+                or dev.get("sd_state") == SD_STATE_RUNNING)
+            if not sd_ok:
+                dev["on_since"] = None
+            elif not dev.get("on_since"):
+                # Device is on but no timestamp saved → use now
+                dev["on_since"] = now
+        else:
+            dev["managed_on"] = False
+            dev["on_since"] = None
+            dev["_runtime_tick"] = None
+            dev["_scheduling_reason"] = None
+        # Count runtime from now (or from the restore, for a deferred
+        # check: the device was on while the switch was unavailable).
+        if dev.get("on_since") and dev.get("_runtime_tick") is None:
+            dev["_runtime_tick"] = now
+
+    def _read_device_power(self, dev):
+        """(watts, known): the power reading, or the nominal fallback with
+        known=False while a configured power sensor is unavailable."""
+        if dev["power_entity"]:
+            watts = get_power_w(self.hass, dev["power_entity"], None)
+            if watts is None:
+                return dev["nominal_power"], False
+            return watts, True
+        return dev["nominal_power"], True
 
     def _get_device_power(self, dev):
         """Read current power or fall back to nominal."""
@@ -1341,12 +1499,15 @@ class DeviceManager:
         devices_on = 0
         total_power = 0
         for dev in self.devices:
-            is_on = self._is_device_on(dev)
+            switch = self._switch_state(dev)
+            is_on = switch == "on"
             power = self._get_device_power(dev) if is_on else 0
             # SD devices: always use sd_state as authoritative state.
             # In WAITING the Shelly is OFF but the state is still "waiting",
             # not "off". Non-SD devices use the physical switch state.
-            if dev["startup_detection"] and dev["sd_state"]:
+            if switch is None:
+                state = DEVICE_STATE_UNAVAILABLE
+            elif dev["startup_detection"] and dev["sd_state"]:
                 state = dev["sd_state"]
             elif is_on:
                 if not dev["managed_on"]:
@@ -1376,6 +1537,10 @@ class DeviceManager:
                 "max_price": dev.get("max_price", 0),
                 "stop_after_runtime": dev.get("stop_after_runtime", False),
                 "runtime_target_reached": self._runtime_target_reached(dev),
+                # Physical switch state, so odd-cycle summaries count the
+                # same devices as this cycle (an SD device in 'waiting' is
+                # off; an 'unavailable' one is unknown).
+                "switch_on": is_on,
                 # Authoritative off-reasons for the advisor: the manager
                 # knows WHY a device is off; consumers must not re-derive.
                 "disabled": self._is_disabled(dev),
@@ -1563,7 +1728,9 @@ class DeviceManager:
         # Keep the reason of a device that is running across the boundary
         # (cheap-grid / PV-gate holds would otherwise be lost and the device
         # shed and restarted at midnight). Off devices start fresh.
-        if not self._is_device_on(dev):
+        # Only a switch known to be off: an unreachable one is checked when
+        # it reports again (_switch_recheck).
+        if self._switch_state(dev) == "off":
             dev["_scheduling_reason"] = None
         # Force-started immunity must not survive the daily reset; a device
         # that was deadline-forced yesterday should be sheddable again today.

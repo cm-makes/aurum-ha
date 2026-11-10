@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.15.4"
+VERSION = "1.16.0"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -32,6 +32,11 @@ CONF_UPDATE_INTERVAL = "update_interval"
 #       battery power sensors: excess = -grid
 CONF_BATTERY_PRIORITY = "battery_priority"
 
+# Minutes without a new grid (or PV) power reading before AURUM treats the
+# sensor as frozen (fail-safe mode, see modules/energy.py). 0 = off; an
+# unavailable sensor is always detected.
+CONF_SENSOR_TIMEOUT = "sensor_timeout"
+
 # ── Config keys: Notifications ──────────────────────────────────
 CONF_NOTIFY_SERVICE = "notify_service"
 
@@ -49,6 +54,7 @@ DEFAULT_BATTERY_CAPACITY_WH = 5000
 DEFAULT_TARGET_SOC = 80
 DEFAULT_MIN_SOC = 10
 DEFAULT_UPDATE_INTERVAL = 15
+DEFAULT_SENSOR_TIMEOUT = 10  # minutes
 
 # ── Device config keys ───────────────────────────────────────────
 CONF_DEV_NAME = "name"
@@ -148,6 +154,14 @@ MODE_CHARGING = "charging"
 
 # ── Device states ────────────────────────────────────────────────
 DEVICE_ACTIVE_STATES = ("on", "running", "manual_override")
+# Published when the device's switch is unavailable/unknown: AURUM cannot
+# tell whether it is on, so it sends no commands and allocates no power.
+DEVICE_STATE_UNAVAILABLE = "unavailable"
+
+# ── Input health (hub sensors) ───────────────────────────────────
+INPUT_OK = "ok"
+INPUT_UNAVAILABLE = "unavailable"   # missing / unavailable / not a number
+INPUT_STALE = "stale"               # no new reading within sensor_timeout
 
 # ── Startup Detection states ─────────────────────────────────────
 SD_STATE_STANDBY = "standby"

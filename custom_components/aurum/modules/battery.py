@@ -9,6 +9,11 @@ Modes:
   normal   – SOC above target, all devices allowed
   low_soc  – SOC below target but above min, per-device thresholds apply
   charging – SOC below min, no devices allowed
+
+SOC unknown (sensor configured but down beyond the hold, see energy.py):
+low_soc. Devices treat the SOC as below every threshold (no battery use),
+but the charging emergency is not triggered on a guess – it switched off
+non-interruptible and cheap-grid devices after every slow restart.
 """
 
 import logging
@@ -31,6 +36,14 @@ class BatteryManager:
     def update(self, shared):
         """Determine battery mode from current SOC."""
         soc = shared.get("battery_soc", -1)
+
+        # SOC unknown → low_soc without the emergency (see module doc)
+        if soc is None:
+            shared["battery_mode"] = MODE_LOW_SOC
+            shared["excess_for_devices"] = shared.get("excess", 0)
+            shared["excess_raw_for_devices"] = shared.get(
+                "excess_raw", 0)
+            return
 
         # No battery configured → always normal
         if soc < 0:

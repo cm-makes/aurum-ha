@@ -40,6 +40,8 @@ from .const import (
     CONF_TARGET_SOC,
     CONF_MIN_SOC,
     CONF_UPDATE_INTERVAL,
+    CONF_SENSOR_TIMEOUT,
+    DEFAULT_SENSOR_TIMEOUT,
     CONF_NOTIFY_SERVICE,
     CONF_PRICE_ENTITY,
     CONF_PRICE_LEVEL_ENTITY,
@@ -267,6 +269,13 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
         ): selector.NumberSelector(selector.NumberSelectorConfig(
             min=5, max=300, step=5,
             unit_of_measurement="s",
+            mode=selector.NumberSelectorMode.BOX)),
+        vol.Required(
+            CONF_SENSOR_TIMEOUT,
+            default=d.get(CONF_SENSOR_TIMEOUT, DEFAULT_SENSOR_TIMEOUT),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=120, step=1,
+            unit_of_measurement="min",
             mode=selector.NumberSelectorMode.BOX)),
         vol.Optional(
             CONF_BATTERY_PRIORITY,

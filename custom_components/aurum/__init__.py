@@ -223,6 +223,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
+    # Save the state when Home Assistant stops. HA does not unload config
+    # entries on stop, so async_shutdown never ran on a restart: the state
+    # file was up to 20 cycles old, and a program started in that window
+    # was restored as paused and cut.
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+
+    async def _async_save_on_stop(_event):
+        if await coordinator.async_save_state():
+            _LOGGER.info("AURUM state saved on Home Assistant stop")
+
+    entry.async_on_unload(hass.bus.async_listen_once(
+        EVENT_HOMEASSISTANT_STOP, _async_save_on_stop))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register the bundled dashboard panel (idempotent across entries/reloads).
