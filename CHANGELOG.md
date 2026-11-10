@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.16.0] - 2026-11-07
+## [1.16.0] - 2026-11-10
 
 Safe mode for failed sensors, and cleaner restarts. From the audit of 2026-11-05 (`docs/CODE_AUDIT_2026-11-05.md`, finding numbers in brackets). Regression tests: `tests/test_failsafe_inputs.py`; the bug tests fail on 1.15.4.
 
