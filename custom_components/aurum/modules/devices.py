@@ -1501,13 +1501,22 @@ class DeviceManager:
         for dev in self.devices:
             switch = self._switch_state(dev)
             is_on = switch == "on"
+            # unmeasured: why "power" is not a reading, or None.
             if is_on:
                 power, known = self._read_device_power(dev)
                 # Nominal power (no or a failed power sensor) is a guess.
-                measured = known and bool(dev["power_entity"])
+                if not dev["power_entity"]:
+                    unmeasured = "on without a power sensor"
+                elif not known:
+                    unmeasured = "on, power sensor unavailable"
+                else:
+                    unmeasured = None
             else:
                 # Off draws nothing; an unreachable switch may be on.
-                power, measured = 0, switch is not None
+                power = 0
+                unmeasured = (
+                    "switch unavailable or missing" if switch is None
+                    else None)
             # SD devices: always use sd_state as authoritative state.
             # In WAITING the Shelly is OFF but the state is still "waiting",
             # not "off". Non-SD devices use the physical switch state.
@@ -1548,8 +1557,10 @@ class DeviceManager:
                 # off; an 'unavailable' one is unknown).
                 "switch_on": is_on,
                 # "power" is a reading, not the nominal guess: the
-                # base-load sampler learns only from measured cycles.
-                "power_measured": measured,
+                # base-load sampler learns only from measured cycles, and
+                # its diagnostics name the reason.
+                "power_measured": unmeasured is None,
+                "power_unmeasured": unmeasured,
                 # Authoritative off-reasons for the advisor: the manager
                 # knows WHY a device is off; consumers must not re-derive.
                 "disabled": self._is_disabled(dev),

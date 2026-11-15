@@ -6,26 +6,39 @@ BudgetManager.update_consumption_profile() never changed anything and the
 PV budget always assumed a flat 500 W household load.
 
 - BaseLoadSampler: house minus AURUM's devices, hourly average, health
-  gates (PV and battery sensors, input faults, guessed device power),
-  coverage, outliers.
+  gates (PV and both battery sensors, input faults, guessed device
+  power), coverage, a fixed plausibility bound for single samples.
+- Skip reasons: diagnostics say why learning is paused, naming the device.
 - BudgetManager: default until min_samples, then the measured mean;
   the learned profile survives a restart.
-- DeviceManager publishes whether a device's power is measured.
+- DeviceManager publishes whether a device's power is measured, and why
+  not.
 - Coordinator end to end: real update cycles learn the hour and keep it
-  across a restart.
+  across a restart; diagnostics name the device that pauses learning.
+- The PV power sensor text asks for the total AC output of all PV systems.
 """
 
 import asyncio
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from custom_components.aurum.const import (
+    DOMAIN,
     INPUT_STALE,
     INPUT_UNAVAILABLE,
     override_entity_id,
 )
+from custom_components.aurum.modules.base_load import (
+    MAX_PLAUSIBLE_W,
+    SKIP_IMPLAUSIBLE,
+)
+
+REPO = Path(__file__).resolve().parents[1]
+UNREACHABLE = "Pool pump: switch unavailable or missing"
 
 GRID = "sensor.grid"
 PV = "sensor.pv"
@@ -79,13 +92,14 @@ def _shared(t, pv=3000.0, grid=50.0, net=-1400.0, devices=1000.0,
     return shared
 
 
-def _feed(sampler, start, minutes, step_s=15, **kw):
+def _feed(sampler, start, minutes, step_s=15, special=None, **kw):
     """Sample every step_s from start; return what the hour boundaries
-    handed over."""
+    handed over. special: {cycle index: _shared kwargs for that cycle}."""
     out = []
     for i in range(int(minutes * 60 / step_s)):
+        args = {**kw, **(special or {}).get(i, {})}
         res = sampler.sample(_shared(start + timedelta(seconds=i * step_s),
-                                     **kw))
+                                     **args))
         if res:
             out.append(res)
     return out
@@ -122,12 +136,23 @@ class TestSampler:
         assert s.disabled_reason == "no PV power sensor"
         assert _feed(s, T10, 60) == [] and _close_hour(s) is None
 
-    def test_battery_needs_a_battery_power_sensor(self):
+    def test_battery_needs_both_battery_power_sensors(self):
         s = _sampler(battery_charge_power_entity=None,
                      battery_discharge_power_entity=None)
-        assert s.disabled_reason == "no battery power sensor"
-        # One sensor is enough (a signed sensor in one field).
-        assert _sampler(battery_discharge_power_entity=None).enabled
+        assert s.disabled_reason == "no battery charge or discharge power sensor"
+        # The sensors are unsigned: with only the charge sensor a
+        # discharging battery is invisible (PV 300 W + battery 500 W
+        # would be learned as 300 W), and vice versa.
+        only_charge = _sampler(battery_discharge_power_entity=None)
+        assert not only_charge.enabled
+        assert only_charge.disabled_reason == (
+            "no battery discharge power sensor")
+        _feed(only_charge, T10, 60)
+        assert _close_hour(only_charge) is None
+        only_discharge = _sampler(battery_charge_power_entity=None)
+        assert only_discharge.disabled_reason == (
+            "no battery charge power sensor")
+        assert _sampler().enabled
         # No battery at all: house = PV + grid.
         assert _sampler(battery_soc_entity=None,
                         battery_charge_power_entity=None,
@@ -189,21 +214,42 @@ class TestSampler:
         assert _close_hour(s) == {10: pytest.approx(650.0)}
 
     def test_glitch_readings_do_not_drag_the_hour(self):
-        s = _sampler()
-        _feed(s, T10, 60)
-        # Two register glitches: the plain mean would be about 1190 W.
-        s._samples[100] = 65535.0
-        s._samples[101] = 65535.0
+        # 120 s cycles: 30 samples an hour, so a 2 % trim drops nothing.
+        # One 65535 W register glitch would raise the hour by about 2.2 kW.
+        s = _sampler(update_interval=120)
+        _feed(s, T10, 60, step_s=120, special={7: {"grid": 65535.0}})
+        assert _close_hour(s) == {10: pytest.approx(650.0)}
+        assert s.last_hour["skipped_cycles"] == {SKIP_IMPLAUSIBLE: 1}
+
+    def test_a_device_power_glitch_does_not_drag_the_hour(self):
+        # A glitch in a device's power sensor drives the sample far below
+        # 0 W: the plain mean would reject the whole hour as negative.
+        s = _sampler(update_interval=120)
+        _feed(s, T10, 60, step_s=120, special={7: {"devices": 65535.0}})
         assert _close_hour(s) == {10: pytest.approx(650.0)}
 
-    def test_a_short_real_load_still_counts(self):
-        # A kettle: 3 min at +2 kW on a 300 W house.
+    @pytest.mark.parametrize("watts, kept", [
+        (MAX_PLAUSIBLE_W - 1000, True),
+        (MAX_PLAUSIBLE_W + 1000, False),
+        (-(MAX_PLAUSIBLE_W - 1000), True),
+        (-(MAX_PLAUSIBLE_W + 1000), False),
+    ])
+    def test_plausibility_bound(self, watts, kept):
+        from custom_components.aurum.modules.base_load import BaseLoadSampler
+        value, reason = BaseLoadSampler.measure(_shared(
+            T10, pv=0.0, grid=watts, net=0.0, devices=0.0))
+        if kept:
+            assert (value, reason) == (watts, None)
+        else:
+            assert (value, reason) == (None, SKIP_IMPLAUSIBLE)
+
+    def test_a_short_real_load_counts_in_full(self):
+        # A kettle: 3 min at +2 kW on a 300 W house (12 of 240 cycles).
+        # A 2 % trim at each end dropped most of it (about 369 W).
         s = _sampler()
-        _feed(s, T10, 60, pv=0.0, grid=300.0, net=0.0, devices=0.0)
-        for i in range(12):
-            s._samples[i] = 2300.0
-        result = _close_hour(s)[10]
-        assert 350 < result < 400
+        _feed(s, T10, 60, pv=0.0, grid=300.0, net=0.0, devices=0.0,
+              special={i: {"grid": 2300.0} for i in range(12)})
+        assert _close_hour(s) == {10: pytest.approx(400.0)}
 
     def test_out_of_step_meters_average_out(self):
         # A cloud: PV read late, half the samples 800 W too high and half
@@ -223,6 +269,88 @@ class TestSampler:
         s = _sampler()
         _feed(s, T10, 60, devices=1700.0)
         assert _close_hour(s) == {10: 0.0}
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Why learning is paused (diagnostics)
+# ══════════════════════════════════════════════════════════════════
+
+
+def _with_unreachable_pump():
+    return [
+        {"name": "Heater", "power": 1000.0, "switch_on": True,
+         "power_measured": True, "power_unmeasured": None},
+        {"name": "Pool pump", "power": 0, "switch_on": False,
+         "power_measured": False,
+         "power_unmeasured": "switch unavailable or missing"},
+    ]
+
+
+class TestSkipReasons:
+    """One switch that never comes back blocks all learning: the
+    diagnostics must say so instead of 'active'."""
+
+    def test_an_unreachable_switch_is_named(self):
+        s = _sampler()
+        _feed(s, T10, 60, device_states=_with_unreachable_pump())
+        info = s.info()
+        assert info["status"] == "paused"
+        assert info["reason"] == UNREACHABLE
+        assert info["samples_this_hour"] == 0
+        assert info["samples_needed_per_hour"] == 120
+        assert info["skipped_this_hour"] == {UNREACHABLE: 240}
+        assert info["last_skip"] == {"reason": UNREACHABLE,
+                                     "at": "2026-06-15T10:59:45"}
+
+        assert _close_hour(s) is None
+        info = s.info()
+        assert info["last_hour"] == {
+            "hour": 10, "samples": 0, "learned_w": None,
+            "reason": "too few samples (0 of 120)",
+            "skipped_cycles": {UNREACHABLE: 240}}
+        # 11:00 the switch is back: active again; the count since start
+        # stays.
+        assert info["status"] == "active" and info["reason"] is None
+        assert info["skipped_this_hour"] == {}
+        assert info["skipped_since_start"] == {UNREACHABLE: 240}
+
+    @pytest.mark.parametrize("extra, reason", [
+        ({"device_states": [{"name": "Heater", "power": 1000.0,
+                             "switch_on": True, "power_measured": False,
+                             "power_unmeasured": "on without a power sensor"}]},
+         "Heater: on without a power sensor"),
+        ({"input_health": {"grid": INPUT_STALE}}, "grid meter stale"),
+        ({"input_health": {"pv": INPUT_UNAVAILABLE}},
+         "PV power sensor unavailable"),
+        ({"input_health": {"battery_discharge": INPUT_UNAVAILABLE}},
+         "battery discharge power sensor unavailable"),
+        ({"surplus_blind": True}, "surplus blind"),
+        ({"device_power_total": None}, "device step failed"),
+        ({"device_states": [{"name": "Heater", "power": 0}]},
+         "devices starting up"),
+        ({"grid": 65535.0}, SKIP_IMPLAUSIBLE),
+    ])
+    def test_each_skip_has_a_reason(self, extra, reason):
+        s = _sampler()
+        s.sample(_shared(T10, **extra))
+        info = s.info()
+        assert (info["status"], info["reason"]) == ("paused", reason)
+        assert info["skipped_since_start"] == {reason: 1}
+
+    def test_off_names_the_missing_sensor(self):
+        info = _sampler(pv_power_entity=None).info()
+        assert (info["status"], info["reason"]) == (
+            "off", "no PV power sensor")
+
+    def test_a_learned_hour_is_reported(self):
+        s = _sampler()
+        _feed(s, T10, 60)
+        _close_hour(s)
+        info = s.info()
+        assert (info["status"], info["reason"]) == ("active", None)
+        assert info["last_hour"] == {"hour": 10, "samples": 240,
+                                     "learned_w": 650.0,
+                                     "skipped_cycles": {}}
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -310,6 +438,16 @@ class TestPowerMeasured:
                  for d in shared["device_states"]}
         assert flags == {"Metered": True, "Plain": False, "Broken": False,
                          "Off": True, "Gone": False}
+        # Why not, for the diagnostics.
+        reasons = {d["name"]: d["power_unmeasured"]
+                   for d in shared["device_states"]}
+        assert reasons == {
+            "Metered": None,
+            "Plain": "on without a power sensor",
+            "Broken": "on, power sensor unavailable",
+            "Off": None,
+            "Gone": "switch unavailable or missing",
+        }
         # The power figures themselves are unchanged.
         assert shared["device_power_total"] == 420 + 1000 + 1000
 
@@ -401,3 +539,67 @@ class TestCoordinator:
         start = datetime(2026, 6, 15, 9, 0)
         _run_cycles(coord, start, start + timedelta(hours=2), 300)
         assert coord.budget._consumption_profile == [500] * 24
+
+    def test_diagnostics_name_the_device_that_pauses_learning(
+            self, monkeypatch, hass, tmp_path, setup, make_device):
+        # A seasonal plug unplugged for the winter: its switch entity is
+        # gone, so no cycle gives a sample and no hour is learned.
+        setup = {**setup, "devices": setup["devices"] + [make_device(
+            name="Pool pump", switch_entity="switch.pool_pump",
+            power_entity="sensor.pool_pump_power")]}
+        coord = _coordinator(monkeypatch, hass, tmp_path, setup)
+        start = datetime(2026, 6, 15, 9, 0)
+        _run_cycles(coord, start, start + timedelta(hours=2), 300)
+        assert coord.budget._consumption_profile[10] == pytest.approx(500.0)
+
+        from custom_components.aurum import diagnostics
+        coord.data = {}
+        coord.last_update_success = True
+        diag_hass = SimpleNamespace(
+            data={DOMAIN: {"test": {"coordinator": coord}}},
+            states=SimpleNamespace(get=lambda entity_id: None))
+        result = asyncio.run(diagnostics.async_get_config_entry_diagnostics(
+            diag_hass, SimpleNamespace(entry_id="test")))
+        learning = result["budget"]["consumption_learning"]
+        assert learning["status"] == "paused"
+        assert learning["reason"] == UNREACHABLE
+        assert learning["last_hour"]["hour"] == 10
+        assert learning["last_hour"]["learned_w"] is None
+        assert learning["last_hour"]["skipped_cycles"] == {UNREACHABLE: 12}
+
+
+# ══════════════════════════════════════════════════════════════════
+#  The PV power sensor must cover all PV production
+# ══════════════════════════════════════════════════════════════════
+
+
+def _pv_descriptions(path):
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [step["data_description"]["pv_power_entity"]
+            for section in ("config", "options")
+            for step in data[section]["step"].values()
+            if "pv_power_entity" in step.get("data_description", {})]
+
+
+class TestPvSensorText:
+    """An unmetered balcony plant or a second inverter is missing from
+    the house consumption, so the learned load comes out too low: the
+    field and the README ask for the total AC output."""
+
+    @pytest.mark.parametrize("path, phrase", [
+        ("custom_components/aurum/strings.json",
+         "total AC output of all PV systems in the house"),
+        ("custom_components/aurum/translations/en.json",
+         "total AC output of all PV systems in the house"),
+        ("custom_components/aurum/translations/de.json",
+         "gesamte AC-Leistung aller PV-Anlagen im Haus"),
+    ])
+    def test_field_description(self, path, phrase):
+        texts = _pv_descriptions(REPO / path)
+        assert len(texts) == 2      # setup and options
+        assert all(phrase in text for text in texts)
+
+    def test_readme(self):
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        assert ("PV **power** sensor that reports the total AC output of "
+                "all PV systems in the house") in readme

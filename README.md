@@ -196,7 +196,14 @@ In **Configure > Energy & Battery**:
 
 > If your forecast entity only provides a daily total without hourly data, AURUM uses a fallback sunset estimate (19:00) for budget calculations.
 
-The budget also subtracts what your household uses until sunset. AURUM learns this per hour of the day: house consumption minus AURUM's own devices, averaged over each hour. An hour uses the learned value once it has data from 3 days; until then AURUM assumes 500 W. Loads that AURUM does not switch, such as a wallbox or a heat pump, count as household load. Learning needs a PV **power** sensor and, with a battery, its charge/discharge power sensors. AURUM pauses it while the grid meter, the PV sensor or a battery power sensor has failed, and while a device that is on has no working power sensor. The learned values survive restarts.
+The budget also subtracts what your household uses until sunset. AURUM learns this per hour of the day: house consumption minus AURUM's own devices, averaged over each hour. An hour uses the learned value once it has data from 3 days; until then AURUM assumes 500 W. Loads that AURUM does not switch, such as a wallbox or a heat pump, count as household load. Short loads such as a kettle count in full; only single readings beyond ±30 kW are ignored as glitches. The learned values survive restarts.
+
+Learning needs:
+
+- a PV **power** sensor that reports the total AC output of all PV systems in the house (every inverter, including a balcony plant). Production it doesn't see is missing from the house consumption, so the learned load would come out too low.
+- with a battery, **both** the battery charge and the battery discharge power sensor. Each reports one direction only, so with just one of them the other direction goes unseen.
+
+AURUM pauses learning while the grid meter, the PV sensor or a battery power sensor has failed, while a device that is on has no working power sensor, and while a device's switch is unavailable or missing (it may be on). The diagnostics (`budget` → `consumption_learning`) show whether learning is active and, if not, why, naming the device.
 
 ### Price-Aware Scheduling (optional)
 
@@ -496,7 +503,7 @@ Download a full JSON snapshot of AURUM's internal state for troubleshooting:
 
 **Settings > Devices & Services > AURUM > Download Diagnostics**
 
-The file contains: energy values, battery state, budget info, device states, override switch states, and coordinator health.
+The file contains: energy values, battery state, budget info (including the learned household load and why its learning is paused, if it is), device states, override switch states, and coordinator health.
 
 ---
 

@@ -117,8 +117,10 @@ async def async_get_config_entry_diagnostics(
             # Household load per hour of day the budget subtracts.
             "consumption_profile": (
                 coordinator.budget.consumption_profile_info()),
-            "consumption_learning": (
-                coordinator.base_load.disabled_reason or "active"),
+            # Whether it is learned and, when not, why (off: missing
+            # sensor; paused: the latest cycle's skip reason, e.g.
+            # "Pool pump: switch unavailable or missing").
+            "consumption_learning": coordinator.base_load.info(),
         })
 
     # ── Devices ────────────────────────────────────────────────────
