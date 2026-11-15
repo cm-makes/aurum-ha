@@ -154,6 +154,10 @@ async def async_get_config_entry_diagnostics(
             # Startup detection
             "startup_detection": dev.get("startup_detection", False),
             "sd_state": dev.get("sd_state", ""),
+            # Start reserve: watts this program keeps free for its heating,
+            # and whether another program's reserve holds this device back.
+            "sd_start_reserve_w": round(dev.get("_sd_start_reserve_w", 0.0)),
+            "start_reserve_hold": dev.get("_start_reserve_hold", False),
             # Override switches
             "override_switch": (
                 override_state.state if override_state else "unavailable"),

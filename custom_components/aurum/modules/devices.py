@@ -110,6 +110,13 @@ _SD_OLD_DEFAULT_FINISH_W = 3
 _SD_STORED_DEFAULT_FINISH_W = (
     _SD_OLD_DEFAULT_FINISH_W, DEFAULT_DEV_SD_FINISH_POWER)
 
+# Start reserve of a program that has just started (see
+# _sd_start_reserve_w): held for at most this long after the start ...
+_SD_START_RESERVE_S = 1800
+# ... or until the measured power has reached this share of the expected
+# peak (the nominal power) once.
+_SD_PEAK_REACHED_SHARE = 0.9
+
 
 def _sd_finish_not_chosen(standby_w, finish_w):
     """True for a finish threshold the user did not pick on purpose.
@@ -287,6 +294,13 @@ class DeviceManager:
             # is not detected as a new start and paused mid-cycle.
             "sd_rearm_pending": False,
             "_sd_rearm_below_since": None,
+            # Start reserve: sd_running_since of the run whose expected
+            # peak has been measured (None: not yet), the watts this
+            # machine keeps free this cycle, and whether this device's
+            # start is held back by another machine's reserve.
+            "sd_peak_run": None,
+            "_sd_start_reserve_w": 0.0,
+            "_start_reserve_hold": False,
 
             # Runtime & energy state
             "on_since": None,
@@ -391,6 +405,11 @@ class DeviceManager:
         # PV Budget cap: maximum power AURUM may allocate to devices today.
         # None when budget module is not active.
         device_budget_w = shared.get("device_budget_w")
+
+        # Start reserves of programs that have just started. Before any
+        # start of this cycle (a start in this cycle is newly_allocated),
+        # and also at the battery reserve, so a peak is seen there too.
+        self._update_sd_start_reserves(now)
 
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
@@ -616,7 +635,8 @@ class DeviceManager:
                 sd_turnon = dec_excess - newly_allocated
                 counted, sd_new = self._handle_startup_detection(
                     dev, sd_turnon, battery_soc, actual_power, now, excess,
-                    power_known=power_known)
+                    power_known=power_known,
+                    start_reserve_w=self._start_reserve_for(dev))
                 if sd_new > 0:
                     newly_allocated += sd_new
                 if counted:
@@ -644,10 +664,20 @@ class DeviceManager:
                 # Seen off (also when switched off at the wall): a release
                 # timer from the last run must not skip the next debounce.
                 dev["_pv_gate_low_since"] = None
+                # A non-interruptible device could not be switched off
+                # again when a program that has just started begins to
+                # heat, so the surplus that program still needs is not
+                # free for it (_sd_start_reserve_w). An interruptible one
+                # may use it: it is shed like any other device when the
+                # heating comes, and respecting the reserve would leave
+                # the surplus unused for up to 30 min whenever a program
+                # never reaches its nominal power (a cold wash).
+                reserve_w = (0.0 if dev["interruptible"]
+                             else self._start_reserve_for(dev))
                 # EMA excess for turn-on (stable, prevents flapping)
-                turnon_excess = dec_excess - newly_allocated
+                turnon_excess = dec_excess - newly_allocated - reserve_w
                 # Grid-only fallback for SOC-below-threshold case
-                turnon_grid = grid_excess - newly_allocated
+                turnon_grid = grid_excess - newly_allocated - reserve_w
 
                 # ── Deadline force-start: bypass budget cap + surplus ──
                 # When muss_heute is ON and the deadline window is reached,
@@ -703,7 +733,7 @@ class DeviceManager:
                 dev["_budget_cap_logged"] = False
                 should_on = self._should_turn_on(
                     dev, turnon_excess, turnon_grid, battery_soc,
-                    soc_threshold, now)
+                    soc_threshold, now, reserve_w=reserve_w)
 
                 if should_on:
                     # _should_turn_on may have granted the start via
@@ -896,8 +926,13 @@ class DeviceManager:
         return self._pv_power_now >= threshold
 
     def _should_turn_on(self, dev, available_excess, available_grid_excess,
-                        battery_soc, soc_threshold, now):
-        """Check if device should be turned on. Returns True/False."""
+                        battery_soc, soc_threshold, now, reserve_w=0.0):
+        """Check if device should be turned on. Returns True/False.
+
+        reserve_w: start reserves of other programs, already taken off
+        both excess values; only used to tell the Advisor that they are
+        what holds the device back.
+        """
         # Runtime target reached: stay off for the rest of the day
         if self._runtime_target_reached(dev):
             return False
@@ -949,6 +984,8 @@ class DeviceManager:
         needed = (dev["nominal_power"] + dev["hysteresis_on"]
                   + dev["residual_power"])
         if eff_excess < needed:
+            dev["_start_reserve_hold"] = (
+                reserve_w > 0 and eff_excess + reserve_w >= needed)
             return False
 
         # Debounce: excess must persist for debounce_on * penalty seconds
@@ -1099,7 +1136,7 @@ class DeviceManager:
 
     def _handle_startup_detection(self, dev, turnon_excess,
                                   battery_soc, actual_power, now, excess,
-                                  power_known=True):
+                                  power_known=True, start_reserve_w=0.0):
         """Handle startup detection state machine.
 
         power_known is False while the configured power sensor is
@@ -1108,6 +1145,9 @@ class DeviceManager:
         drawing power (RUNNING). _sd_observe_override also passes False
         for a RUNNING program whose plug the user switched off while it
         drew power: 0 W there is an interruption, not standby.
+
+        start_reserve_w: the start reserves of other programs, which are
+        not free for a surplus start in WAITING (_sd_start_reserve_w).
 
         Returns (counted_as_on, newly_started_power).
         """
@@ -1225,10 +1265,13 @@ class DeviceManager:
                     tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
 
-            # PV excess check
+            # PV excess check. What other programs that have just started
+            # still need for their heating is not free (the deadline start
+            # above runs on grid anyway and ignores it).
             needed = nominal + dev["hysteresis_on"]
             soc_ok = battery_soc < 0 or battery_soc >= soc_threshold
-            if turnon_excess >= needed and soc_ok:
+            free_excess = turnon_excess - start_reserve_w
+            if free_excess >= needed and soc_ok:
                 # Debounce: conditions must persist
                 if dev["excess_since"] is None:
                     dev["excess_since"] = now
@@ -1250,15 +1293,28 @@ class DeviceManager:
                 dev["excess_since"] = None
                 dev["force_started"] = False
                 dev["_scheduling_reason"] = SCHED_REASON_EXCESS_SUFFICIENT
+                reserved = (f" - {start_reserve_w:.0f}W reserved"
+                            if start_reserve_w > 0 else "")
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Started "
-                    f"(excess={turnon_excess:.0f}W >= "
+                    f"(excess={turnon_excess:.0f}W{reserved} >= "
                     f"{needed:.0f}W needed)")
                 self._notify(
                     self._t("sd_running", name=dev['name']),
                     tag=f"aurum_sd_{dev['name']}")
                 return True, nominal
             else:
+                if start_reserve_w > 0:
+                    # Another program's heating is still to come: power
+                    # freed by switching devices off now would go to it,
+                    # not to this one. No preemption until its reserve is
+                    # released (so nothing is switched off for a start the
+                    # reserve then blocks); after that it uses the
+                    # measured power.
+                    dev["_start_reserve_hold"] = (
+                        soc_ok and turnon_excess >= needed)
+                    dev["excess_since"] = None
+                    return False, 0
                 # Try preemption before giving up
                 freed = self._preempt_for_sd(
                     dev, needed, turnon_excess, battery_soc,
@@ -1485,6 +1541,58 @@ class DeviceManager:
         dev["sd_run_runtime_s"] = None
         dev["sd_power_samples"] = []
         dev["force_started"] = False
+
+    def _update_sd_start_reserves(self, now):
+        """Refresh each program's start reserve for this cycle and clear
+        last cycle's 'held back by a reserve' flags."""
+        for dev in self.devices:
+            dev["_start_reserve_hold"] = False
+            dev["_sd_start_reserve_w"] = self._sd_start_reserve_w(dev, now)
+
+    def _sd_start_reserve_w(self, dev, now):
+        """Watts a program that has just started keeps free for its
+        heating (0 for any other device).
+
+        A washer takes in water at about 25 W for several minutes before
+        it heats at about 2 kW. Its surplus looked free meanwhile, so a
+        second machine started on it, and minutes later both heated from
+        the grid or the battery; neither can be stopped mid-program. So a
+        RUNNING program keeps (expected peak - measured power) free until
+        it has drawn _SD_PEAK_REACHED_SHARE of the expected peak once, for
+        at most _SD_START_RESERVE_S after its start (a cold wash never
+        reaches the peak). The expected peak is the nominal power.
+
+        No reserve without a power sensor (the peak can never be seen) or
+        while the plug is off or unreachable (nothing comes until it is
+        on again). A power sensor that fails before the peak was seen
+        keeps the whole peak reserved: nothing shows that it has come.
+        """
+        if (not dev["startup_detection"]
+                or dev["sd_state"] != SD_STATE_RUNNING
+                or not dev["power_entity"]):
+            return 0.0
+        since = dev.get("sd_running_since")
+        if (since is None
+                or (now - since).total_seconds() >= _SD_START_RESERVE_S
+                or dev.get("sd_peak_run") == since):
+            return 0.0
+        if self._switch_state(dev) != "on":
+            return 0.0
+        peak = float(dev["nominal_power"])
+        watts, known = self._read_device_power(dev)
+        if not known:
+            return peak
+        watts = max(0.0, watts)
+        if watts >= _SD_PEAK_REACHED_SHARE * peak:
+            dev["sd_peak_run"] = since
+            return 0.0
+        return peak - watts
+
+    def _start_reserve_for(self, dev):
+        """Start reserves of the other programs (W): not free for a
+        surplus start of dev."""
+        return sum(d["_sd_start_reserve_w"] for d in self.devices
+                   if d is not dev)
 
     def _preempt_for_sd(self, sd_device, needed_w, turnon_excess,
                         battery_soc, soc_threshold, now, excess):
@@ -1844,6 +1952,9 @@ class DeviceManager:
                 # knows WHY a device is off; consumers must not re-derive.
                 "disabled": self._is_disabled(dev),
                 "condition_met": self._condition_met(dev),
+                # The surplus would start it, but a program that has just
+                # started still needs it for its heating.
+                "start_reserve_hold": dev["_start_reserve_hold"],
             })
 
         shared["device_states"] = device_states
