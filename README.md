@@ -341,6 +341,11 @@ surplus", "→ waiting for program start"), and the SOC-threshold, max-price,
 PV-power-threshold and deadline controls. It follows your HA theme and is
 localized (English by default, German when the HA UI is set to German).
 
+Renaming the AURUM device, or the entity IDs of its hub sensors, does not break
+the panel. Leave the per-device entity IDs (`sensor.aurum_<device>…`,
+`switch.aurum_<device>_…`) as they are: AURUM and the panel build them from the
+device name.
+
 > The sidebar entry is sorted alphabetically — if your sidebar is long, scroll
 > down or pin it to the top via *Profile → Edit sidebar*.
 

@@ -70,6 +70,10 @@ def _device_icon(name: str) -> str:
     return "mdi:power-plug"
 
 
+# Every AURUM entity sets a fixed entity_id: the dashboard panel, devices.py
+# and the docs rely on these ids. A name-derived id changes when the AURUM
+# device is renamed and HA regenerates the entity IDs (HA 2026.11). HA uses
+# the fixed id only when it registers an entity: existing ids stay as they are.
 def _hub_device_info(entry_id):
     """Return device info for the AURUM hub."""
     # Keyword form works both where DeviceInfo is a TypedDict (< 2026.11)
@@ -137,6 +141,7 @@ class AurumExcessSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_excess"
         self._attr_name = "AURUM Excess Power"
+        self.entity_id = "sensor.aurum_excess_power"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -157,6 +162,7 @@ class AurumBatteryModeSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_battery_mode"
         self._attr_name = "AURUM Battery Mode"
+        self.entity_id = "sensor.aurum_battery_mode"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -208,6 +214,7 @@ class AurumCycleSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_cycle"
         self._attr_name = "AURUM Cycle"
+        self.entity_id = "sensor.aurum_cycle"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -360,6 +367,7 @@ class AurumDeviceEnergyTotalSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_energy_total"
         self._attr_name = "AURUM Energy Today"
+        self.entity_id = "sensor.aurum_energy_today"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -389,6 +397,7 @@ class AurumGridPowerSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_grid_power"
         self._attr_name = "AURUM Grid Power"
+        self.entity_id = "sensor.aurum_grid_power"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -413,6 +422,7 @@ class AurumPVPowerSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_pv_power"
         self._attr_name = "AURUM PV Power"
+        self.entity_id = "sensor.aurum_pv_power"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -437,6 +447,7 @@ class AurumBatterySOCSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_battery_soc"
         self._attr_name = "AURUM Battery SOC"
+        self.entity_id = "sensor.aurum_battery_soc"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -466,6 +477,7 @@ class AurumBatteryChargeSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_battery_charge"
         self._attr_name = "AURUM Battery Charge"
+        self.entity_id = "sensor.aurum_battery_charge"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -491,6 +503,7 @@ class AurumBatteryDischargeSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_battery_discharge"
         self._attr_name = "AURUM Battery Discharge"
+        self.entity_id = "sensor.aurum_battery_discharge"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -524,6 +537,7 @@ class AurumForecastRemainingSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_forecast_remaining"
         self._attr_name = "AURUM Forecast Remaining"
+        self.entity_id = "sensor.aurum_forecast_remaining"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -555,6 +569,7 @@ class AurumBudgetWSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_budget_w"
         self._attr_name = "AURUM Budget"
+        self.entity_id = "sensor.aurum_budget"
         self._attr_device_info = _hub_device_info(entry.entry_id)
         self._budget_w = None  # numeric value, None = unlimited
 
@@ -596,6 +611,7 @@ class AurumSafetyFactorSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_safety_factor"
         self._attr_name = "AURUM Safety Factor"
+        self.entity_id = "sensor.aurum_safety_factor"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -625,6 +641,7 @@ class AurumElectricityPriceSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_electricity_price"
         self._attr_name = "AURUM Electricity Price"
+        self.entity_id = "sensor.aurum_electricity_price"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
@@ -663,6 +680,7 @@ class AurumHouseConsumptionSensor(
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_house_consumption"
         self._attr_name = "AURUM House Consumption"
+        self.entity_id = "sensor.aurum_house_consumption"
         self._attr_device_info = _hub_device_info(entry.entry_id)
 
     @callback
