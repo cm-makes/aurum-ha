@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.3] - 2026-11-15
+
 ### Changed
 - **README** leads with washing machines and dishwashers (startup detection) and with deadlines, and says what AURUM doesn't do: no EV charging, no battery or inverter control.
 
