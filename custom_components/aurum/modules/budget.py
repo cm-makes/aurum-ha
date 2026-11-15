@@ -44,6 +44,9 @@ TRAJECTORY_MIN_SUN_ELEVATION = 10.0
 #: ... or the PV production counter (pv_actual_today_entity) must have
 #: risen at least this much (kWh) since midnight.
 TRAJECTORY_MIN_PV_TODAY_KWH = 0.05
+#: Version of the anchor rule above, saved with the anchor. A same-day
+#: anchor saved by an older rule is dropped on restore.
+_TRAJECTORY_ANCHOR_RULE = 2
 
 
 class BudgetManager:
@@ -1062,6 +1065,8 @@ class BudgetManager:
             "trajectory_start_time": (
                 self._trajectory_start_time.isoformat()
                 if self._trajectory_start_time else None),
+            # 2 = anchored only on real PV (1.16.4); see restore_state.
+            "trajectory_anchor_rule": _TRAJECTORY_ANCHOR_RULE,
             "pv_total_midnight": self._pv_total_midnight,
             "consumption_profile": self._consumption_profile,
             "consumption_samples": self._consumption_samples,
@@ -1100,6 +1105,12 @@ class BudgetManager:
 
         traj_soc = saved.get("trajectory_start_soc")
         traj_time = saved.get("trajectory_start_time")
+        if (saved.get("trajectory_anchor_rule") or 1) < _TRAJECTORY_ANCHOR_RULE:
+            # Saved by 1.16.3 or older, which anchored the ramp on any
+            # export after midnight: a night-time blip would keep the
+            # budget at 0 W for the rest of the update day. Drop it; the
+            # next real-PV reading anchors the ramp again.
+            traj_soc = traj_time = None
         if traj_soc is not None and traj_time is not None:
             self._trajectory_start_soc = float(traj_soc)
             try:

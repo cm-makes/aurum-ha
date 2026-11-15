@@ -395,19 +395,33 @@ class DeviceManager:
         # ── Emergency: battery charging → turn off everything ────
         if battery_mode == MODE_CHARGING:
             for dev in self.devices:
-                # The SD state machine is skipped this cycle: quiet and
-                # detection time must be observed again afterwards.
-                self._restart_sd_timers(dev)
                 # Manual override → AURUM must not touch the device in ANY
                 # cycle, including this emergency (contract of the override
                 # switch). Keeps externally-driven cycles (e.g. an
                 # anti-legionella boost above the run-condition threshold)
                 # from being killed when SOC drops to min_soc.
                 if self._is_manual_override(dev):
-                    if self._is_device_on(dev):
-                        if dev["on_since"] is None:
-                            dev["on_since"] = now
+                    was_on = self._is_device_on(dev)
+                    if was_on and dev["on_since"] is None:
+                        dev["on_since"] = now
+                    if dev["startup_detection"]:
+                        # Keep watching at the reserve too (the observer
+                        # never switches): a program run under override
+                        # here was cut or paused on release before.
+                        actual_power, power_known = (
+                            self._read_device_power(dev) if was_on
+                            else (0, True))
+                        if was_on and dev["sd_state"] == SD_STATE_RUNNING:
+                            self._accumulate_runtime(dev, now, actual_power)
+                        self._sd_observe_override(
+                            dev, was_on, actual_power, now, excess,
+                            battery_soc, power_known=power_known)
+                    else:
+                        self._restart_sd_timers(dev)
                     continue
+                # The SD state machine is skipped this cycle: quiet and
+                # detection time must be observed again afterwards.
+                self._restart_sd_timers(dev)
                 # SD devices in standby: keep Shelly ON (3-5W)
                 if (dev["startup_detection"]
                         and dev["sd_state"] in ("", SD_STATE_STANDBY)):
@@ -468,6 +482,12 @@ class DeviceManager:
                 if (not dev["startup_detection"]
                         or dev["sd_state"] == SD_STATE_RUNNING):
                     self._accumulate_runtime(dev, now, actual_power)
+            elif (dev["startup_detection"]
+                    and dev["sd_state"] == SD_STATE_RUNNING):
+                # Plug off mid-run: the off time is not runtime. The finish
+                # accumulates from the last tick, so without this it added
+                # the whole off span to the runtime and the finished push.
+                dev["_runtime_tick"] = now
 
             # ── 0a. "Must run today" job bookkeeping (regular devices) ──
             # The job is the estimated_runtime counted from when muss_heute
@@ -502,6 +522,8 @@ class DeviceManager:
             # No switch command. Startup detection keeps watching the
             # power, so a program run under override is not cut on release.
             if self._is_manual_override(dev):
+                # Release timers start over after the override.
+                dev["_pv_gate_low_since"] = None
                 if was_on:
                     dev["_pending_off"] = None
                     if dev["on_since"] is None:
@@ -960,7 +982,8 @@ class DeviceManager:
         # within hysteresis_off of the on-threshold and SOC is healthy;
         # otherwise stop once the shortfall persists for debounce_off.
         # Takes precedence over the generic SOC/excess-deficit blocks below
-        # so a gated device stops on falling sun even while surplus remains.
+        # so a gated device stops on falling sun even while some surplus
+        # remains, unless that surplus would start it again anyway.
         if dev.get("_scheduling_reason") == SCHED_REASON_SOLAR_PV:
             threshold = dev.get("pv_power_threshold") or 0
             off_level = max(0, threshold - dev["hysteresis_off"])
@@ -975,6 +998,17 @@ class DeviceManager:
             if elapsed < dev["debounce_off"]:
                 return None
             dev["_pv_gate_low_since"] = None
+            # The stop is executed whatever the meter shows (see
+            # _FORCED_STOP_REASONS). If real surplus would start the device
+            # again (the same test as a surplus start: its own draw plus the
+            # export covers nominal + hysteresis_on + residual), it continues
+            # as a surplus run instead of an off/on a few minutes later.
+            carried = (available_excess + self._get_device_power(dev)
+                       >= dev["nominal_power"] + dev["hysteresis_on"]
+                       + dev["residual_power"])
+            if soc_ok and carried:
+                dev["_scheduling_reason"] = SCHED_REASON_SURPLUS_AVAILABLE
+                return None
             return "pv_below_threshold"
 
         # SOC below threshold: turn off if deficit persists
@@ -1627,6 +1661,9 @@ class DeviceManager:
         dev["excess_since"] = None
         dev["_excess_deficit_since"] = None
         dev["_soc_grid_deficit_since"] = None
+        # A stale PV-gate release timer would skip debounce_off on the next
+        # run, now that the release is executed without a deficit.
+        dev["_pv_gate_low_since"] = None
         dev["_switch_times"].append(now)
         self._log_action(dev, "ON", excess, soc, reason)
 
@@ -1642,6 +1679,7 @@ class DeviceManager:
         dev["excess_since"] = None
         dev["_excess_deficit_since"] = None
         dev["_soc_grid_deficit_since"] = None
+        dev["_pv_gate_low_since"] = None
         # Clear scheduling reason so the next turn-on decision starts fresh.
         # Without this, a stale "cheap_grid" reason can cause AURUM to treat
         # a later manually-started device as a cheap-grid device and apply

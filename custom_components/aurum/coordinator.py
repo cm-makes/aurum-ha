@@ -149,6 +149,9 @@ class AurumCoordinator(DataUpdateCoordinator):
 
         # ── Device state cache (used on odd cycles) ────────────────
         self._cached_device_states: list[dict] = []
+        # False after a failed device step until the next good one: odd
+        # cycles then reuse a stale cache (see Step 3).
+        self._device_step_ok = True
 
         # ── CSV loggers (initialized in async_setup) ───────────────
         self.action_csv = None
@@ -433,7 +436,9 @@ class AurumCoordinator(DataUpdateCoordinator):
                         self.devices.update, shared)
                     self._cached_device_states = shared.get(
                         "device_states", [])
+                    self._device_step_ok = True
                 except Exception as e:
+                    self._device_step_ok = False
                     _LOGGER.warning("Devices error: %s", e)
             else:
                 shared["device_states"] = self._cached_device_states
@@ -442,6 +447,10 @@ class AurumCoordinator(DataUpdateCoordinator):
                 (shared["devices_on"], shared["device_power_total"],
                  shared["cheap_grid_active"]) = summarize_cached_states(
                     self._cached_device_states)
+                if not self._device_step_ok:
+                    # The cache is from before the failing device step:
+                    # the base-load sampler must not learn from it.
+                    shared["base_load_device_data_stale"] = True
 
             # ── Step 4: Update device_states cache ─────────────────
             # Keep the previous list when the device step failed: an empty

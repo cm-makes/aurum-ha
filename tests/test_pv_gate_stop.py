@@ -69,14 +69,38 @@ class TestReleaseWithoutVisibleImport:
         _run(mgr, now, 12, excess=0, pv=2000, soc=20)
         assert hass.states[SW] == "off"
 
-    def test_stops_even_with_surplus(
+    def test_stops_with_a_small_surplus(
             self, hass, make_manager, make_device, now):
-        # The README: "a gated device stops on falling sun even while
-        # surplus remains".
+        # 100 W export with the 600 W pump on: a surplus start would need
+        # 600 + 200 + 100, so the gate's stop stands.
+        mgr = _pool(make_manager, make_device)
+        hass.states[SW] = "on"
+        _running(mgr.devices[0], now)
+        _run(mgr, now, 12, excess=100, pv=300, soc=80)
+        assert hass.states[SW] == "off"
+
+    def test_continues_as_surplus_run_when_surplus_would_restart_it(
+            self, hass, make_manager, make_device, now):
+        # 400 W export with the pump on: 400 + 600 >= 900, the surplus path
+        # would switch it on again minutes later. No off/on: it continues
+        # as a surplus run.
         mgr = _pool(make_manager, make_device)
         hass.states[SW] = "on"
         _running(mgr.devices[0], now)
         _run(mgr, now, 12, excess=400, pv=300, soc=80)
+        assert hass.states[SW] == "on"
+        assert mgr.devices[0]["_scheduling_reason"] == "surplus_available"
+        # ...and is shed like any surplus run once the surplus is gone.
+        _run(mgr, now + timedelta(minutes=13), 12, excess=-300, pv=300,
+             soc=80)
+        assert hass.states[SW] == "off"
+
+    def test_soc_below_threshold_stops_despite_surplus(
+            self, hass, make_manager, make_device, now):
+        mgr = _pool(make_manager, make_device)
+        hass.states[SW] = "on"
+        _running(mgr.devices[0], now)
+        _run(mgr, now, 12, excess=400, pv=300, soc=20)
         assert hass.states[SW] == "off"
 
 
@@ -125,6 +149,32 @@ class TestGuards:
         _run(mgr, now, 12, excess=-400, pv=300, soc=80)
         assert hass.states[SW] == "off"
         assert hass.states["switch.heater"] == "on"
+
+    def test_stale_release_timer_does_not_skip_debounce_off(
+            self, hass, make_manager, make_device, now):
+        # A release timer left over from an earlier run (e.g. stopped by
+        # another path) must not end the next run on a single low reading.
+        mgr = _pool(make_manager, make_device)
+        dev = mgr.devices[0]
+        dev["_pv_gate_low_since"] = now - timedelta(hours=20)
+        dev["excess_since"] = now - timedelta(minutes=10)
+        mgr.update(_shared(now, excess=0, pv=1500, soc=80))  # gate start
+        assert hass.states[SW] == "on"
+        later = now + timedelta(minutes=11)  # past min_on_time
+        mgr.update(_shared(later, excess=0, pv=300, soc=80))
+        assert hass.states[SW] == "on"
+
+    def test_override_clears_the_release_timer(
+            self, hass, make_manager, make_device, now):
+        mgr = _pool(make_manager, make_device)
+        dev = mgr.devices[0]
+        hass.states[SW] = "on"
+        _running(dev, now)
+        dev["_pv_gate_low_since"] = now - timedelta(minutes=30)
+        hass.states["switch.aurum_pool_override"] = "on"
+        mgr.update(_shared(now, excess=0, pv=300, soc=80))
+        assert dev["_pv_gate_low_since"] is None
+        assert hass.states[SW] == "on"
 
     def test_price_end_stays_deficit_limited(
             self, hass, make_manager, make_device, now):

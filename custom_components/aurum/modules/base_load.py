@@ -176,7 +176,9 @@ class BaseLoadSampler:
         if shared.get("surplus_blind"):
             return None, SKIP_SURPLUS_BLIND
         devices_w = shared.get("device_power_total")
-        if devices_w is None:
+        if devices_w is None or shared.get("base_load_device_data_stale"):
+            # Even cycles leave the total unset when the device step fails;
+            # odd cycles then reuse the cache from before the failure.
             return None, SKIP_DEVICE_STEP
         for dev in shared.get("device_states") or []:
             # Startup placeholders have no power_measured.

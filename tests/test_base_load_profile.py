@@ -351,6 +351,8 @@ class TestSkipReasons:
          "battery discharge power sensor unavailable"),
         ({"surplus_blind": True}, "surplus blind"),
         ({"device_power_total": None}, "device step failed"),
+        # Odd cycle after a failed device step: stale cached device data.
+        ({"base_load_device_data_stale": True}, "device step failed"),
         ({"input_health": None}, SKIP_ENERGY_STEP),
         ({"device_states": [{"name": "Heater", "power": 0}]},
          "devices starting up"),
@@ -557,6 +559,22 @@ class TestCoordinator:
         again = _coordinator(monkeypatch, hass, tmp_path, setup)
         assert again.budget._consumption_profile[10] == pytest.approx(650.0)
         assert again.budget.consumption_profile_info()["samples"][10] == 1
+
+    def test_failing_device_step_learns_nothing_from_the_stale_cache(
+            self, monkeypatch, hass, tmp_path, setup):
+        # The device step raises from 10:00 on while the heater's real draw
+        # changes: odd cycles must not learn from the cache of 09:xx.
+        coord = _coordinator(monkeypatch, hass, tmp_path, setup)
+        start = datetime(2026, 6, 15, 9, 0)
+        _run_cycles(coord, start, start + timedelta(minutes=55), 300)
+
+        def _boom(_shared):
+            raise RuntimeError("device step broken")
+        monkeypatch.setattr(coord.devices, "update", _boom)
+        hass.states["sensor.heater_power"] = "2000"
+        _run_cycles(coord, start + timedelta(hours=1),
+                    start + timedelta(hours=2), 300)
+        assert coord.budget._consumption_profile[10] == pytest.approx(500.0)
 
     def test_no_learning_without_pv_sensor(
             self, monkeypatch, hass, tmp_path, setup):

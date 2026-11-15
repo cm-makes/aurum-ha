@@ -603,3 +603,60 @@ class TestFinishedPushRuntime:
         PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
         assert dev2["sd_state"] == SD_STATE_RUNNING
         assert dev2["sd_run_runtime_s"] == dev["sd_run_runtime_s"]
+
+
+def run_mode(mgr, hass, t, seconds, watts, mode, excess=0):
+    """Like run(), with an explicit battery mode (e.g. charging)."""
+    end = t + timedelta(seconds=seconds)
+    while t < end:
+        hass.states[PW] = str(watts)
+        sh = shared(t, excess)
+        sh["battery_mode"] = mode
+        mgr.update(sh)
+        t += timedelta(seconds=TICK)
+    return t
+
+
+class TestBatteryAtReserve:
+    """Battery mode 'charging' (SOC at or below min) used to skip the
+    observer, so the override fix did not work at the reserve."""
+
+    def test_program_resumed_under_override_at_reserve_is_not_cut(
+            self, hass, make_manager, make_device):
+        from custom_components.aurum.const import MODE_CHARGING
+        mgr, dev = washer(make_manager, make_device)
+        t = to_waiting(mgr, hass, dev, T0)
+        hass.actions.clear()
+        hass.states[OV] = "on"
+        hass.states[SW] = "on"
+        t = run_mode(mgr, hass, t, 1200, 2000, MODE_CHARGING)
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        hass.states[OV] = "off"
+        t = run_mode(mgr, hass, t, 600, 2000, MODE_CHARGING)
+        assert switch_cmds(hass) == []
+        assert hass.states[SW] == "on"
+
+    def test_override_never_switches_at_reserve(
+            self, hass, make_manager, make_device):
+        from custom_components.aurum.const import MODE_CHARGING
+        mgr, dev = washer(make_manager, make_device)
+        hass.states[OV] = "on"
+        hass.states[SW] = "on"
+        run_mode(mgr, hass, T0, 1800, 2000, MODE_CHARGING)
+        assert switch_cmds(hass) == []
+        assert dev["sd_state"] == SD_STATE_RUNNING
+
+
+class TestPlugOffOutsideOverride:
+    def test_off_time_is_not_runtime(self, hass, make_manager, make_device):
+        # AURUM starts the program on surplus; the user switches the plug
+        # off mid-program. The finish must not add the off span.
+        mgr, dev = washer(make_manager, make_device)
+        t = to_waiting(mgr, hass, dev, T0)
+        t, _ = run(mgr, hass, t, 900, 0, excess=3000)  # starts on surplus
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        t, _ = run(mgr, hass, t, 1800, 2000, excess=3000)
+        before = dev["runtime_today_s"]
+        hass.states[SW] = "off"
+        t, _ = run(mgr, hass, t, 1200, 0, excess=3000)
+        assert dev["runtime_today_s"] - before <= TICK

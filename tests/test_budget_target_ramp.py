@@ -371,3 +371,25 @@ class TestForecastSlot:
     def test_repeated_hours_from_several_days(self):
         fc = [(10.0, 80.0), (11.0, 400.0), (10.0, 900.0)]
         assert BudgetManager._forecast_w_now(fc, day(10, 30)) == 900.0
+
+
+class TestAnchorFromOlderVersion:
+    """An anchor saved by 1.16.3 (any export after midnight) must not
+    survive the update restart: it would keep the budget at 0 W for the
+    rest of the update day."""
+
+    def test_old_anchor_is_dropped_on_restore(self, hass, clock):
+        bm = make_budget(hass)
+        bm.restore_state({"trajectory_start_soc": 60.0,
+                          "trajectory_start_time": "2026-11-16T02:00:00"})
+        assert bm._trajectory_start_soc is None
+        assert bm._trajectory_start_time is None
+
+    def test_new_anchor_survives_a_restart(self, hass, clock):
+        bm = make_budget(hass)
+        bm._trajectory_start_soc = 35.0
+        bm._trajectory_start_time = datetime(2026, 11, 16, 9, 30)
+        again = make_budget(hass)
+        again.restore_state(bm.get_state_for_save())
+        assert again._trajectory_start_soc == 35.0
+        assert again._trajectory_start_time == datetime(2026, 11, 16, 9, 30)
