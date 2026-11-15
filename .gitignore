@@ -21,3 +21,6 @@ aurum_test_helpers.yaml
 .claude/
 __pycache__/
 *.pyc
+
+# Promotion drafts and notes (local only)
+marketing/
