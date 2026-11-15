@@ -31,6 +31,7 @@ from ..const import (
     DEFAULT_DEV_MIN_ON_TIME,
     DEFAULT_DEV_MIN_OFF_TIME,
     DEFAULT_DEV_RESIDUAL_POWER,
+    DEFAULT_DEV_SD_FINISH_POWER,
     DEFAULT_EXCESS_DEFICIT_TOLERANCE,
     DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
     SCHED_REASON_SURPLUS_AVAILABLE,
@@ -89,6 +90,63 @@ _NOTIFY_STRINGS = {
     },
 }
 
+# How far above the standby power a finish threshold that was not chosen on
+# purpose is raised (see sd_finish_threshold).
+_SD_FINISH_MARGIN_W = 1
+
+# Finish threshold the config flow stored up to 1.16.3 for every device
+# whose user left the field alone (with the same 3 W standby default).
+_SD_OLD_DEFAULT_FINISH_W = 3
+
+# Finish thresholds the config flow stores for a user who leaves the field
+# alone: the old default and the current one.
+_SD_STORED_DEFAULT_FINISH_W = (
+    _SD_OLD_DEFAULT_FINISH_W, DEFAULT_DEV_SD_FINISH_POWER)
+
+
+def _sd_finish_not_chosen(standby_w, finish_w):
+    """True for a finish threshold the user did not pick on purpose.
+
+    - Equal to a standby power of 3 W or more: the old 3 W / 3 W default,
+      or a pair raised together as the old help text said ("Usually same
+      as standby"). An equal pair below the old default (2 W / 2 W) can
+      only come from lowering both on purpose, so it is kept.
+    - A stored default (3 W or 4 W) left alone while the standby power was
+      raised above it.
+    """
+    if finish_w == standby_w:
+        return standby_w >= _SD_OLD_DEFAULT_FINISH_W
+    return finish_w < standby_w and finish_w in _SD_STORED_DEFAULT_FINISH_W
+
+
+def sd_finish_threshold(standby_w, finish_w, start_w):
+    """Program-finished threshold that startup detection uses (W).
+
+    The finish check is strict (power < threshold), so a threshold at the
+    standby power is never reached by a machine idling at its standby: only
+    Max runtime ends the program, hours late. Up to 1.16.3 the default and
+    the help text put it exactly there (3 W for 3 W standby). Only values
+    that were not chosen on purpose (_sd_finish_not_chosen) are raised, to
+    1 W above standby: enough for a meter that reads a little above the
+    entered standby (3.2-3.4 W for 3 W), but no further, because the wider
+    the band, the more quiet program phases (dishwasher drying) pass for
+    the end.
+
+    Any other value at or below standby is used as set. It comes from a
+    deliberate edit, typically for a machine that really idles lower than
+    the entered standby (a plug that does not count its own draw idles at
+    about 0.5 W) and whose drying phase ended the program too early.
+    Raising it would bring that back, and the following pump-out would be
+    detected as a new program and its plug cut. Kept as set, it at worst
+    leaves the end to Max runtime, as before.
+
+    It never exceeds the start threshold: a finished machine idling between
+    the two would be detected as a new program at once and its plug cut.
+    """
+    if _sd_finish_not_chosen(standby_w, finish_w):
+        finish_w = standby_w + _SD_FINISH_MARGIN_W
+    return min(finish_w, start_w)
+
 
 class DeviceManager:
     """Manage priority-based device switching (HELIOS-compatible logic)."""
@@ -124,6 +182,15 @@ class DeviceManager:
     def _init_device(self, cfg):
         """Initialize a device from config dict."""
         name = cfg.get("name", "Unknown")
+        sd_start = cfg.get("sd_power_threshold", 5)
+        sd_standby = cfg.get("sd_standby_power", 3)
+        # The config flow stores every SD field, so devices set up with the
+        # old 3 W default keep it: correct it here, not only for new ones.
+        sd_finish_cfg = cfg.get("sd_finish_power", sd_standby)
+        sd_finish = sd_finish_threshold(sd_standby, sd_finish_cfg, sd_start)
+        if cfg.get("startup_detection"):
+            self._log_sd_thresholds(
+                name, sd_standby, sd_finish_cfg, sd_finish, sd_start)
         return {
             # Identity
             "name": name,
@@ -188,12 +255,11 @@ class DeviceManager:
             # Startup detection
             "startup_detection": cfg.get("startup_detection", False),
             "sd_state": "",
-            "sd_power_threshold": cfg.get("sd_power_threshold", 5),
+            "sd_power_threshold": sd_start,
             "sd_detection_time": cfg.get("sd_detection_time", 5),
             "sd_max_runtime": cfg.get("sd_max_runtime", 10800),
-            "sd_standby_power": cfg.get("sd_standby_power", 3),
-            "sd_finish_power": cfg.get("sd_finish_power",
-                                       cfg.get("sd_standby_power", 3)),
+            "sd_standby_power": sd_standby,
+            "sd_finish_power": sd_finish,
             "sd_finish_time": cfg.get("sd_finish_time", 600),
             "sd_min_runtime": cfg.get("sd_min_runtime", 300),
             "sd_detected_at": None,
@@ -241,6 +307,36 @@ class DeviceManager:
             # against the switch on the first cycle it reports again.
             "_switch_recheck": False,
         }
+
+    def _log_sd_thresholds(self, name, standby, finish_cfg, finish, start):
+        """One log line per setup for a startup-detection device whose
+        finish threshold AURUM changes or whose thresholds look off; none
+        for a consistent config."""
+        if standby >= start:
+            # The standby power is what to fix: a machine idling there is
+            # above the start threshold and detected as a new program, and
+            # no finish threshold is both above standby and not above the
+            # start threshold.
+            msg = (f"standby {standby:g} W must be below the start "
+                   f"threshold {start:g} W")
+            if finish != finish_cfg:
+                msg += (f", using finish threshold {finish:g} W instead of "
+                        f"{finish_cfg:g} W")
+        elif finish_cfg > start:
+            msg = (f"finish threshold {finish_cfg:g} W must not be above "
+                   f"the start threshold {start:g} W, using {finish:g} W")
+        elif finish != finish_cfg:
+            msg = (f"finish threshold {finish_cfg:g} W is not above standby "
+                   f"{standby:g} W, so a machine idling at its standby never "
+                   f"finishes: using {finish:g} W")
+        elif finish <= standby:
+            relation = "is below" if finish < standby else "equals"
+            msg = (f"finish threshold {finish:g} W {relation} standby "
+                   f"{standby:g} W, kept as set: a program counts as "
+                   f"finished only once the power stays below {finish:g} W")
+        else:
+            return
+        self.hass.log(f"AURUM SD [{name}]: {msg}")
 
     # ══════════════════════════════════════════════════════════════
     #  MAIN UPDATE (HELIOS-compatible)
