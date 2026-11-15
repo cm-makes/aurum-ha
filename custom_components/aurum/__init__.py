@@ -166,6 +166,8 @@ async def _async_heal_entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> Non
         expected[f"{eid}_{slug}_soc_threshold"] = (
             f"number.aurum_{slug}_soc_threshold")
         expected[f"{eid}_{slug}_max_price"] = f"number.aurum_{slug}_max_price"
+        expected[f"{eid}_{slug}_pv_power_threshold"] = (
+            f"number.aurum_{slug}_pv_power_threshold")
         expected[f"{eid}_{slug}_deadline"] = f"time.aurum_{slug}_deadline"
 
     ent_reg = er.async_get(hass)

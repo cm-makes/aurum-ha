@@ -89,6 +89,7 @@ class AurumCheapGridActiveSensor(CoordinatorEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_cheap_grid_active"
         self._attr_name = "AURUM Cheap Grid Active"
+        self.entity_id = "binary_sensor.aurum_cheap_grid_active"
         self._attr_device_info = _hub_device_info(entry.entry_id)
         self._attr_is_on = False
 

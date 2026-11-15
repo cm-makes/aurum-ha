@@ -93,6 +93,7 @@ class AurumTargetSOC(_AurumRestoreNumber):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_target_soc"
         self._attr_name = "AURUM Target SOC"
+        self.entity_id = "number.aurum_target_soc"
         self._attr_device_info = _hub_device_info(entry.entry_id)
         self._attr_native_value = coordinator.battery.target_soc
 
@@ -119,6 +120,7 @@ class AurumMinSOC(_AurumRestoreNumber):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_min_soc"
         self._attr_name = "AURUM Min SOC"
+        self.entity_id = "number.aurum_min_soc"
         self._attr_device_info = _hub_device_info(entry.entry_id)
         self._attr_native_value = coordinator.battery.min_soc
 

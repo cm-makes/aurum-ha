@@ -6,7 +6,8 @@
  * from the per-device override switches (switch.aurum_<slug>_override)
  * and builds all other entity_ids deterministically from the slug, so
  * adding or removing a device in the AURUM config is reflected here
- * automatically — no dashboard editing required.
+ * automatically — no dashboard editing required. Hub sensors are looked
+ * up in the entity registry by unique_id, so renamed entity ids still work.
  *
  * Pure vanilla JS (no build step, no Lit) so it ships as-is via HACS.
  */
@@ -21,6 +22,23 @@ const HUB = {
   forecast: "sensor.aurum_forecast_remaining",
   cheap: "binary_sensor.aurum_cheap_grid_active",
   advisor: "sensor.aurum_current_decision",
+};
+
+// Hub entity → key of its unique_id ("<config entry id>_<key>"). The ids
+// above are only the defaults: after the AURUM device is renamed, HA's
+// "Recreate entity IDs" renames them (e.g. sensor.smarthome_aurumsolopt_
+// pv_power, issue #31). Per-device ids are renamed back on every start,
+// these are not. The panel looks up the actual ids by unique_id.
+const HUB_KEYS = {
+  pv: "pv_power",
+  grid: "grid_power",
+  soc: "battery_soc",
+  surplus: "excess",
+  budget: "budget_w",
+  house: "house_consumption",
+  forecast: "forecast_remaining",
+  cheap: "cheap_grid_active",
+  advisor: "advisor",
 };
 
 // Advisor decision code → banner icon + accent color.
@@ -170,10 +188,16 @@ class AurumPanel extends HTMLElement {
     this._sig = null; // structural signature (device slugs)
     this._refs = {}; // id -> update fn
     this._advReasons = null; // slug -> advisor reason (memo per update)
+    this._hub = { ...HUB }; // role -> actual entity_id (registry lookup)
+    this._regNames = {}; // entity_id -> registry name of AURUM entities
+    this._regRef = null; // hass.entities the registry was last read for
+    this._regDone = false;
+    this._regLoading = false;
   }
 
   set hass(hass) {
     this._hass = hass;
+    this._loadRegistry();
     this._sync();
   }
   set narrow(_v) {}
@@ -210,21 +234,93 @@ class AurumPanel extends HTMLElement {
     return (STRINGS[this._lang()] || STRINGS.en)[key] || STRINGS.en[key] || key;
   }
 
+  // ── Entity registry ──────────────────────────────────────────
+  // Read once, and again whenever HA's registry changes (the frontend
+  // replaces hass.entities on every registry update). Not admin-only.
+  // Without it (older HA, error) the default entity ids are used.
+  _loadRegistry() {
+    const hass = this._hass;
+    if (!hass || typeof hass.callWS !== "function" || this._regLoading) return;
+    const ref = hass.entities || null;
+    if (this._regDone && ref === this._regRef) return;
+    this._regLoading = true;
+    Promise.resolve(hass.callWS({ type: "config/entity_registry/list" }))
+      .then((entries) => this._applyRegistry(entries))
+      .catch((err) =>
+        console.debug("AURUM panel: entity registry not readable, using default entity ids", err)
+      )
+      .finally(() => {
+        // A registry change during the read shows up as a new
+        // hass.entities on the next update, which reads it again.
+        this._regRef = ref;
+        this._regDone = true;
+        this._regLoading = false;
+        this._sig = null; // entity ids or names may have changed
+        this._sync();
+      });
+  }
+
+  _applyRegistry(entries) {
+    if (!Array.isArray(entries)) return;
+    const roleByKey = {};
+    for (const role of Object.keys(HUB_KEYS)) roleByKey[HUB_KEYS[role]] = role;
+    const hub = { ...HUB };
+    const names = {};
+    for (const en of entries) {
+      if (!en || en.platform !== "aurum" || typeof en.entity_id !== "string") continue;
+      // The user's name for the entity, else the one AURUM set.
+      names[en.entity_id] = en.name || en.original_name || null;
+      const entry = en.config_entry_id;
+      const uid = en.unique_id;
+      if (!entry || typeof uid !== "string" || !uid.startsWith(entry + "_")) continue;
+      const role = roleByKey[uid.slice(entry.length + 1)];
+      // A unique_id is only unique per platform: check the domain.
+      if (role && en.entity_id.split(".")[0] === HUB[role].split(".")[0]) {
+        hub[role] = en.entity_id;
+      }
+    }
+    this._hub = hub;
+    this._regNames = names;
+  }
+
+  // Display name of a device. AURUM names its status sensor
+  // "AURUM <device>"; since HA 2026.11 the friendly name also starts with
+  // the HA device name, e.g. "AurumSolOpt AURUM Boiler" after the AURUM
+  // device was renamed to "AurumSolOpt". Both prefixes are stripped.
+  _devName(slug, statusId) {
+    const hass = this._hass;
+    let name = this._regNames[statusId];
+    if (!name) {
+      const st = hass.states[statusId];
+      name = st && st.attributes ? st.attributes.friendly_name : null;
+    }
+    if (!name) return slug;
+    let n = String(name).trim();
+    const reg = hass.entities && hass.entities[statusId];
+    const dev = reg && reg.device_id && hass.devices && hass.devices[reg.device_id];
+    const devName = dev ? String(dev.name_by_user || dev.name || "").trim() : "";
+    if (
+      devName &&
+      devName.toLowerCase() !== "aurum" &&
+      n.toLowerCase().startsWith(devName.toLowerCase() + " ")
+    ) {
+      n = n.slice(devName.length + 1).trim();
+    }
+    n = n.replace(/^AURUM\s+/i, "").trim();
+    return n || slug;
+  }
+
   _devices() {
     if (!this._hass) return [];
     const out = [];
     for (const id of Object.keys(this._hass.states)) {
-      // Match switch.aurum_<slug>_override → one per device.
+      // Match switch.aurum_<slug>_override → one per device. The
+      // per-device ids are fixed: devices.py builds them from the slug too.
       const m = /^switch\.aurum_(.+)_override$/.exec(id);
       if (!m) continue;
       const slug = m[1];
       const e = DEV(slug);
-      const st = this._hass.states[e.status];
-      let name = slug;
-      if (st && st.attributes && st.attributes.friendly_name) {
-        name = st.attributes.friendly_name.replace(/^AURUM\s+/, "");
-      }
-      out.push({ slug, name, e });
+      out.push({ slug, name: this._devName(slug, e.status), e });
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
     return out;
@@ -249,7 +345,7 @@ class AurumPanel extends HTMLElement {
     // HA startup the override switch can appear before the rest.
     const sig = JSON.stringify([
       this._lang(), // rebuild with new labels if the UI language changes
-      this._exists(HUB.advisor), // banner appears when the sensor registers
+      this._exists(this._hub.advisor), // banner appears when the sensor registers
       devices.map((d) => [
         d.slug,
         d.name,
@@ -290,7 +386,7 @@ class AurumPanel extends HTMLElement {
 
     // Advisor banner: what AURUM is doing right now, and why.
     // Hidden entirely on installs that predate the advisor sensor.
-    if (this._exists(HUB.advisor)) root.appendChild(this._buildAdvisor());
+    if (this._exists(this._hub.advisor)) root.appendChild(this._buildAdvisor());
 
     // Overview chips
     root.appendChild(this._buildOverview());
@@ -343,7 +439,7 @@ class AurumPanel extends HTMLElement {
     box.appendChild(body);
 
     this._refs["advisor"] = () => {
-      let code = this._st(HUB.advisor) || "unknown";
+      let code = this._st(this._hub.advisor) || "unknown";
       if (code === "unavailable") code = "unknown";
       const meta = DECISION_META[code] || DECISION_META.unknown;
       icon.textContent = meta.icon;
@@ -352,7 +448,7 @@ class AurumPanel extends HTMLElement {
       // Headline: prefer HA's backend-localized ENUM state (covers every
       // HA language); fall back to the local mirror on older frontends.
       let headline = "";
-      const stObj = this._hass && this._hass.states[HUB.advisor];
+      const stObj = this._hass && this._hass.states[this._hub.advisor];
       if (stObj && typeof this._hass.formatEntityState === "function") {
         try {
           headline = this._hass.formatEntityState(stObj);
@@ -369,7 +465,7 @@ class AurumPanel extends HTMLElement {
       // pass; this updater runs before the card updaters by insertion
       // order). Cleared in _build.
       this._advReasons = null;
-      const advDevs = this._attr(HUB.advisor, "devices");
+      const advDevs = this._attr(this._hub.advisor, "devices");
       if (Array.isArray(advDevs)) {
         this._advReasons = new Map();
         for (const x of advDevs) {
@@ -379,13 +475,13 @@ class AurumPanel extends HTMLElement {
 
       // Context line: devices active · surplus (live sensor) · price.
       const parts = [];
-      const on = this._attr(HUB.advisor, "devices_on");
-      const total = this._attr(HUB.advisor, "devices_total");
+      const on = this._attr(this._hub.advisor, "devices_on");
+      const total = this._attr(this._hub.advisor, "devices_total");
       if (on != null && total != null)
         parts.push(`${on}/${total} ${this._t("devicesOn")}`);
-      const ex = parseFloat(this._st(HUB.surplus));
+      const ex = parseFloat(this._st(this._hub.surplus));
       if (!isNaN(ex)) parts.push(`⚡ ${Math.round(ex)} W`);
-      const ct = this._attr(HUB.advisor, "current_price_ct");
+      const ct = this._attr(this._hub.advisor, "current_price_ct");
       if (ct != null) parts.push(`💶 ${ct} ct/kWh`);
       sub.textContent = parts.join(" · ");
     };
@@ -420,11 +516,11 @@ class AurumPanel extends HTMLElement {
     };
 
     add("pv", "🔆", this._t("solar"), () => {
-      const v = parseFloat(this._st(HUB.pv));
+      const v = parseFloat(this._st(this._hub.pv));
       return { text: isNaN(v) ? "–" : `${Math.round(v)} W`, color: "#ffb300" };
     });
     add("grid", "🔌", this._t("grid"), () => {
-      const v = parseFloat(this._st(HUB.grid));
+      const v = parseFloat(this._st(this._hub.grid));
       if (isNaN(v)) return { text: "–" };
       if (v > 50)
         return { text: `↓ ${Math.round(v)} W`, color: "var(--error-color,#db4437)" };
@@ -436,31 +532,31 @@ class AurumPanel extends HTMLElement {
       return { text: "≈ 0 W", color: "var(--secondary-text-color,#888)" };
     });
     add("soc", "🔋", this._t("battery"), () => {
-      const v = parseFloat(this._st(HUB.soc));
+      const v = parseFloat(this._st(this._hub.soc));
       if (isNaN(v) || v < 0) return { text: "–", color: "var(--secondary-text-color,#888)" };
       const color = v >= 60 ? "var(--success-color,#43a047)" : v >= 30 ? "#ffb300" : "var(--error-color,#db4437)";
       return { text: `${Math.round(v)} %`, color };
     });
     add("surplus", "⚡", this._t("surplus"), () => {
-      const v = parseFloat(this._st(HUB.surplus));
+      const v = parseFloat(this._st(this._hub.surplus));
       if (isNaN(v)) return { text: "–" };
       const color = v > 500 ? "var(--success-color,#43a047)" : v > 100 ? "#ffb300" : "var(--secondary-text-color,#888)";
       return { text: `${Math.round(v)} W`, color };
     });
     add("budget", "🎯", this._t("budget"), () => {
-      const v = parseFloat(this._st(HUB.budget));
+      const v = parseFloat(this._st(this._hub.budget));
       return { text: isNaN(v) ? "∞" : `${Math.round(v)} W` };
     });
     add("house", "🏠", this._t("house"), () => {
-      const v = parseFloat(this._st(HUB.house));
+      const v = parseFloat(this._st(this._hub.house));
       return { text: isNaN(v) ? "–" : `${Math.round(v)} W` };
     });
     add("forecast", "📈", this._t("forecast"), () => {
-      const v = parseFloat(this._st(HUB.forecast));
+      const v = parseFloat(this._st(this._hub.forecast));
       return { text: isNaN(v) ? "–" : `${v.toFixed(1)} kWh` };
     });
     add("cheap", "💶", this._t("cheap"), () => {
-      const on = this._st(HUB.cheap) === "on";
+      const on = this._st(this._hub.cheap) === "on";
       return {
         text: on ? this._t("cheapActive") : "–",
         color: on ? "#ffb300" : "var(--secondary-text-color,#888)",
