@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Support link in the panel.** A small line below the devices: "AURUM is free. If it saves you money: ☕ Buy me a coffee" (German: "Kaffee spendieren"). It is a plain link that opens in a new tab; nothing is loaded from the site before you click it.
+
 ## [1.16.3] - 2026-11-15
 
 ### Changed
