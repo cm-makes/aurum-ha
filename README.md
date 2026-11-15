@@ -207,14 +207,18 @@ In **Configure > Energy & Battery**, set one or more of these:
 
 > All fields are optional. You only need one price source — AURUM checks them in order: max_price threshold → cheap period → price level.
 
-> ⚠️ **Price unit: AURUM works in ct/kWh.** Since v1.15.4 a `price_entity`
-> whose unit is **EUR/kWh** or **€/kWh** (e.g. the native Home Assistant
-> *Tibber* integration, `0.28`) is converted to ct automatically. A sensor
-> without a unit, or in another currency, is used as-is — if it reports
-> `0.28` instead of `28`, every price looks cheap and the device runs on grid
-> around the clock. Wrap such a sensor in a template sensor that multiplies
-> by 100, or leave `max_price` at `0` and rely on the price level / cheap
-> period instead.
+> ⚠️ **Price unit: AURUM works in ct/kWh**, the hundredth of your currency
+> (cents, Rappen, öre, pence). A `price_entity` that reports a whole
+> currency unit is converted automatically: per kWh (**EUR/kWh**, **€/kWh**,
+> **CHF/kWh**, **GBP/kWh**, **SEK/kWh**, **NOK/kWh**, **DKK/kWh**, **PLN/kWh**,
+> **CZK/kWh**, **USD/kWh**, **AUD/kWh** and a few more; e.g. the native Home
+> Assistant *Tibber* integration, `0.28`) is multiplied by 100, per MWh
+> (**EUR/MWh**) divided by 10. EUR/kWh has been converted since v1.15.4, the
+> other currencies and MWh since 1.16.3. A sensor without a unit is used
+> as-is — if it reports `0.28` instead of `28`, every price looks cheap and
+> the device runs on grid around the clock. Wrap such a sensor in a template
+> sensor that multiplies by 100, or leave `max_price` at `0` and rely on the
+> price level / cheap period instead.
 >
 > Power and energy sensors are converted the same way: kW / MW are read as W,
 > Wh / MWh as kWh.
@@ -226,7 +230,7 @@ Edit a device and set:
 | Setting | Description |
 |---------|-------------|
 | **Price mode** | *Solar only* (default), *Solar + cheap grid*, or *Solar + cheap grid (SOC-gated)* |
-| **Maximum price** | Grid power only below this price (ct/kWh). Set to 0 to use price level / cheap period instead. |
+| **Maximum price** | Grid power only below this price (ct/kWh, or Rappen etc. per kWh). Set to 0 to use price level / cheap period instead. |
 
 **How it works:**
 
@@ -263,7 +267,8 @@ floor; leave it on `cheap_grid` when price should always win.
 - [Nordpool](https://github.com/custom-components/nordpool) — price sensor + price level
 - [aWATTar](https://github.com/home-assistant-libs/awattar) — hourly price data
 - [EPEX Spot](https://github.com/mampfes/hacs_epex_spot) — day-ahead prices
-- Any sensor providing ct/kWh or price levels
+- [Innostrom](https://github.com/LukasSkywalker/ha-innostrom) — Swiss dynamic tariffs (AEW, Swisspower and others), price sensor in CHF/kWh
+- Any sensor providing a price per kWh (or MWh) or price levels
 
 ---
 

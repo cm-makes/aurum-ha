@@ -106,10 +106,15 @@ Für preisbewusstes Scheduling (günstigen Netzstrom nutzen, wenn wenig PV):
 - **aWATTar:** HACS-Integration „aWATTar".
 - **Nord Pool:** HACS-Integration „Nord Pool".
 - **EPEX Spot:** HACS-Integration „EPEX Spot Price".
+- **Schweiz (AEW, Swisspower u. a.):** Integration [„Innostrom dynamic tariffs"](https://github.com/LukasSkywalker/ha-innostrom), liefert den Preis in CHF/kWh.
 
-> ⚠️ **Einheit prüfen:** AURUM rechnet in **ct/kWh**. Seit v1.15.4 wird ein
-> Sensor mit der Einheit **EUR/kWh** oder **€/kWh** (z. B. die eingebaute
-> Tibber-Integration) automatisch umgerechnet. Hat der Sensor gar keine
+> ⚠️ **Einheit prüfen:** AURUM rechnet in **ct/kWh**, also im Hundertstel
+> deiner Währung (Cent, Rappen, Öre). Ein Sensor, der eine ganze
+> Währungseinheit pro kWh liefert (**EUR/kWh**, **€/kWh**, **CHF/kWh**,
+> **SEK/kWh** usw., z. B. die eingebaute Tibber-Integration), wird
+> automatisch mit 100 multipliziert, einer pro MWh (**EUR/MWh**) durch 10
+> geteilt. EUR/kWh wird seit v1.15.4 umgerechnet, die anderen Währungen und
+> MWh seit 1.16.3. Hat der Sensor gar keine
 > Einheit und liefert `0.28` statt `28`, gilt jeder Preis als „günstig“ und
 > das Gerät läuft rund um die Uhr mit Netzstrom. Abhilfe: Template-Sensor mit
 > `× 100`, oder beim Gerät den Maximalpreis auf `0` lassen und nur
