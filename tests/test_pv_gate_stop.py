@@ -79,20 +79,35 @@ class TestReleaseWithoutVisibleImport:
         _run(mgr, now, 12, excess=100, pv=300, soc=80)
         assert hass.states[SW] == "off"
 
-    def test_continues_as_surplus_run_when_surplus_would_restart_it(
+    def test_stops_even_with_a_large_surplus(
             self, hass, make_manager, make_device, now):
-        # 400 W export with the pump on: 400 + 600 >= 900, the surplus path
-        # would switch it on again minutes later. No off/on: it continues
-        # as a surplus run.
+        # The gate's release stands; the surplus path may start the pump
+        # again later (min_off_time + debounce_on), as a surplus run.
         mgr = _pool(make_manager, make_device)
         hass.states[SW] = "on"
         _running(mgr.devices[0], now)
         _run(mgr, now, 12, excess=400, pv=300, soc=80)
-        assert hass.states[SW] == "on"
-        assert mgr.devices[0]["_scheduling_reason"] == "surplus_available"
-        # ...and is shed like any surplus run once the surplus is gone.
-        _run(mgr, now + timedelta(minutes=13), 12, excess=-300, pv=300,
-             soc=80)
+        assert hass.states[SW] == "off"
+
+    def test_battery_fed_pump_drawing_above_nominal_stops(
+            self, hass, make_manager, make_device, now):
+        # Review of a reverted shortcut: a measured draw above nominal at
+        # 0 W export must not count as surplus that keeps it running.
+        mgr = _pool(make_manager, make_device,
+                    power_entity="sensor.pool_power")
+        hass.states["sensor.pool_power"] = "900"
+        hass.states[SW] = "on"
+        _running(mgr.devices[0], now)
+        _run(mgr, now, 12, excess=0, pv=300, soc=80)
+        assert hass.states[SW] == "off"
+
+    def test_battery_fed_pump_without_margins_stops(
+            self, hass, make_manager, make_device, now):
+        mgr = _pool(make_manager, make_device, hysteresis_on=0,
+                    residual_power=0)
+        hass.states[SW] = "on"
+        _running(mgr.devices[0], now)
+        _run(mgr, now, 12, excess=0, pv=300, soc=80)
         assert hass.states[SW] == "off"
 
     def test_soc_below_threshold_stops_despite_surplus(
@@ -163,6 +178,21 @@ class TestGuards:
         later = now + timedelta(minutes=11)  # past min_on_time
         mgr.update(_shared(later, excess=0, pv=300, soc=80))
         assert hass.states[SW] == "on"
+
+    def test_wall_switch_off_clears_the_release_timer(
+            self, hass, make_manager, make_device, now):
+        # Timer armed by a dip, then the user switches the pump off at the
+        # wall: seen off, the timer is cleared, so a manual restart later
+        # is not stopped on its first low reading.
+        mgr = _pool(make_manager, make_device)
+        dev = mgr.devices[0]
+        hass.states[SW] = "on"
+        _running(dev, now)
+        _run(mgr, now, 5, excess=0, pv=300, soc=80)
+        assert dev["_pv_gate_low_since"] is not None
+        hass.states[SW] = "off"
+        mgr.update(_shared(now + timedelta(minutes=6), excess=0, pv=300))
+        assert dev["_pv_gate_low_since"] is None
 
     def test_override_clears_the_release_timer(
             self, hass, make_manager, make_device, now):

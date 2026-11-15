@@ -660,3 +660,40 @@ class TestPlugOffOutsideOverride:
         hass.states[SW] = "off"
         t, _ = run(mgr, hass, t, 1200, 0, excess=3000)
         assert dev["runtime_today_s"] - before <= TICK
+
+
+class TestReserveEdgeCases:
+    def test_unreachable_plug_at_reserve_does_not_finish(
+            self, hass, make_manager, make_device):
+        from custom_components.aurum.const import MODE_CHARGING
+        mgr, dev = washer(make_manager, make_device)
+        hass.states[OV] = "on"
+        hass.states[SW] = "on"
+        t, _ = run(mgr, hass, T0, 1200, 2000)       # adopted
+        t, _ = run(mgr, hass, t, 60, 1)             # quiet readings
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        hass.states[SW] = "unavailable"
+        hass.states[PW] = "unavailable"
+        end = t + timedelta(minutes=15)
+        while t < end:
+            sh = shared(t)
+            sh["battery_mode"] = MODE_CHARGING
+            mgr.update(sh)
+            t += timedelta(seconds=TICK)
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        assert pushes(hass, "finished") == []
+
+    def test_plug_off_at_reserve_is_not_runtime(
+            self, hass, make_manager, make_device):
+        from custom_components.aurum.const import MODE_CHARGING
+        mgr, dev = washer(make_manager, make_device)
+        t = to_waiting(mgr, hass, dev, T0)
+        t, _ = run(mgr, hass, t, 900, 0, excess=3000)   # starts on surplus
+        t, _ = run(mgr, hass, t, 600, 2000, excess=3000)
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        before = dev["runtime_today_s"]
+        hass.states[SW] = "off"
+        t = run_mode(mgr, hass, t, 1800, 0, MODE_CHARGING)
+        hass.states[SW] = "on"
+        t = run_mode(mgr, hass, t, 60, 2000, MODE_NORMAL)
+        assert dev["runtime_today_s"] - before <= 3 * TICK

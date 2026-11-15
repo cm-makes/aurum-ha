@@ -393,3 +393,13 @@ class TestAnchorFromOlderVersion:
         again.restore_state(bm.get_state_for_save())
         assert again._trajectory_start_soc == 35.0
         assert again._trajectory_start_time == datetime(2026, 11, 16, 9, 30)
+
+    @pytest.mark.parametrize("marker", ["2", "x", [2], True, None, 0, 1])
+    def test_odd_marker_drops_only_the_anchor(self, hass, clock, marker):
+        bm = make_budget(hass)
+        bm.restore_state({"trajectory_start_soc": 60.0,
+                          "trajectory_start_time": "2026-11-16T02:00:00",
+                          "trajectory_anchor_rule": marker,
+                          "consumption_profile": [123] * 24})
+        assert bm._trajectory_start_soc is None
+        assert bm._consumption_profile[0] == 123

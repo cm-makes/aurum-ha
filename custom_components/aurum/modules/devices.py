@@ -401,6 +401,14 @@ class DeviceManager:
                 # anti-legionella boost above the run-condition threshold)
                 # from being killed when SOC drops to min_soc.
                 if self._is_manual_override(dev):
+                    if self._switch_state(dev) is None:
+                        # Unreachable plug: nothing observed, as in the
+                        # normal loop (time nobody saw must not finish or
+                        # detect a program).
+                        self._restart_sd_timers(dev)
+                        if dev.get("_runtime_tick") or dev.get("on_since"):
+                            dev["_runtime_tick"] = now
+                        continue
                     was_on = self._is_device_on(dev)
                     if was_on and dev["on_since"] is None:
                         dev["on_since"] = now
@@ -429,6 +437,9 @@ class DeviceManager:
                 # SD running: don't interrupt program
                 if (dev["startup_detection"]
                         and dev["sd_state"] == SD_STATE_RUNNING):
+                    if not self._is_device_on(dev):
+                        # Plug off at the reserve: not runtime either.
+                        dev["_runtime_tick"] = now
                     continue
                 if self._is_device_on(dev):
                     self._turn_off(dev, now, excess, battery_soc,
@@ -630,6 +641,9 @@ class DeviceManager:
                     soc_threshold, now)
                 dev["_pending_off"] = should_off
             else:
+                # Seen off (also when switched off at the wall): a release
+                # timer from the last run must not skip the next debounce.
+                dev["_pv_gate_low_since"] = None
                 # EMA excess for turn-on (stable, prevents flapping)
                 turnon_excess = dec_excess - newly_allocated
                 # Grid-only fallback for SOC-below-threshold case
@@ -982,8 +996,7 @@ class DeviceManager:
         # within hysteresis_off of the on-threshold and SOC is healthy;
         # otherwise stop once the shortfall persists for debounce_off.
         # Takes precedence over the generic SOC/excess-deficit blocks below
-        # so a gated device stops on falling sun even while some surplus
-        # remains, unless that surplus would start it again anyway.
+        # so a gated device stops on falling sun even while surplus remains.
         if dev.get("_scheduling_reason") == SCHED_REASON_SOLAR_PV:
             threshold = dev.get("pv_power_threshold") or 0
             off_level = max(0, threshold - dev["hysteresis_off"])
@@ -998,17 +1011,10 @@ class DeviceManager:
             if elapsed < dev["debounce_off"]:
                 return None
             dev["_pv_gate_low_since"] = None
-            # The stop is executed whatever the meter shows (see
-            # _FORCED_STOP_REASONS). If real surplus would start the device
-            # again (the same test as a surplus start: its own draw plus the
-            # export covers nominal + hysteresis_on + residual), it continues
-            # as a surplus run instead of an off/on a few minutes later.
-            carried = (available_excess + self._get_device_power(dev)
-                       >= dev["nominal_power"] + dev["hysteresis_on"]
-                       + dev["residual_power"])
-            if soc_ok and carried:
-                dev["_scheduling_reason"] = SCHED_REASON_SURPLUS_AVAILABLE
-                return None
+            # Executed whatever the meter shows (_FORCED_STOP_REASONS). With
+            # a large real surplus the surplus path may start the device
+            # again after min_off_time; a "carried by surplus" shortcut was
+            # tried and kept battery-fed devices running (audit #5).
             return "pv_below_threshold"
 
         # SOC below threshold: turn off if deficit persists

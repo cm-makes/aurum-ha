@@ -1105,7 +1105,9 @@ class BudgetManager:
 
         traj_soc = saved.get("trajectory_start_soc")
         traj_time = saved.get("trajectory_start_time")
-        if (saved.get("trajectory_anchor_rule") or 1) < _TRAJECTORY_ANCHOR_RULE:
+        rule = saved.get("trajectory_anchor_rule")
+        if (not isinstance(rule, (int, float)) or isinstance(rule, bool)
+                or not rule >= _TRAJECTORY_ANCHOR_RULE):
             # Saved by 1.16.3 or older, which anchored the ramp on any
             # export after midnight: a night-time blip would keep the
             # budget at 0 W for the rest of the update day. Drop it; the
