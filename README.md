@@ -337,7 +337,7 @@ Details:
 | Device physically on, override switch **OFF** | AURUM applies normal turn-off logic (e.g. battery protection) |
 | AURUM turned the device on | Full management — turns off when surplus drops |
 
-With *Startup detection*, AURUM keeps reading the power while the override is on. A program you run meanwhile shows as `running` (reason `running`) and its end is detected as usual. When you switch the override off, a running program runs to its end untouched. A paused program that isn't drawing power stays paused until there is surplus.
+With *Startup detection* and a power sensor, AURUM keeps reading the power while the override is on. A program you run meanwhile shows as `running` (reason `running`) and its end is detected as usual. If you switch the plug off mid-program, the program is interrupted, not finished: the off time counts neither as runtime nor toward *Finish time*, only *Max runtime* can end it meanwhile, and the same program continues when you switch the plug back on. When you switch the override off, a program AURUM has seen running under the override runs to its end untouched. AURUM has seen it once it has drawn more than the *Start threshold* for the *Detection time*. That takes at least two readings, one per update cycle (up to 30 s with the defaults). A program you start or resume just before switching the override off is handled like any program start: AURUM pauses it until there is surplus. A paused program that isn't drawing power stays paused until there is surplus. Without a power sensor AURUM can't tell a program from standby, so it adopts no program under the override.
 
 ---
 

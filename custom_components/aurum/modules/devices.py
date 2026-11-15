@@ -942,7 +942,9 @@ class DeviceManager:
         power_known is False while the configured power sensor is
         unavailable: actual_power is then the nominal fallback, which must
         not be read as a program start (STANDBY) or as a program still
-        drawing power (RUNNING).
+        drawing power (RUNNING). _sd_observe_override also passes False
+        for a RUNNING program whose plug the user switched off: 0 W there
+        is an interruption, not standby.
 
         Returns (counted_as_on, newly_started_power).
         """
@@ -1193,14 +1195,24 @@ class DeviceManager:
         state = dev["sd_state"] or SD_STATE_STANDBY
         dev["sd_state"] = state
         if state == SD_STATE_RUNNING:
+            if not was_on:
+                # The user switched the plug off mid-program (e.g. to add
+                # laundry): interrupted, not finished. The off time is
+                # neither runtime nor quiet time for the smart finish, so
+                # only max_runtime can end the run meanwhile, and switching
+                # the plug back on continues the same run.
+                dev["_runtime_tick"] = now
             # Finish detection only: the RUNNING branch never switches.
             self._handle_startup_detection(
                 dev, 0, battery_soc, actual_power, now, excess,
-                power_known=power_known)
+                power_known=power_known and was_on)
             return
-        if not was_on or not power_known:
-            # Nothing to observe. With the plug off, a program still running
-            # after a max_runtime finish has been cut: the hold ends.
+        if not was_on or not power_known or not dev.get("power_entity"):
+            # Nothing to observe. Without a power sensor the reading is the
+            # nominal fallback: a plug that is on would be adopted as a
+            # program, run after phantom run. With the plug off, a program
+            # still running after a max_runtime finish has been cut: the
+            # hold ends.
             if not was_on:
                 dev["sd_rearm_pending"] = False
             self._restart_sd_timers(dev)
@@ -1317,7 +1329,9 @@ class DeviceManager:
             if not dev.get("_cached_on", False):
                 continue
             if not dev["managed_on"]:
-                continue  # manual override, don't preempt
+                continue  # switched on by the user, don't preempt
+            if self._is_manual_override(dev):
+                continue  # Manual override: AURUM never switches it
             if not dev["interruptible"]:
                 continue  # non-interruptible, don't preempt
             if dev["priority"] >= sd_device["priority"]:
