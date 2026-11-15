@@ -94,7 +94,7 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
 | **Manual Override** | Auto-created switch per device: AURUM hands the device back to you |
 | **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
-| **State Persistence** | Device runtimes, energy counters and budget safety factor survive restarts |
+| **State Persistence** | Device runtimes, energy counters, the budget safety factor and the learned household load survive restarts |
 | **HA Diagnostics** | Download a full JSON snapshot for bug reports |
 | **No Vendor Lock-In** | Works with any grid meter, any battery, any smart plug, any price sensor |
 
@@ -195,6 +195,8 @@ In **Configure > Energy & Battery**:
 | `pv_forecast_today_entity` | Sensor with **hourly forecast data** as attribute (e.g. Solcast "Forecast Today" with `forecast` attribute) |
 
 > If your forecast entity only provides a daily total without hourly data, AURUM uses a fallback sunset estimate (19:00) for budget calculations.
+
+The budget also subtracts what your household uses until sunset. AURUM learns this per hour of the day: house consumption minus AURUM's own devices, averaged over each hour. An hour uses the learned value once it has data from 3 days; until then AURUM assumes 500 W. Loads that AURUM does not switch, such as a wallbox or a heat pump, count as household load. Learning needs a PV **power** sensor and, with a battery, its charge/discharge power sensors. AURUM pauses it while the grid meter, the PV sensor or a battery power sensor has failed, and while a device that is on has no working power sensor. The learned values survive restarts.
 
 ### Price-Aware Scheduling (optional)
 
