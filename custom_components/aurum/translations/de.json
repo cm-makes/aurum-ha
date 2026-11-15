@@ -151,6 +151,7 @@
           "condition_entity": "Bedingungs-Sensor (optional)",
           "condition_op": "Bedingung",
           "condition_value": "Grenzwert",
+          "condition_margin": "Wiedereinschalt-Abstand",
           "day_start_hour": "Reset-Stunde (täglich)"
         },
         "data_description": {
@@ -183,6 +184,7 @@
           "min_off_time": "Wie lange muss das Gerät mindestens ausgeschaltet bleiben (Sekunden)? Nützlich für Kompressoren, Lüfter mit Nachlauf. Standard: 60s.",
           "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
           "condition_value": "Schwellwert für den Bedingungs-Sensor.",
+          "condition_margin": "Wie ein Thermostat: Hat der Sensor den Grenzwert erreicht, darf das Gerät erst wieder starten, wenn der Sensor um diesen Abstand wieder auf der erlaubten Seite liegt. Beispiel: unter 55 mit Abstand 3 → aus bei 55, wieder erlaubt unter 52, damit ein Speicher mit 54,9 das Gerät nicht gleich wieder einschaltet. In der Einheit des Sensors. 0 = kein Abstand (Standard).",
           "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf."
         }
       },
@@ -227,6 +229,7 @@
           "condition_entity": "Bedingungs-Sensor (optional)",
           "condition_op": "Bedingung",
           "condition_value": "Grenzwert",
+          "condition_margin": "Wiedereinschalt-Abstand",
           "day_start_hour": "Reset-Stunde (täglich)"
         },
         "data_description": {
@@ -257,6 +260,7 @@
           "min_off_time": "Mindestzeit die das Gerät ausgeschaltet bleibt (Sekunden).",
           "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
           "condition_value": "Schwellwert für den Bedingungs-Sensor.",
+          "condition_margin": "Thermostat-Band in der Einheit des Sensors: Nach Erreichen des Grenzwerts darf das Gerät erst wieder starten, wenn der Sensor um diesen Abstand wieder auf der erlaubten Seite liegt (unter 55, Abstand 3: wieder unter 52). 0 = aus.",
           "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf."
         }
       },

@@ -71,6 +71,7 @@ from .const import (
     CONF_DEV_CONDITION_ENTITY,
     CONF_DEV_CONDITION_OP,
     CONF_DEV_CONDITION_VALUE,
+    CONF_DEV_CONDITION_MARGIN,
     CONDITION_OP_BELOW,
     CONDITION_OP_ABOVE,
     CONF_DEV_PRICE_MODE,
@@ -451,6 +452,15 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             default=d.get(CONF_DEV_CONDITION_VALUE, vol.UNDEFINED),
         ): selector.NumberSelector(selector.NumberSelectorConfig(
             min=-100, max=10000, step=0.5,
+            mode=selector.NumberSelectorMode.BOX)),
+        # Restart margin (thermostat band) in the sensor's unit: once the
+        # limit is reached, the device may start again only below
+        # limit - margin ('above': above limit + margin). 0 = no band.
+        vol.Optional(
+            CONF_DEV_CONDITION_MARGIN,
+            default=d.get(CONF_DEV_CONDITION_MARGIN, 0),
+        ): selector.NumberSelector(selector.NumberSelectorConfig(
+            min=0, max=1000, step=0.1,
             mode=selector.NumberSelectorMode.BOX)),
         # ── Price-aware scheduling ───────────────────────────
         vol.Optional(

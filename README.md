@@ -83,7 +83,7 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **PV Surplus Steering** | Turns devices on/off based on available excess power |
 | **Battery Priority** | Optional: only genuine grid export counts as surplus, so the battery charges first |
 | **Battery-Aware** | Respects battery SOC with configurable target and minimum thresholds |
-| **Run Conditions** | Optional per-device prerequisite (a sensor below/above a limit — e.g. water heater only while the tank is below 55 °C) |
+| **Run Conditions** | Optional per-device prerequisite (a sensor below/above a limit — e.g. water heater only while the tank is below 55 °C), with an optional restart margin so it works like a thermostat |
 | **PV Power Gate** | Optional per-device threshold: run on raw PV generation above a limit (with healthy SOC), bypassing the budget cap |
 | **Daily Reset Hour** | Per-device reset hour for runtime counters — align a cheap-grid device to the solar day |
 | **Priority-Based** | Higher priority devices get power first |
@@ -167,6 +167,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Deadline** | Time by which the device must have run (e.g. `18:00`). Only active while the device's *Must run today* switch is on. Regular devices: AURUM starts the device on grid just in time to reach *Estimated runtime* by the deadline, counting the runtime since *Must run today* was switched on (PV runs count); once that is reached, *Must run today* resets. With *Stop after runtime* the daily cap wins. With *Startup detection*, the deadline is sized for the pending program and *Must run today* resets when that program finishes. |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
 | **Run condition sensor** | Optional prerequisite: a sensor that must be **below** / **above** a limit for the device to run (e.g. water heater only while `sensor.boiler_temp` is below `55`). Blocks all start paths; an unavailable sensor fails open. |
+| **Restart margin** | Optional thermostat band for the run condition, in the sensor's unit. Once the reading has reached the limit, the condition stays unmet until the reading is this far back on the allowed side: *below* `55` with margin `3` stops at 55 and allows the next start only below 52 (*above* is mirrored), so a tank at 54.9 °C does not restart the water heater. `0` = no band (default). An unavailable sensor still fails open. The band is kept across restarts and starts over when you change the sensor, the condition or the limit. |
 | **Daily reset hour** | Hour (0–23) when this device's runtime counter resets. `0` = midnight (default). Set to `9` so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight. |
 | **PV power threshold** | Optional: run whenever *actual* PV generation is ≥ this many watts **and** battery SOC ≥ the device's SOC threshold, bypassing the daily budget cap. Expresses "run whenever PV ≥ 1000 W and battery ≥ 25 %" — useful when the surplus/budget logic reserves solar for the battery and a device (e.g. a pool pump) wouldn't otherwise start. Requires a PV **power** sensor. `0` = disabled (default). Also available as a live `number.aurum_{slug}_pv_power_threshold` entity and a dashboard control. |
 
@@ -457,7 +458,7 @@ The `devices` attribute lists every device with a machine-readable `reason`:
 | `program_paused` | Program paused, waiting for surplus to resume |
 | `battery_charging` | Battery below reserve |
 | `below_soc_threshold` | Battery below this device's SOC threshold |
-| `condition_not_met` | Run condition blocks it (e.g. boiler already hot) |
+| `condition_not_met` | Run condition blocks it (e.g. boiler already hot, or still inside the restart margin) |
 | `disabled` | Force-off switch is on |
 | `switch_unavailable` | The device's switch is unavailable — AURUM sends it nothing until it reports again |
 | `input_fault` | Waiting because the surplus or the SOC is unknown (sensor failure) |

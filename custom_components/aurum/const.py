@@ -89,6 +89,11 @@ CONF_DEV_DAY_START_HOUR = "day_start_hour"      # int 0-23
 CONF_DEV_CONDITION_ENTITY = "condition_entity"
 CONF_DEV_CONDITION_OP = "condition_op"          # "below" | "above"
 CONF_DEV_CONDITION_VALUE = "condition_value"
+# Restart margin (thermostat band), in the sensor's own unit: once the
+# reading has reached the limit, the condition stays unmet until the reading
+# is back past the limit by this much ('below 55', margin 3: off at 55,
+# allowed again below 52). 0 = no band (default, strict compare).
+CONF_DEV_CONDITION_MARGIN = "condition_margin"
 CONDITION_OP_BELOW = "below"
 CONDITION_OP_ABOVE = "above"
 

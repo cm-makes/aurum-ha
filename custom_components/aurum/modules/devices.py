@@ -234,6 +234,12 @@ class DeviceManager:
             "condition_entity": cfg.get("condition_entity"),
             "condition_op": cfg.get("condition_op", "below"),
             "condition_value": cfg.get("condition_value"),
+            # Restart margin (thermostat band), 0 = strict compare.
+            "condition_margin": cfg.get("condition_margin", 0),
+            # The condition whose limit the reading reached and has not
+            # left by the margin yet ([entity, op, limit]), or None. See
+            # _condition_met.
+            "_cond_latch": None,
 
             # Price-aware scheduling
             "price_mode": cfg.get("price_mode", "solar_only"),
@@ -808,6 +814,22 @@ class DeviceManager:
         sensor also returns True (fail-open): a broken temp sensor must
         not permanently strand the device — the regular surplus logic
         still applies either way.
+
+        Restart margin (thermostat band): once the reading has reached the
+        limit, the condition stays unmet until the reading is back past
+        the limit by condition_margin. 'below 55' with margin 3 is unmet
+        from 55 on and met again below 52 ('above' mirrored), so a reading
+        that dips to 54.9 no longer restarts the device. Margin 0 releases
+        the latch with the first met reading: the strict compare.
+
+        The latch follows the readings only, not the switch, so every
+        caller of a cycle (start paths, the stop in block 1d, the WAITING
+        state, the published flag) gets the same answer, and it keeps
+        tracking under Manual override. While the sensor is unavailable it
+        is kept as is: nothing was observed, and a sensor that drops out
+        for a moment must not reopen the band. It is persisted with the
+        condition it belongs to, so a restart keeps the band and an
+        edited sensor, operator or limit starts without a latch.
         """
         entity = dev.get("condition_entity")
         value = dev.get("condition_value")
@@ -816,9 +838,19 @@ class DeviceManager:
         current = get_float(self.hass, entity, default=None)
         if current is None:
             return True
-        if dev.get("condition_op", "below") == "above":
-            return current > float(value)
-        return current < float(value)
+        limit = float(value)
+        above = dev.get("condition_op", "below") == "above"
+        key = [entity, "above" if above else "below", limit]
+        if (current <= limit) if above else (current >= limit):
+            dev["_cond_latch"] = key
+            return False
+        if dev.get("_cond_latch") == key:
+            margin = max(0.0, float(dev.get("condition_margin") or 0))
+            restart = limit + margin if above else limit - margin
+            if (current <= restart) if above else (current >= restart):
+                return False
+        dev["_cond_latch"] = None
+        return True
 
     def _runtime_target_reached(self, dev):
         """True when stop_after_runtime is set and today's runtime
