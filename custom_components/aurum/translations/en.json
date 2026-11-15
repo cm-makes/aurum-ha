@@ -311,6 +311,10 @@
     "input_stale": {
       "title": "AURUM: {entity} reports no new values",
       "description": "The grid meter **{entity}** still shows a value, but has not reported a new reading within the *Sensor timeout*. A frozen feed (an MQTT sensor without expiry, a stalled cloud connection) looks like a live value, so AURUM runs in safe mode until the meter reports again: no device is started on surplus, and devices running on surplus are switched off after their turn-off delay. Programs, deadline jobs and cheap-grid runs continue.\n\nCheck the device or integration behind this sensor. If it normally updates less often, raise *Sensor timeout* in the AURUM settings above its update interval, or set it to 0 to turn this check off. This message clears itself when the sensor reports again."
+    },
+    "missing_entities": {
+      "title": "AURUM: configured entities not found",
+      "description": "AURUM's configuration uses entities that Home Assistant does not have. They were still missing when AURUM checked again 10 minutes later:\n\n{entities}\n\nUsually such an entity was renamed (for example with *Recreate entity IDs*), disabled, or removed together with its device or integration. Until they exist again, AURUM works without them: a device without its switch is not switched, startup detection sees no program start without the power measurement, a run condition without its sensor does not apply, a missing grid meter or battery sensor puts AURUM in safe mode, and a missing price, forecast, weather or solar production sensor gives no data.\n\nOpen **Settings → Devices & services → AURUM → Configure** and select the current entities, or enable them again. This message clears itself when the entities exist again."
     }
   },
   "entity": {

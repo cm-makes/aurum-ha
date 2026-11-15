@@ -311,6 +311,10 @@
     "input_stale": {
       "title": "AURUM: {entity} liefert keine neuen Werte",
       "description": "Der Netzzähler **{entity}** zeigt noch einen Wert, hat aber innerhalb des *Sensor-Zeitlimits* keinen neuen gemeldet. Ein eingefrorener Wert (MQTT-Sensor ohne Ablaufzeit, hängende Cloud-Verbindung) sieht aus wie ein Live-Wert, deshalb läuft AURUM im Sicherheitsmodus, bis der Zähler wieder meldet: Kein Gerät wird auf Überschuss gestartet, und Geräte, die auf Überschuss laufen, werden nach ihrer Ausschaltverzögerung abgeschaltet. Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter.\n\nPrüfe das Gerät oder die Integration hinter diesem Sensor. Aktualisiert er normalerweise seltener, erhöhe das *Sensor-Zeitlimit* in den AURUM-Einstellungen über sein Aktualisierungsintervall oder setze es auf 0, um diese Prüfung abzuschalten. Die Meldung verschwindet von selbst, sobald der Sensor wieder meldet."
+    },
+    "missing_entities": {
+      "title": "AURUM: Konfigurierte Entitäten nicht gefunden",
+      "description": "Die AURUM-Konfiguration verwendet Entitäten, die es in Home Assistant nicht gibt. Sie fehlten auch noch, als AURUM 10 Minuten später erneut geprüft hat:\n\n{entities}\n\nMeist wurde eine solche Entität umbenannt (zum Beispiel, weil die Entitäts-IDs neu erstellt wurden), deaktiviert oder mit ihrem Gerät oder ihrer Integration entfernt. Bis es sie wieder gibt, arbeitet AURUM ohne sie: Ein Gerät ohne seinen Schalter wird nicht geschaltet, die Programmerkennung sieht ohne die Verbrauchsmessung keinen Programmstart, eine Bedingung ohne ihren Sensor gilt nicht, ein fehlender Netzzähler oder Batteriesensor versetzt AURUM in den Sicherheitsmodus, und ein fehlender Preis-, Prognose-, Wetter- oder PV-Erzeugungssensor liefert keine Daten.\n\nÖffne **Einstellungen → Geräte & Dienste → AURUM → Konfigurieren** und wähle die aktuellen Entitäten aus, oder aktiviere sie wieder. Die Meldung verschwindet von selbst, sobald es die Entitäten wieder gibt."
     }
   },
   "entity": {

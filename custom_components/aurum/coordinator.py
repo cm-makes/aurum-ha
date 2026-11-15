@@ -25,6 +25,7 @@ from .modules.devices import DeviceManager
 from .modules.pricing import PricingManager
 from .modules.advisor import AdvisorManager
 from .modules.base_load import BaseLoadSampler
+from .modules.entity_check import MissingEntityCheck, describe, format_missing
 from .modules.helpers import CSVLogger, get_float
 from .modules.persistence import PersistenceManager
 
@@ -96,6 +97,9 @@ class AurumCoordinator(DataUpdateCoordinator):
     STARTUP_MAX_WAIT_S = 300
     # A failed hub input becomes an HA repair issue after this long.
     ISSUE_DELAY_S = 900
+    # The check for configured entities that no longer exist waits for
+    # Home Assistant to be running, at most this long after cycle 1.
+    ENTITY_CHECK_MAX_WAIT_S = 3600
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry):
         """Initialize coordinator and all modules."""
@@ -120,7 +124,10 @@ class AurumCoordinator(DataUpdateCoordinator):
         self._last_daily_reset: int = -1  # day of year
         self._first_cycle_at = None   # wall clock of cycle 1
         self._in_startup = True       # latched off when startup ends
-        self._issues: dict = {}       # repair issue id -> (status, entity)
+        # repair issue id -> (translation_key, placeholders)
+        self._issues: dict = {}
+        # Configured entities that no longer exist (repair issue).
+        self.entity_check = MissingEntityCheck(self.config)
 
         # ── Create modules ─────────────────────────────────────────
         self.energy = EnergyManager(self.bridge, self.config)
@@ -293,41 +300,100 @@ class AurumCoordinator(DataUpdateCoordinator):
                 "– starting in fail-safe mode", int(waited))
         return False, ready
 
+    def _ha_running(self):
+        """Home Assistant has finished starting (CoreState.running).
+        hass.is_running also counts STARTING, while integrations are
+        still loading."""
+        state = getattr(self.hass, "state", None)
+        return str(getattr(state, "value", state)).lower() == "running"
+
+    def _check_missing_entities(self, shared):
+        """Check that the entities in the config exist (entity_check.py)
+        and publish the confirmed missing ones in
+        shared["missing_entities"]. Checks start once Home Assistant is
+        running (at most ENTITY_CHECK_MAX_WAIT_S after cycle 1): at setup
+        the integrations behind the plugs and sensors are still loading.
+        Each change is logged once. Never raises into the control loop."""
+        check = self.entity_check
+        try:
+            now = shared["now"]
+            waited = ((now - self._first_cycle_at).total_seconds()
+                      if self._first_cycle_at else 0)
+            if ((self._ha_running()
+                    or waited >= self.ENTITY_CHECK_MAX_WAIT_S)
+                    and check.due(now)):
+                before = check.missing_entities()
+                if check.check(
+                        lambda e: self.bridge.get_state(e) is not None,
+                        now):
+                    new = [r for r in check.missing
+                           if r["entity"] not in before]
+                    back = before - check.missing_entities()
+                    if new:
+                        _LOGGER.warning(
+                            "AURUM: configured entities not found (renamed "
+                            "or removed?), select the current ones in "
+                            "Configure: %s",
+                            "; ".join(describe(r, code=False) for r in new))
+                    if back:
+                        _LOGGER.info(
+                            "AURUM: configured entities found again: %s",
+                            ", ".join(sorted(back)))
+        except Exception as e:  # noqa: BLE001 – the check is best effort
+            _LOGGER.debug("AURUM entity check failed: %s", e)
+        shared["missing_entities"] = list(check.missing)
+
     def _update_repair_issues(self, shared):
         """Raise an HA repair issue for a hub input that has failed for
-        ISSUE_DELAY_S, and delete it when the input recovers. Best effort:
-        never raises into the control loop."""
+        ISSUE_DELAY_S, and one listing the configured entities that no
+        longer exist (shared["missing_entities"]). Each is deleted when
+        the cause is gone. Best effort: never raises into the control
+        loop."""
         try:
             from homeassistant.helpers import issue_registry as ir
         except ImportError:
             return
         try:
             now = shared["now"]
+            missing = shared.get("missing_entities") or []
+            missing_ids = {ref["entity"] for ref in missing}
             wanted = {}
             for fault in shared.get("input_faults") or []:
                 if fault.get("input") not in _ISSUE_INPUTS:
+                    continue
+                # A sensor that no longer exists is in the missing-entities
+                # issue: one issue per cause, worded "not found".
+                if fault.get("entity") in missing_ids:
                     continue
                 since = fault.get("since")
                 if (since is None or (now - since).total_seconds()
                         < self.ISSUE_DELAY_S):
                     continue
-                wanted[f"input_{fault['input']}"] = fault
+                wanted[f"input_{fault['input']}"] = (
+                    f"input_{fault['status']}",
+                    {"entity": fault["entity"] or "?"})
+            if missing:
+                # The placeholder is not translated by HA: AURUM writes
+                # the field labels in the HA language.
+                lang = getattr(self.bridge, "language", "en") or "en"
+                wanted["missing_entities"] = (
+                    "missing_entities",
+                    {"entities": format_missing(missing, lang)})
             for issue_id in list(self._issues):
                 if issue_id not in wanted:
                     ir.async_delete_issue(self.hass, DOMAIN, issue_id)
                     del self._issues[issue_id]
-            for issue_id, fault in wanted.items():
-                key = (fault["status"], fault["entity"])
+            for issue_id, key in wanted.items():
                 if self._issues.get(issue_id) == key:
                     continue
+                translation_key, placeholders = key
                 ir.async_create_issue(
                     self.hass, DOMAIN, issue_id,
                     is_fixable=False,
                     is_persistent=False,
                     severity=ir.IssueSeverity.WARNING,
-                    translation_key=f"input_{fault['status']}",
-                    translation_placeholders={
-                        "entity": fault["entity"] or "?"},
+                    translation_key=translation_key,
+                    translation_placeholders=placeholders,
                 )
                 self._issues[issue_id] = key
         except Exception as e:  # noqa: BLE001 – issues are best effort
@@ -370,6 +436,7 @@ class AurumCoordinator(DataUpdateCoordinator):
                 shared["excess"] = shared.get("excess", 0)
                 return shared
 
+            self._check_missing_entities(shared)
             self._update_repair_issues(shared)
 
             # ── Step 2: Battery mode ───────────────────────────────
