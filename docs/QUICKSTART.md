@@ -160,8 +160,12 @@ wget -O - https://raw.githubusercontent.com/cm-makes/aurum-ha/main/tools/quickst
 **Step 1 – Energie-Quellen:**
 - **Netz-Leistungssensor** (Pflicht): z. B. `sensor.fronius_grid_power`
   (positiv = Bezug, negativ = Einspeisung – wichtig!)
-- **PV-Leistungssensor** (empfohlen): z. B. `sensor.fronius_pv_power`
+- **PV-Leistungssensor** (empfohlen): z. B. `sensor.fronius_pv_power`.
+  Die gesamte PV-Erzeugung aller Anlagen; bei einem Hybrid-Wechselrichter
+  dessen PV-Leistung (DC-Eingang), nicht die AC-Leistung.
 - **Akku-SOC-Sensor** (empfohlen, wenn Batterie vorhanden)
+- **Akku-Lade- und Entladeleistung** (empfohlen, wenn Batterie vorhanden;
+  beide, je immer positiv). Ohne sie lernt AURUM den Hausverbrauch nicht.
 - **Strompreis-Sensor** (optional)
 
 **Step 2 – Akku-Einstellungen:**
