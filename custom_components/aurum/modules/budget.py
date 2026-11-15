@@ -36,6 +36,15 @@ _LOGGER = logging.getLogger(__name__)
 #: enough.
 TRAJECTORY_MIN_PV_W = 100.0
 
+#: Without a PV power sensor and without an hourly forecast, sunrise alone
+#: is too early: PV still makes next to nothing in the first hour, so a
+#: battery overshoot then anchored the ramp at a pre-production SOC. The
+#: sun must stand at least this high (degrees, sun.sun "elevation") ...
+TRAJECTORY_MIN_SUN_ELEVATION = 10.0
+#: ... or the PV production counter (pv_actual_today_entity) must have
+#: risen at least this much (kWh) since midnight.
+TRAJECTORY_MIN_PV_TODAY_KWH = 0.05
+
 
 class BudgetManager:
     """PV surplus budget based on forecast and SOC trajectory.
@@ -107,6 +116,11 @@ class BudgetManager:
 
         # ── PV total midnight snapshot (for daily calc) ─────────────
         self._pv_total_midnight = None
+        # Lowest PV-today reading since midnight: the baseline for "PV has
+        # produced today" (ramp anchor). The lowest, not the first, because
+        # many inverters hold yesterday's daily yield overnight and only
+        # reset it when they wake up in the morning.
+        self._pv_today_min_kwh = None
 
         # ── Hourly PV snapshot (for weather learning) ───────────────
         # Tracks cumulative pv_actual at the start of each hour so
@@ -176,6 +190,10 @@ class BudgetManager:
         hours_remaining = self._hours_until_sunset()
         hourly_forecast = self._get_hourly_forecast()
         pv_actual_kwh = self._get_pv_today_kwh()
+        if pv_actual_kwh is not None and (
+                self._pv_today_min_kwh is None
+                or pv_actual_kwh < self._pv_today_min_kwh):
+            self._pv_today_min_kwh = pv_actual_kwh
 
         remaining_kwh = get_energy_kwh(
             self.hass, self.pv_forecast_entity, default=None)
@@ -693,9 +711,14 @@ class BudgetManager:
 
         With a PV power sensor, its reading decides (an outage reads 0 W,
         so it does not anchor). Without one shared["pv_power"] is always
-        0 W, so the forecast for the current slot decides, and without
-        hourly forecast data the sun's position. With none of them the
-        ramp is not anchored and its multiplier stays neutral (1.0).
+        0 W, so the forecast for the current slot decides. Without hourly
+        forecast data either, sunrise alone is not enough (PV still makes
+        next to nothing then): the sun must stand at least 10 degrees high,
+        or the PV-today counter must have risen by 0.05 kWh since midnight.
+        sun.sun below the horizon always means no. With none of these
+        signals (no counter, sun.sun or its elevation missing, or, far
+        north in winter, a sun that never climbs that high) the ramp is not
+        anchored and its multiplier stays neutral (1.0).
         """
         if self.pv_power_entity:
             return (float(shared.get("pv_power") or 0.0)
@@ -703,7 +726,35 @@ class BudgetManager:
         if hourly_forecast:
             return (self._forecast_w_now(hourly_forecast, now)
                     >= TRAJECTORY_MIN_PV_W)
-        return self.hass.get_state("sun.sun") == "above_horizon"
+        if self.hass.get_state("sun.sun") == "below_horizon":
+            return False   # night, whatever a counter glitch says
+        elevation = self._sun_elevation()
+        if (elevation is not None
+                and elevation >= TRAJECTORY_MIN_SUN_ELEVATION):
+            return True
+        return (self._pv_today_rise_kwh(shared)
+                >= TRAJECTORY_MIN_PV_TODAY_KWH)
+
+    def _sun_elevation(self):
+        """sun.sun's elevation in degrees, None when it is not available."""
+        raw = self.hass.get_state("sun.sun", attribute="elevation")
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _pv_today_rise_kwh(self, shared):
+        """PV energy produced since midnight (kWh), 0 without a counter.
+
+        Measured from the lowest reading since midnight, so a daily-yield
+        sensor that still shows yesterday's total overnight does not count.
+        """
+        if not self.pv_actual_today_entity or self._pv_today_min_kwh is None:
+            return 0.0
+        pv_today = shared.get("pv_actual_today_kwh")
+        if pv_today is None:
+            return 0.0
+        return pv_today - self._pv_today_min_kwh
 
     @staticmethod
     def _forecast_w_now(hourly_forecast, now):
@@ -969,6 +1020,7 @@ class BudgetManager:
         self._trajectory_start_soc = None
         self._trajectory_start_time = None
         self._pv_total_midnight = None
+        self._pv_today_min_kwh = None
         self._weather_factor_ema = None
         self._pv_hour_snapshot_kwh = None
         self._pv_hour_snapshot_h = None

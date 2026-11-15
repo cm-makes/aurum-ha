@@ -64,6 +64,28 @@ def day(h, m=0):
     return datetime(2026, 11, 16, h, m)
 
 
+def attrs(hass, entity_id):
+    hass.attributes = getattr(hass, "attributes", {})
+    return hass.attributes.setdefault(entity_id, {})
+
+
+def sun(hass, state, elevation=None):
+    """Set sun.sun; elevation None leaves the attribute out."""
+    hass.states["sun.sun"] = state
+    a = attrs(hass, "sun.sun")
+    a.clear()
+    if elevation is not None:
+        a["elevation"] = elevation
+
+
+PV_TODAY = "sensor.pv_today"
+
+
+def pv_today(hass, kwh):
+    hass.states[PV_TODAY] = str(kwh)
+    attrs(hass, PV_TODAY)["unit_of_measurement"] = "kWh"
+
+
 # ── (1) Dynamic target only lowers ───────────────────────────────
 
 
@@ -157,11 +179,11 @@ class TestRampAnchor:
     def test_night_export_blip_does_not_zero_the_morning(self, hass, clock):
         """Audit #18: grid-only surplus, 5 W export at 01:00 at SOC 41 %."""
         bm = make_budget(hass)
-        hass.states["sun.sun"] = "below_horizon"
+        sun(hass, "below_horizon", -40.0)
         tick(bm, clock, day(1), soc=41, excess=5)
         assert bm._trajectory_start_soc is None
 
-        hass.states["sun.sun"] = "above_horizon"
+        sun(hass, "above_horizon", 15.0)
         sh = tick(bm, clock, day(10), soc=35, excess=400)
         assert bm._trajectory_start_soc == 35
         assert bm._trajectory_start_time == day(10)
@@ -204,6 +226,138 @@ class TestRampAnchor:
     def test_still_needs_excess(self, hass, clock):
         bm = make_budget(hass, pv_power_entity="sensor.pv")
         tick(bm, clock, day(9), soc=40, excess=-300, pv=1500)
+        assert bm._trajectory_start_soc is None
+
+
+class TestSunFallback:
+    """No PV power sensor, no hourly forecast: sunrise alone is too early.
+
+    PV still makes next to nothing in the first hour after sunrise, so a
+    battery overshoot then anchored the ramp at a pre-production SOC. The
+    sun must stand 10 degrees high, or the PV-today counter must have
+    risen 0.05 kWh since midnight.
+    """
+
+    def test_november_sunrise_blip_does_not_anchor(self, hass, clock):
+        """Review example: sunrise 07:45, export blip right at sunrise, the
+        battery drains 41 -> 33 % until PV takes over at 09:00."""
+        bm = make_budget(hass)
+        for at, soc, excess, state, elevation in [
+            (day(1), 48, 5, "below_horizon", -45.0),
+            (day(7, 45), 41, 5, "above_horizon", 0.2),   # sunrise blip
+            (day(8, 15), 39, 0, "above_horizon", 3.6),
+            (day(8, 30), 36, 30, "above_horizon", 5.5),  # sun still low
+        ]:
+            sun(hass, state, elevation)
+            tick(bm, clock, at, soc=soc, excess=excess)
+            assert bm._trajectory_start_soc is None, at
+
+        sun(hass, "above_horizon", 10.1)
+        sh = tick(bm, clock, day(9), soc=33, excess=350)
+        assert bm._trajectory_start_soc == 33
+        assert bm._trajectory_start_time == day(9)
+        assert sh["budget_info"]["trajectory_multiplier"] == 1.0
+        assert sh["device_budget_w"] > 200
+
+        # Anchored at the sunrise blip, the ramp expected the battery to
+        # climb from 41 % since 07:45 and cut the same 09:00 budget hard.
+        early = make_budget(hass)
+        early._trajectory_start_soc = 41
+        early._trajectory_start_time = day(7, 45)
+        early_w, early_info = early._calculate_budget(33)
+        assert early_info["trajectory_multiplier"] < 0.5
+        assert early_w < sh["device_budget_w"] / 2
+
+    @pytest.mark.parametrize("elevation", [None, "unknown"])
+    def test_missing_elevation_is_no_daylight_signal(
+            self, hass, clock, elevation):
+        """Above the horizon but no usable elevation: no anchor, the ramp
+        stays neutral instead of anchoring at sunrise."""
+        bm = make_budget(hass)
+        sun(hass, "above_horizon", elevation)
+        sh = tick(bm, clock, day(12), soc=50, excess=500)
+        assert bm._trajectory_start_soc is None
+        assert sh["budget_info"]["trajectory_multiplier"] == 1.0
+
+    def test_pv_counter_rise_anchors_while_the_sun_is_low(self, hass, clock):
+        bm = make_budget(hass, pv_actual_today_entity=PV_TODAY)
+        sun(hass, "above_horizon", 2.0)
+        pv_today(hass, 0.0)
+        tick(bm, clock, day(7, 50), soc=39, excess=10)
+        assert bm._trajectory_start_soc is None
+        sun(hass, "above_horizon", 4.0)
+        pv_today(hass, 0.03)
+        tick(bm, clock, day(8, 5), soc=38, excess=40)
+        assert bm._trajectory_start_soc is None
+        sun(hass, "above_horizon", 6.0)
+        pv_today(hass, 0.06)
+        tick(bm, clock, day(8, 20), soc=37, excess=150)
+        assert bm._trajectory_start_soc == 37
+        assert bm._trajectory_start_time == day(8, 20)
+
+    def test_counter_holding_yesterday_does_not_count(self, hass, clock):
+        """Many inverters show yesterday's daily yield until they wake up
+        and reset in the morning. Only the rise from the lowest reading
+        since midnight counts."""
+        bm = make_budget(hass, pv_actual_today_entity=PV_TODAY)
+        pv_today(hass, 12.4)
+        sun(hass, "below_horizon", -45.0)
+        tick(bm, clock, day(1), soc=48, excess=5)
+        assert bm._trajectory_start_soc is None
+        sun(hass, "above_horizon", 0.5)
+        tick(bm, clock, day(7, 50), soc=41, excess=5)
+        assert bm._trajectory_start_soc is None
+        pv_today(hass, 0.0)                   # inverter wakes and resets
+        sun(hass, "above_horizon", 1.5)
+        tick(bm, clock, day(8), soc=40, excess=5)
+        assert bm._trajectory_start_soc is None
+        pv_today(hass, 0.07)
+        sun(hass, "above_horizon", 4.0)
+        tick(bm, clock, day(8, 25), soc=38, excess=120)
+        assert bm._trajectory_start_soc == 38
+
+    def test_counter_works_without_sun_entity(self, hass, clock):
+        bm = make_budget(hass, pv_actual_today_entity=PV_TODAY)
+        pv_today(hass, 12.4)                  # held overnight
+        tick(bm, clock, day(1), soc=48, excess=5)
+        assert bm._trajectory_start_soc is None
+        pv_today(hass, 0.0)
+        tick(bm, clock, day(8), soc=40, excess=5)
+        assert bm._trajectory_start_soc is None
+        pv_today(hass, 0.08)
+        tick(bm, clock, day(8, 40), soc=38, excess=200)
+        assert bm._trajectory_start_soc == 38
+
+    def test_lifetime_counter(self, hass, clock):
+        bm = make_budget(hass, pv_actual_today_entity=PV_TODAY)
+        sun(hass, "above_horizon", 1.0)
+        pv_today(hass, 8123.40)               # midnight snapshot -> 0 today
+        tick(bm, clock, day(7, 50), soc=40, excess=10)
+        pv_today(hass, 8123.43)
+        tick(bm, clock, day(8, 5), soc=39, excess=40)
+        assert bm._trajectory_start_soc is None
+        pv_today(hass, 8123.47)
+        tick(bm, clock, day(8, 20), soc=38, excess=150)
+        assert bm._trajectory_start_soc == 38
+
+    def test_below_horizon_vetoes_a_counter_glitch(self, hass, clock):
+        bm = make_budget(hass, pv_actual_today_entity=PV_TODAY)
+        sun(hass, "below_horizon", -40.0)
+        pv_today(hass, 0.0)
+        tick(bm, clock, day(0, 30), soc=50, excess=0)
+        pv_today(hass, 0.3)
+        tick(bm, clock, day(2), soc=47, excess=5)
+        assert bm._trajectory_start_soc is None
+
+    def test_daily_reset_clears_the_counter_baseline(self, hass, clock):
+        bm = make_budget(hass, pv_actual_today_entity=PV_TODAY)
+        pv_today(hass, 0.0)
+        tick(bm, clock, day(6), soc=40, excess=0)
+        pv_today(hass, 9.2)
+        tick(bm, clock, day(18), soc=80, excess=0)
+        bm.daily_reset()
+        # Next night, no sun entity: yesterday's 9.2 kWh is still shown.
+        tick(bm, clock, datetime(2026, 11, 17, 1, 0), soc=60, excess=5)
         assert bm._trajectory_start_soc is None
 
 
