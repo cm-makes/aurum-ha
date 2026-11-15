@@ -16,7 +16,9 @@ machine froze, so on release
 
 Review follow-ups: preemption skips a device under override, a device
 without a power sensor adopts nothing, and a plug the user switches off
-mid-program interrupts the run instead of finishing it.
+mid-program interrupts the run instead of finishing it. A plug switched
+off once the program is already quiet (it has ended) still finishes it
+after Finish time, and the 'finished' push reports the counted runtime.
 """
 
 from datetime import datetime, timedelta
@@ -448,3 +450,156 @@ class TestReleaseWindow:
         assert dev["sd_state"] == SD_STATE_WAITING
         assert ("OFF", SW) in hass.actions
         assert len(pushes(hass, "detected")) == 1
+
+
+def adopted_run(mgr, hass, dev, t, seconds):
+    """Plug on in standby, then a program started at the machine under
+    override and drawing power for `seconds`."""
+    t, _ = run(mgr, hass, t, 60, 1)
+    hass.states[OV] = "on"
+    t, _ = run(mgr, hass, t, seconds, 2000)
+    assert dev["sd_state"] == SD_STATE_RUNNING
+    return t
+
+
+class TestPlugOffAfterTheEnd:
+    """Only a plug-off while the program draws power is an interruption.
+    Quiet already seen at the last reading (the program has ended, the user
+    unplugs it after unloading) keeps counting toward Finish time."""
+
+    def test_end_is_detected_with_the_plug_off(
+            self, hass, make_manager, make_device):
+        mgr, dev = washer(make_manager, make_device)
+        hass.states[MH] = "on"
+        t = adopted_run(mgr, hass, dev, T0, 5400)
+        hass.actions.clear()                    # the standby plug-on
+        t_end = t
+        t, _ = run(mgr, hass, t, 120, 2)        # ended, standby power
+        on_runtime = dev["runtime_today_s"]
+
+        hass.states[SW] = "off"
+        # Finish time after the end, plus one reading.
+        quiet_left = dev["sd_finish_time"] - (t - t_end).total_seconds()
+        t, _ = run(mgr, hass, t, quiet_left + TICK, 0)
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        finished = pushes(hass, "finished")
+        assert len(finished) == 1
+        assert "smart_finish" in finished[0]
+        assert hass.states[MH] == "off"
+        # The off time is still not runtime.
+        assert dev["runtime_today_s"] == on_runtime
+
+        # Left off a while, then the next program: a second run.
+        t, _ = run(mgr, hass, t, 1200, 0)
+        hass.states[SW] = "on"
+        t, _ = run(mgr, hass, t, 60, 1)
+        t, _ = run(mgr, hass, t, 3600, 2000)
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        t, _ = run(mgr, hass, t, dev["sd_finish_time"] + 60, 1)
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        assert len(pushes(hass, "finished")) == 2
+        assert switch_cmds(hass) == []
+
+    def test_plug_back_on_within_finish_time_continues(
+            self, hass, make_manager, make_device):
+        # Paused at the appliance, unplugged, plugged in and resumed
+        # within Finish time: the same run goes on.
+        mgr, dev = washer(make_manager, make_device)
+        t = adopted_run(mgr, hass, dev, T0, 1800)
+        t, _ = run(mgr, hass, t, 120, 1)
+        hass.states[SW] = "off"
+        t, _ = run(mgr, hass, t, 300, 0)
+        hass.states[SW] = "on"
+        t, _ = run(mgr, hass, t, 1800, 2000)
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        assert pushes(hass, "finished") == []
+        t, _ = run(mgr, hass, t, dev["sd_finish_time"] + 60, 1)
+        assert len(pushes(hass, "finished")) == 1
+
+    def test_plug_off_while_drawing_power_is_an_interruption(
+            self, hass, make_manager, make_device):
+        # A quiet phase earlier in the program (a soak) does not count:
+        # at the plug-off the program was drawing power again.
+        mgr, dev = washer(make_manager, make_device)
+        t = adopted_run(mgr, hass, dev, T0, 1800)
+        t, _ = run(mgr, hass, t, 120, 1)
+        t, _ = run(mgr, hass, t, 600, 2000)
+        before = dev["runtime_today_s"]
+        hass.states[SW] = "off"
+        t, _ = run(mgr, hass, t, 1800, 0)
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        assert pushes(hass, "finished") == []
+        assert dev["runtime_today_s"] == before
+
+
+def finished_minutes(hass):
+    """Minutes the single 'finished' push reports."""
+    finished = pushes(hass, "finished")
+    assert len(finished) == 1
+    return int(finished[0].split("Runtime: ")[1].split(" min")[0])
+
+
+class TestFinishedPushRuntime:
+    """The 'finished' push reports the runtime counted for the program:
+    the off time of an interruption under override is not in it."""
+
+    def test_interruption_is_not_in_the_push(
+            self, hass, make_manager, make_device):
+        mgr, dev = washer(make_manager, make_device)
+        t = aurum_started_run(mgr, hass, dev, T0)
+        assert dev["runtime_today_s"] <= 600    # only this run today
+        hass.states[OV] = "on"
+        hass.states[SW] = "off"
+        t, _ = run(mgr, hass, t, 1800, 0)
+        hass.states[SW] = "on"
+        t, _ = run(mgr, hass, t, 1200, 2000)
+        t, _ = run(mgr, hass, t, dev["sd_finish_time"] + 60, 1)
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        assert finished_minutes(hass) == int(dev["runtime_today_s"] / 60)
+
+    def test_max_runtime_finish_with_the_plug_off(
+            self, hass, make_manager, make_device):
+        mgr, dev = washer(make_manager, make_device, sd_max_runtime=3600)
+        t = aurum_started_run(mgr, hass, dev, T0)
+        hass.states[OV] = "on"
+        hass.states[SW] = "off"
+        t, _ = run(mgr, hass, t, 3600, 0)
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        minutes = finished_minutes(hass)
+        assert minutes == int(dev["runtime_today_s"] / 60)
+        assert minutes < 15                     # not the full 60 min
+        assert "max_runtime" in pushes(hass, "finished")[0]
+
+    def test_run_across_the_daily_reset(
+            self, hass, make_manager, make_device):
+        # Interrupted before midnight, finished after it: the push has the
+        # whole program, while the daily counter starts again at zero.
+        mgr, dev = washer(make_manager, make_device)
+        t = adopted_run(mgr, hass, dev, datetime(2026, 11, 15, 22, 30), 1800)
+        hass.states[SW] = "off"
+        t, _ = run(mgr, hass, t, 1200, 0)
+        hass.states[SW] = "on"
+        midnight = datetime(2026, 11, 16)
+        t, _ = run(mgr, hass, t, (midnight - t).total_seconds(), 2000)
+        before_reset = dev["runtime_today_s"]
+        mgr.daily_reset()
+        assert dev["runtime_today_s"] == 0
+        t, _ = run(mgr, hass, t, 1800, 2000)
+        t, _ = run(mgr, hass, t, dev["sd_finish_time"] + 60, 1)
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        assert finished_minutes(hass) == int(
+            (before_reset + dev["runtime_today_s"]) / 60)
+
+    def test_counted_runtime_survives_a_restart(
+            self, hass, make_manager, make_device, tmp_path):
+        sf = str(tmp_path / "state.json")
+        mgr, dev = washer(make_manager, make_device)
+        t = datetime.now().replace(microsecond=0) - timedelta(minutes=30)
+        t = adopted_run(mgr, hass, dev, t, 600)
+        assert dev["sd_run_runtime_s"] > 0
+        PersistenceManager(hass, {"state_file": sf}).save(mgr)
+
+        mgr2, dev2 = washer(make_manager, make_device)
+        PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
+        assert dev2["sd_state"] == SD_STATE_RUNNING
+        assert dev2["sd_run_runtime_s"] == dev["sd_run_runtime_s"]

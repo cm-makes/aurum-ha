@@ -203,6 +203,11 @@ class DeviceManager:
             "sd_power_above_since": None,
             "sd_power_below_since": None,
             "sd_power_samples": [],
+            # Runtime counted for the current program, as in runtime_today_s
+            # (the 'finished' push reports it). None: not tracked (a run
+            # restored from an older state file); the push then falls back
+            # to the time since sd_running_since.
+            "sd_run_runtime_s": None,
             # Set when a program is finished by max_runtime while it still
             # draws power. Blocks re-detection until the power has stayed
             # at standby for sd_finish_time, so the still-running program
@@ -943,8 +948,8 @@ class DeviceManager:
         unavailable: actual_power is then the nominal fallback, which must
         not be read as a program start (STANDBY) or as a program still
         drawing power (RUNNING). _sd_observe_override also passes False
-        for a RUNNING program whose plug the user switched off: 0 W there
-        is an interruption, not standby.
+        for a RUNNING program whose plug the user switched off while it
+        drew power: 0 W there is an interruption, not standby.
 
         Returns (counted_as_on, newly_started_power).
         """
@@ -1051,6 +1056,7 @@ class DeviceManager:
                               "deadline_forced")
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now
+                dev["sd_run_runtime_s"] = 0
                 dev["sd_power_samples"] = []
                 dev["sd_lockout_until"] = now + timedelta(
                     seconds=dev["sd_max_runtime"])
@@ -1079,6 +1085,7 @@ class DeviceManager:
                               "excess_sufficient")
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now
+                dev["sd_run_runtime_s"] = 0
                 dev["sd_power_samples"] = []
                 dev["sd_lockout_until"] = now + timedelta(
                     seconds=dev["sd_max_runtime"])
@@ -1140,7 +1147,13 @@ class DeviceManager:
 
             if smart_finish or max_expired:
                 reason = "smart_finish" if smart_finish else "max_runtime"
-                runtime_min = int(runtime_s / 60)
+                # Report the runtime counted for this program, not the time
+                # since its start: the off time of an interruption under
+                # Manual override is not program runtime.
+                self._accumulate_runtime(dev, now)
+                run_s = dev.get("sd_run_runtime_s")
+                runtime_min = int(
+                    (runtime_s if run_s is None else run_s) / 60)
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Program complete "
                     f"({reason}, {actual_power:.0f}W, "
@@ -1164,7 +1177,6 @@ class DeviceManager:
                     if (dev["sd_rearm_pending"]
                         and actual_power <= dev["sd_power_threshold"])
                     else None)
-                self._accumulate_runtime(dev, now)
                 dev["on_since"] = None
                 dev["_runtime_tick"] = None
                 self._notify(
@@ -1195,17 +1207,25 @@ class DeviceManager:
         state = dev["sd_state"] or SD_STATE_STANDBY
         dev["sd_state"] = state
         if state == SD_STATE_RUNNING:
+            # Quiet time is being observed: the last reading was below the
+            # finish threshold (any reading above it clears the timer).
+            quiet = dev["sd_power_below_since"] is not None
             if not was_on:
-                # The user switched the plug off mid-program (e.g. to add
-                # laundry): interrupted, not finished. The off time is
-                # neither runtime nor quiet time for the smart finish, so
-                # only max_runtime can end the run meanwhile, and switching
-                # the plug back on continues the same run.
+                # The plug is off: the off time is never runtime. Switched
+                # off while the program drew power (e.g. to add laundry),
+                # the run is interrupted, not finished: the off time is no
+                # quiet time either, so only max_runtime can end the run
+                # meanwhile, and switching the plug back on continues it.
+                # Switched off while already quiet (the program has ended,
+                # e.g. unplugged after unloading), the quiet time keeps
+                # counting toward sd_finish_time, so the end is detected as
+                # usual. A pause at the appliance and then a plug-off reads
+                # the same way.
                 dev["_runtime_tick"] = now
             # Finish detection only: the RUNNING branch never switches.
             self._handle_startup_detection(
                 dev, 0, battery_soc, actual_power, now, excess,
-                power_known=power_known and was_on)
+                power_known=power_known and (was_on or quiet))
             return
         if not was_on or not power_known or not dev.get("power_entity"):
             # Nothing to observe. Without a power sensor the reading is the
@@ -1231,6 +1251,7 @@ class DeviceManager:
         dev["sd_detected_at"] = None
         dev["sd_waiting_since"] = None
         dev["sd_running_since"] = now
+        dev["sd_run_runtime_s"] = 0
         dev["sd_power_samples"] = []
         dev["sd_lockout_until"] = now + timedelta(
             seconds=dev["sd_max_runtime"])
@@ -1303,6 +1324,7 @@ class DeviceManager:
         dev["sd_power_above_since"] = None
         dev["sd_power_below_since"] = None
         dev["sd_running_since"] = None
+        dev["sd_run_runtime_s"] = None
         dev["sd_power_samples"] = []
         dev["force_started"] = False
 
@@ -1582,6 +1604,10 @@ class DeviceManager:
             elapsed = max(0, (now - tick).total_seconds())
             dev["runtime_today_s"] += elapsed
             dev["energy_today_wh"] += power_w * elapsed / 3600
+            # The program's own count, unaffected by the daily reset.
+            if (dev.get("sd_state") == SD_STATE_RUNNING
+                    and dev.get("sd_run_runtime_s") is not None):
+                dev["sd_run_runtime_s"] += elapsed
         dev["_runtime_tick"] = now
 
     def _publish_device_states(self, shared, battery_soc):
