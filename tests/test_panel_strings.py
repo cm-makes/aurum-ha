@@ -19,7 +19,7 @@ def _keys(lang):
     m = re.search(r"\n  " + lang + r": \{\n(.*?)\n  \},", SRC, re.S)
     assert m, f"STRINGS.{lang} not found"
     return set(re.findall(r"^\s+(\w+):", m.group(1), re.M)) | set(
-        re.findall(r"[,{]\s*(\w+):\s*\"", m.group(1)))
+        re.findall(r"[,{]\s*(\w+):\s*[\"'`]", m.group(1)))
 
 
 def test_en_and_de_have_the_same_keys():
@@ -46,5 +46,15 @@ def test_support_link_is_a_safe_outbound_link():
     assert "innerHTML" not in body
 
 
-def test_footer_is_built():
-    assert "root.appendChild(this._buildFooter());" in SRC
+def test_footer_is_built_inside_build():
+    # The call must sit in _build(), after the innerHTML reset, on a real
+    # (not commented-out) line; a plain substring check passed even when
+    # the call was commented out.
+    m = re.search(r"\n  _build\(devices\) \{(.*?)\n  \}", SRC, re.S)
+    assert m, "_build(devices) not found"
+    lines = [ln.strip() for ln in m.group(1).splitlines()]
+    reset = lines.index('this.innerHTML = "";')
+    calls = [i for i, ln in enumerate(lines)
+             if ln == "root.appendChild(this._buildFooter());"]
+    assert len(calls) == 1, "footer must be appended exactly once"
+    assert calls[0] > reset
