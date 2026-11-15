@@ -17,7 +17,7 @@
         },
         "data_description": {
           "grid_power_entity": "Der Sensor deines Netzzählers (z.B. Shelly 3EM, SMA, Fronius, Kostal). Muss den aktuellen Verbrauch in Watt melden. Positiver Wert = du beziehst Strom, negativer Wert = du speist ein. Das ist der wichtigste Sensor — ohne ihn kann AURUM nicht arbeiten.",
-          "pv_power_entity": "Wie viel Strom deine Solaranlage gerade erzeugt (in Watt). Wird nur zur Anzeige genutzt, nicht für die Berechnung. Kann leer bleiben.",
+          "pv_power_entity": "Wie viel Strom deine Solaranlage gerade erzeugt (in Watt). Wird für die Solarleistung-Schwelle genutzt und um zu erkennen, wann der Solartag fürs PV-Budget beginnt. Kann leer bleiben.",
           "battery_soc_entity": "Wie voll deine Hausbatterie gerade ist (in Prozent, 0–100%). Leer lassen wenn du keine Batterie hast — AURUM verteilt dann den gesamten Überschuss direkt an die Geräte.",
           "battery_charge_power_entity": "Wie viel Leistung gerade IN deine Batterie fließt (in Watt, immer positiv). Wichtig für eine genaue Überschussberechnung — ohne diesen Sensor kann AURUM nicht sehen, dass Strom in der Batterie 'versteckt' wird. Findest du meist in deiner Wechselrichter- oder BMS-Integration.",
           "battery_discharge_power_entity": "Wie viel Leistung gerade AUS deiner Batterie fließt (in Watt, immer positiv). Zusammen mit der Ladeleistung berechnet AURUM den echten PV-Überschuss der für Geräte verfügbar ist.",
@@ -96,7 +96,7 @@
         },
         "data_description": {
           "grid_power_entity": "Dein Netzzähler-Sensor in Watt. Positiv = Strombezug, negativ = Einspeisung.",
-          "pv_power_entity": "Aktuelle PV-Erzeugung in Watt (optional, nur zur Anzeige).",
+          "pv_power_entity": "Aktuelle PV-Erzeugung in Watt (optional). Genutzt für die Solarleistung-Schwelle und den Tagesstart des PV-Budgets.",
           "battery_soc_entity": "Aktueller Batterie-Ladestand in Prozent.",
           "battery_charge_power_entity": "Leistung die in die Batterie fließt (Watt, immer positiv). Ermöglicht genaue Überschussberechnung.",
           "battery_discharge_power_entity": "Leistung die aus der Batterie fließt (Watt, immer positiv).",
