@@ -30,6 +30,21 @@ from .helpers import get_float, get_energy_kwh
 
 _LOGGER = logging.getLogger(__name__)
 
+#: Minimum PV power (W) at which the solar day counts as started, so the
+#: SOC day ramp may anchor. At night PV reads 0 W; the margin also keeps
+#: dawn noise out. See the anchor in update() for why excess alone is not
+#: enough.
+TRAJECTORY_MIN_PV_W = 100.0
+
+#: Without a PV power sensor and without an hourly forecast, sunrise alone
+#: is too early: PV still makes next to nothing in the first hour, so a
+#: battery overshoot then anchored the ramp at a pre-production SOC. The
+#: sun must stand at least this high (degrees, sun.sun "elevation") ...
+TRAJECTORY_MIN_SUN_ELEVATION = 10.0
+#: ... or the PV production counter (pv_actual_today_entity) must have
+#: risen at least this much (kWh) since midnight.
+TRAJECTORY_MIN_PV_TODAY_KWH = 0.05
+
 
 class BudgetManager:
     """PV surplus budget based on forecast and SOC trajectory.
@@ -54,6 +69,9 @@ class BudgetManager:
         # ── Entity IDs ──────────────────────────────────────────────
         self.target_soc_entity = config.get("target_soc_entity")
         self.battery_soc_entity = config.get("battery_soc_entity")
+        # Only tells whether shared["pv_power"] is a real reading (it is
+        # 0 W when no PV power sensor is configured).
+        self.pv_power_entity = config.get("pv_power_entity")
         self.pv_forecast_entity = config.get("pv_forecast_entity")
         self.pv_forecast_today_entity = config.get("pv_forecast_today_entity")
         self.pv_actual_today_entity = config.get("pv_actual_today_entity")
@@ -98,6 +116,11 @@ class BudgetManager:
 
         # ── PV total midnight snapshot (for daily calc) ─────────────
         self._pv_total_midnight = None
+        # Lowest PV-today reading since midnight: the baseline for "PV has
+        # produced today" (ramp anchor). The lowest, not the first, because
+        # many inverters hold yesterday's daily yield overnight and only
+        # reset it when they wake up in the morning.
+        self._pv_today_min_kwh = None
 
         # ── Hourly PV snapshot (for weather learning) ───────────────
         # Tracks cumulative pv_actual at the start of each hour so
@@ -167,6 +190,10 @@ class BudgetManager:
         hours_remaining = self._hours_until_sunset()
         hourly_forecast = self._get_hourly_forecast()
         pv_actual_kwh = self._get_pv_today_kwh()
+        if pv_actual_kwh is not None and (
+                self._pv_today_min_kwh is None
+                or pv_actual_kwh < self._pv_today_min_kwh):
+            self._pv_today_min_kwh = pv_actual_kwh
 
         remaining_kwh = get_energy_kwh(
             self.hass, self.pv_forecast_entity, default=None)
@@ -209,10 +236,16 @@ class BudgetManager:
         # Guard on an actually-resolvable target SOC (config/entity/slider),
         # not on the legacy target_soc_entity key which AURUM never sets —
         # that made the trajectory learner permanently inert.
+        # excess > 0 alone does not mean the solar day has begun: a battery
+        # that overshoots its set point at night exports for a few seconds.
+        # That anchored the ramp at a night SOC, the battery kept draining
+        # until sunrise and the multiplier held the budget at 0 W until
+        # about noon. Anchor only once PV really produces.
         excess = shared.get("excess_for_devices", 0)
         if (self._trajectory_start_soc is None
                 and excess > 0 and self._get_target_soc() is not None
-                and battery_soc is not None):
+                and battery_soc is not None
+                and self._solar_day_started(shared, hourly_forecast, now)):
             self._trajectory_start_soc = battery_soc
             self._trajectory_start_time = now
             _LOGGER.debug(
@@ -282,13 +315,7 @@ class BudgetManager:
         usable_wh = remaining_wh * combined
 
         # Dynamic target SOC: lower target in bad weather
-        effective_target = target_soc
-        if self.budget_dynamic_target:
-            reduction = ((1.0 - weather_factor)
-                         * self.budget_dynamic_target_max_reduction)
-            effective_target = max(
-                self.budget_dynamic_target_min,
-                target_soc - reduction)
+        effective_target = self._dynamic_target(target_soc, weather_factor)
 
         # Energy needed to reach target SOC
         energy_to_target = (max(0, effective_target - battery_soc) / 100
@@ -308,8 +335,11 @@ class BudgetManager:
         budget_w = budget_wh / hours_remaining if hours_remaining > 0 else 0
 
         # ── SOC trajectory multiplier ───────────────────────────────
+        # The ramp must aim at a SOC the battery can reach. Aimed above
+        # 100 %, it judges the battery as behind by definition and clamps
+        # the budget to 0 W for most of a day on which it fills up.
         trajectory_mult = self._get_trajectory_multiplier(
-            battery_soc, effective_target, hours_remaining)
+            battery_soc, min(effective_target, 100.0), hours_remaining)
         budget_w_adjusted = budget_w * trajectory_mult
 
         info.update({
@@ -394,6 +424,24 @@ class BudgetManager:
         if not condition or condition in ("unavailable", "unknown"):
             return None
         return condition
+
+    def _dynamic_target(self, target_soc, weather_factor):
+        """Lower the target SOC in bad weather, never raise it.
+
+        The learned weather factor often sits above 1 (it is clamped at
+        1.5), so (1 - w) * 30 went negative and lifted the target up to
+        15 points above the user's setting (past 100 % for a high target).
+        The budget then held back energy the user never asked to store.
+        The floor only limits how far the target drops; it does not lift
+        a target set below it.
+        """
+        if not self.budget_dynamic_target:
+            return target_soc
+        reduction = (max(0.0, 1.0 - weather_factor)
+                     * self.budget_dynamic_target_max_reduction)
+        return min(target_soc,
+                   max(self.budget_dynamic_target_min,
+                       target_soc - reduction))
 
     def _get_target_soc(self):
         """Read target SOC: number_values first, then entity, then direct config."""
@@ -658,6 +706,67 @@ class BudgetManager:
     #  SOC TRAJECTORY
     # ══════════════════════════════════════════════════════════════
 
+    def _solar_day_started(self, shared, hourly_forecast, now):
+        """True once PV really produces, so the day ramp may anchor.
+
+        With a PV power sensor, its reading decides (an outage reads 0 W,
+        so it does not anchor). Without one shared["pv_power"] is always
+        0 W, so the forecast for the current slot decides. Without hourly
+        forecast data either, sunrise alone is not enough (PV still makes
+        next to nothing then): the sun must stand at least 10 degrees high,
+        or the PV-today counter must have risen by 0.05 kWh since midnight.
+        sun.sun below the horizon always means no. With none of these
+        signals (no counter, sun.sun or its elevation missing, or, far
+        north in winter, a sun that never climbs that high) the ramp is not
+        anchored and its multiplier stays neutral (1.0).
+        """
+        if self.pv_power_entity:
+            return (float(shared.get("pv_power") or 0.0)
+                    >= TRAJECTORY_MIN_PV_W)
+        if hourly_forecast:
+            return (self._forecast_w_now(hourly_forecast, now)
+                    >= TRAJECTORY_MIN_PV_W)
+        if self.hass.get_state("sun.sun") == "below_horizon":
+            return False   # night, whatever a counter glitch says
+        elevation = self._sun_elevation()
+        if (elevation is not None
+                and elevation >= TRAJECTORY_MIN_SUN_ELEVATION):
+            return True
+        return (self._pv_today_rise_kwh(shared)
+                >= TRAJECTORY_MIN_PV_TODAY_KWH)
+
+    def _sun_elevation(self):
+        """sun.sun's elevation in degrees, None when it is not available."""
+        raw = self.hass.get_state("sun.sun", attribute="elevation")
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _pv_today_rise_kwh(self, shared):
+        """PV energy produced since midnight (kWh), 0 without a counter.
+
+        Measured from the lowest reading since midnight, so a daily-yield
+        sensor that still shows yesterday's total overnight does not count.
+        """
+        if not self.pv_actual_today_entity or self._pv_today_min_kwh is None:
+            return 0.0
+        pv_today = shared.get("pv_actual_today_kwh")
+        if pv_today is None:
+            return 0.0
+        return pv_today - self._pv_today_min_kwh
+
+    @staticmethod
+    def _forecast_w_now(hourly_forecast, now):
+        """Forecast watts of the slot that contains now (0 before the first)."""
+        current = now.hour + now.minute / 60.0
+        started = [(h, w) for h, w in hourly_forecast if h <= current]
+        if not started:
+            return 0.0
+        slot = max(h for h, _ in started)
+        # Some providers list several days; same-hour slots then repeat.
+        return max(w for h, w in started if h == slot)
+
     def _get_trajectory_multiplier(self, battery_soc, target_soc,
                                    hours_remaining):
         """Compare actual SOC vs expected linear ramp.
@@ -911,6 +1020,7 @@ class BudgetManager:
         self._trajectory_start_soc = None
         self._trajectory_start_time = None
         self._pv_total_midnight = None
+        self._pv_today_min_kwh = None
         self._weather_factor_ema = None
         self._pv_hour_snapshot_kwh = None
         self._pv_hour_snapshot_h = None
