@@ -24,15 +24,47 @@
 
 ---
 
-**AURUM** (*Latin: Gold*) turns your solar surplus into gold: it automatically distributes excess PV power to household devices — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
+**AURUM** (*Latin: Gold*) turns your solar surplus into gold: it runs your pool pump, water heater, washing machine and other household devices on excess PV power — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
 
-> **No coding required.** Install via HACS, add your grid sensor, configure devices through the UI — done.
+> **No coding required.** Install AURUM from the Home Assistant Marketplace, pick your grid sensor, add your devices in the UI — done.
+
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=cm-makes&repository=aurum-ha&category=integration"><img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open AURUM in the Home Assistant Marketplace"></a>
+</p>
 
 <p align="center">
   <img src="docs/dashboard.png" alt="AURUM Dashboard" width="900">
   <br>
   <em>Built-in AURUM sidebar panel: the Advisor banner, live energy chips, and one card per device</em>
 </p>
+
+---
+
+## Why AURUM?
+
+- **For the devices you already have.** Pool pump, water heater, heating rod, IR heaters, washing machine, dishwasher: anything behind a smart plug or switch. Pick your grid meter, add the devices in the UI, and AURUM switches them on surplus, highest priority first. No YAML, no blueprints, no extra cards.
+- **It tells you why.** The Advisor says in plain words why each device is running, waiting or off (waiting for surplus, battery below reserve, tank already hot), in the panel and as a sensor for your own automations.
+- **Battery, forecast and price in one place.** Let the battery charge first, use the Solcast or Open-Meteo forecast so it still reaches its target, and use cheap hours from Tibber, Nordpool or aWATTar when the sun isn't enough.
+- **Appliances that finish on time.** AURUM notices when you press Start on the washer, holds the program until there is surplus, and starts it on grid just in time if the sun doesn't come before your deadline.
+- **Runs everywhere, switches itself.** It's a plain integration: no add-on, no optimizer automations to write, works on every Home Assistant installation type. No EV charging: AURUM is for everything with a plug.
+
+<details>
+<summary>🇩🇪 <b>Kurz auf Deutsch</b></summary>
+
+<br>
+
+AURUM nutzt deinen PV-Überschuss für Geräte im Haus: Poolpumpe, Warmwasser-Boiler, Heizstab, Infrarotheizung, Waschmaschine, Spülmaschine. Alles, was an einer smarten Steckdose oder einem Schalter hängt.
+
+- **Einrichtung komplett in der Oberfläche:** Netzzähler auswählen, Geräte anlegen, Prioritäten setzen. Kein YAML.
+- **Akku zuerst, wenn du willst:** SOC-Schwellen pro Gerät, Akku-Vorrang und PV-Prognose (Solcast, Open-Meteo) für das Tagesbudget.
+- **Dynamische Stromtarife:** Geräte laufen auf Wunsch auch bei günstigem Netzstrom (Tibber, Nordpool, aWATTar, EPEX Spot).
+- **Waschmaschine und Spülmaschine:** Du drückst Start, AURUM wartet auf Sonne und startet notfalls rechtzeitig vor deiner Deadline mit Netzstrom.
+- **Erklärt jede Entscheidung:** Der Advisor zeigt, warum ein Gerät läuft, wartet oder aus ist.
+- Oberfläche und Dashboard auf Deutsch und Englisch.
+
+Installation: **Einstellungen → Marketplace**, nach **AURUM** suchen, installieren. Fragen gerne auch auf Deutsch in den [Discussions](https://github.com/cm-makes/aurum-ha/discussions).
+
+</details>
 
 ---
 
@@ -73,13 +105,22 @@
 
 ## Installation
 
-### HACS (recommended)
+### Home Assistant Marketplace (2026.11 and later)
+
+<a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=cm-makes&repository=aurum-ha&category=integration"><img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open AURUM in the Home Assistant Marketplace"></a>
+
+1. Click the badge, or go to **Settings → Marketplace** and search for **AURUM**
+2. Click **Install**. The setup starts right away, no restart needed
+
+Updates show up under **Settings → Updates**. After an update, Home Assistant asks you to restart.
+
+### HACS (before 2026.11)
 
 1. Open HACS in Home Assistant
 2. Search for **AURUM** and click **Download**
 3. Restart Home Assistant
 
-AURUM is in the HACS default store — no custom repository needed.
+AURUM is in the default list of both — no custom repository needed.
 
 ### Manual
 
@@ -90,7 +131,9 @@ AURUM is in the HACS default store — no custom repository needed.
 
 ## Setup
 
-1. Go to **Settings > Integrations > Add Integration > AURUM**
+<a href="https://my.home-assistant.io/redirect/config_flow_start/?domain=aurum"><img src="https://my.home-assistant.io/badges/config_flow_start.svg" alt="Add AURUM to Home Assistant"></a>
+
+1. Click the badge, or go to **Settings > Integrations > Add Integration > AURUM**
 2. **Energy & Battery:** Select your grid power sensor (and optionally PV, battery SOC, battery charge/discharge power, PV forecast)
 3. **Battery settings:** Set capacity, target SOC, minimum SOC, update interval and sensor timeout (see [When a sensor fails](#when-a-sensor-fails-safe-mode))
 4. After setup: Go to **AURUM > Configure** to add devices
@@ -565,6 +608,7 @@ Got a question, an idea, or want to show off your setup? Use GitHub Discussions 
 | [Ask a question](https://github.com/cm-makes/aurum-ha/discussions/categories/q-a) | Setup help, configuration, troubleshooting |
 | [Share an idea](https://github.com/cm-makes/aurum-ha/discussions/categories/ideas) | Feature ideas — discuss before opening a formal request |
 | [Show and tell](https://github.com/cm-makes/aurum-ha/discussions/categories/show-and-tell) | Dashboards, setups, energy results |
+| [Home Assistant forum](https://community.home-assistant.io/t/aurum-solar-surplus-optimizer-hacs-integration/1000274) | Release news and other users' setups |
 | [Report a bug](https://github.com/cm-makes/aurum-ha/issues/new?template=bug_report.yml) | Something broken? Open an issue |
 
 ---
