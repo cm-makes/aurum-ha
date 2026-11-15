@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **README:** installation from the Home Assistant Marketplace (2026.11) with My Home Assistant badges, HACS steps for older versions, a "Why AURUM?" section and a short summary in German.
-- **Brand logo** trimmed to the wordmark without empty space and exported at the sizes Home Assistant asks for (`logo.png` 144 px high, new `logo@2x.png`). The Marketplace shows it before you install.
+- **Brand logo** trimmed to the wordmark without empty space and exported at the sizes Home Assistant asks for (`logo.png` 144 px high, new `logo@2x.png`). The Marketplace takes the brand images from the latest release, so the new logo appears there after the next release.
 - The brand preview page moved to `tools/brand_preview.html` and no longer ships with the integration; the unused `render_preview.py` is gone.
 
 ## [1.16.1] - 2026-11-15
