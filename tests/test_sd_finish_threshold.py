@@ -8,10 +8,10 @@ smartly: only Max runtime (3 h) ended the program, the finished push and the
 Must-run-today reset came hours late. The config flow stores every SD field,
 so existing devices keep the old 3 W and need the runtime correction.
 
-Only values that were not chosen on purpose are raised: finish == standby,
-or the old 3 W default left alone below a raised standby. Any other value
-below standby is a deliberate edit (a machine that really idles lower) and
-is used as set.
+Only values that were not chosen on purpose are raised: finish == standby
+for a standby of 3 W or more, or a stored default (the old 3 W, the new
+4 W) left alone below a raised standby. Any other value at or below standby
+is a deliberate edit (a machine that really idles lower) and is used as set.
 
 The threshold must also stay at or below the start threshold, or a finished
 machine idling between the two is detected as a new program and its plug cut.
@@ -100,16 +100,27 @@ class TestRule:
     @pytest.mark.parametrize("standby, finish, start, expected", [
         (3, 3, 5, 4),       # old default: at standby, never reached
         (3.0, 3.0, 5.0, 4.0),   # as the number selector stores it
-        (0, 0, 5, 1),       # a device that idles at 0 W
+        (4, 4, 50, 5),      # = standby, raised together
         (10, 10, 50, 11),   # = standby, as the old help text said
         (3, 3, 50, 4),      # washer with 50 W start: not raised further
+        (2, 2, 5, 2),       # equal pair lowered below the old default:
+        (1, 1, 5, 1),       # ... both lowered on purpose, used as set
+        (2.0, 2.0, 5.0, 2.0),
+        (0, 0, 5, 0),       # ... 0 W is never undercut: left to Max runtime
         (5, 3, 10, 6),      # old 3 W default left below a raised standby
         (5, 3, 5, 5),       # ... raised, then capped at the start threshold
+        (5, 4, 10, 6),      # new 4 W default left below a raised standby
+        (5, 4, 50, 6),
+        (6, 4, 50, 7),
+        (5.0, 4.0, 50.0, 6.0),
+        (5, 4, 5, 5),       # ... raised, then capped at the start threshold
         (3, 2, 5, 2),       # deliberately below standby: used as set
         (3, 1, 5, 1),
         (3, 0, 5, 0),
-        (5, 4, 10, 4),      # below a raised standby, not the old default
+        (5, 2, 10, 2),      # below a raised standby, not a default
+        (6, 5, 50, 5),
         (1, 3, 5, 3),       # old default above a lowered standby: usable
+        (2, 4, 5, 4),       # new default above a lowered standby: usable
         (3, 4, 5, 4),       # a usable value is kept
         (3, 4, 50, 4),
         (3, 10, 5, 5),      # above the start threshold: capped
@@ -229,6 +240,34 @@ class TestStoredOldDefault:
         assert ("OFF", SW) not in hass.actions
         assert any("using 6 W" in m for m in hass.logs)
 
+    @pytest.mark.parametrize("standby, start, idle, used", [
+        (5, 50, 5.2, 6),    # washer with the recommended 50 W start
+        (6, 50, 6.3, 7),
+        (5, 10, 5.3, 6),
+    ])
+    def test_new_default_below_a_raised_standby_is_raised(
+            self, hass, make_manager, make_device, standby, start, idle,
+            used):
+        # A device added from this release on: Standby raised for a machine
+        # that idles there, Finish left at the 4 W the add-device form
+        # stores. Kept as set, the idle machine never dropped below it.
+        mgr = make_manager([flow_device(
+            make_device, sd_standby_power=standby,
+            sd_finish_power=const.DEFAULT_DEV_SD_FINISH_POWER,
+            sd_power_threshold=start)])
+        begin = datetime(2026, 11, 15, 9, 0)
+        dev = running_since(hass, mgr, begin)
+        t = run(hass, mgr, begin, begin + timedelta(minutes=60), 400)
+        run(hass, mgr, t, t + timedelta(minutes=11), idle)
+
+        assert dev["sd_finish_power"] == used
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        pushes = finished_pushes(hass)
+        assert len(pushes) == 1 and "smart_finish" in pushes[0]
+        assert hass.states[MH] == "off"          # job done, not 3 h later
+        assert ("OFF", SW) not in hass.actions
+        assert any(f"using {used} W" in m for m in hass.logs)
+
 
 # ══════════════════════════════════════════════════════════════════
 #  A finish threshold deliberately set below standby
@@ -241,12 +280,20 @@ class TestBelowStandbyKeptAsSet:
     standby (a plug that does not count its own draw idles at ~0.5 W) and
     whose drying phase ended the program too early. Raising it to
     standby + 1 W brought that back, and the pump-out after the drying
-    phase was detected as a new program and its plug cut."""
+    phase was detected as a new program and its plug cut. The same holds
+    for an equal pair lowered below the old 3 W / 3 W default (2 W / 2 W):
+    a user who followed the old "Usually same as standby" lowered both."""
 
-    @pytest.mark.parametrize("finish, drying", [(1, 2.0), (2, 2.5)])
+    @pytest.mark.parametrize("standby, finish, drying", [
+        (3, 1, 2.0),
+        (3, 2, 2.5),
+        (2, 2, 2.5),        # equal pair lowered on purpose
+        (1, 1, 1.5),
+    ])
     def test_drying_phase_does_not_end_the_program(
-            self, hass, make_manager, make_device, finish, drying):
-        mgr = make_manager([flow_device(make_device, sd_finish_power=finish)])
+            self, hass, make_manager, make_device, standby, finish, drying):
+        mgr = make_manager([flow_device(
+            make_device, sd_standby_power=standby, sd_finish_power=finish)])
         start = datetime(2026, 11, 15, 9, 0)
         dev = running_since(hass, mgr, start)
         t = run(hass, mgr, start, start + timedelta(minutes=60), 1900)
@@ -281,9 +328,15 @@ class TestBelowStandbyKeptAsSet:
         assert dev["sd_state"] == SD_STATE_RUNNING
         assert dev["sd_finish_power"] == 0
 
+    @pytest.mark.parametrize("standby, finish, relation", [
+        (3, 2, "is below standby 3 W"),
+        (2, 2, "equals standby 2 W"),
+    ])
     def test_hint_is_logged_once_per_setup(
-            self, hass, make_manager, make_device):
-        mgr = make_manager([flow_device(make_device, sd_finish_power=2)])
+            self, hass, make_manager, make_device, standby, finish,
+            relation):
+        mgr = make_manager([flow_device(
+            make_device, sd_standby_power=standby, sd_finish_power=finish)])
         start = datetime(2026, 11, 15, 9, 0)
         running_since(hass, mgr, start)
         run(hass, mgr, start, start + timedelta(minutes=10), 1900)
@@ -291,7 +344,8 @@ class TestBelowStandbyKeptAsSet:
         notes = [m for m in hass.logs if "AURUM SD [Test Device]: " in m
                  and "finish threshold" in m]
         assert len(notes) == 1
-        assert "kept as set" in notes[0]
+        assert f"finish threshold {finish} W {relation}, kept as set" \
+            in notes[0]
         assert "using" not in notes[0]
 
 
@@ -308,9 +362,12 @@ class TestThresholdLog:
     @pytest.mark.parametrize("standby, finish, start, expected", [
         (3, 3, 5, "finish threshold 3 W is not above standby 3 W"),
         (5, 3, 10, "finish threshold 3 W is not above standby 5 W"),
+        (5, 4, 50, "finish threshold 4 W is not above standby 5 W, so a "
+                   "machine idling at its standby never finishes: using 6 W"),
         (3, 10, 5, "finish threshold 10 W must not be above the start "
                    "threshold 5 W, using 5 W"),
         (3, 2, 5, "finish threshold 2 W is below standby 3 W, kept as set"),
+        (2, 2, 5, "finish threshold 2 W equals standby 2 W, kept as set"),
     ])
     def test_one_line_names_the_problem(self, hass, make_manager, make_device,
                                         standby, finish, start, expected):
@@ -418,13 +475,35 @@ class TestHelpTexts:
     ])
     def test_finish_help_allows_a_value_below_standby(self, path, gone, kept):
         # A finish threshold below standby is used as set (a machine that
-        # really idles lower): the help must not say it is pointless.
+        # really idles lower): the help must not say it is pointless. Both
+        # forms say so: existing users see only the edit form.
         data = json.loads((COMPONENT / path).read_text(encoding="utf-8"))
         steps = data["options"]["step"]
-        long_text = steps["add_device"]["data_description"]["sd_finish_power"]
-        assert kept in long_text
         for step in ("add_device", "edit_device"):
             text = steps[step]["data_description"]["sd_finish_power"]
+            assert kept in text
             assert gone not in text
             assert "corrects other values" not in text
             assert "andere Werte korrigiert" not in text
+
+    @pytest.mark.parametrize("path, rules", [
+        ("strings.json", ("3W or more",
+                          "a default (3W or 4W) below a higher standby")),
+        ("translations/en.json", ("3W or more",
+                                  "a default (3W or 4W) below a higher "
+                                  "standby")),
+        ("translations/de.json", ("ab 3W",
+                                  "ein Standardwert (3W oder 4W) unter "
+                                  "einem höheren Standby")),
+    ])
+    def test_finish_help_describes_which_values_are_raised(self, path, rules):
+        # Equal to a standby of 3 W or more, or a stored default (old 3 W,
+        # new 4 W) below a higher standby: the edit form shows the stored
+        # value while standby + 1 W is used, so both forms must say so.
+        data = json.loads((COMPONENT / path).read_text(encoding="utf-8"))
+        steps = data["options"]["step"]
+        for step in ("add_device", "edit_device"):
+            text = steps[step]["data_description"]["sd_finish_power"]
+            for rule in rules:
+                assert rule in text, (step, rule)
+            assert "standby + 1W" in text.replace("Standby", "standby")

@@ -31,6 +31,7 @@ from ..const import (
     DEFAULT_DEV_MIN_ON_TIME,
     DEFAULT_DEV_MIN_OFF_TIME,
     DEFAULT_DEV_RESIDUAL_POWER,
+    DEFAULT_DEV_SD_FINISH_POWER,
     DEFAULT_EXCESS_DEFICIT_TOLERANCE,
     DEFAULT_SOC_GRID_DEFICIT_TOLERANCE,
     SCHED_REASON_SURPLUS_AVAILABLE,
@@ -94,17 +95,28 @@ _NOTIFY_STRINGS = {
 _SD_FINISH_MARGIN_W = 1
 
 # Finish threshold the config flow stored up to 1.16.3 for every device
-# whose user left the field alone.
+# whose user left the field alone (with the same 3 W standby default).
 _SD_OLD_DEFAULT_FINISH_W = 3
+
+# Finish thresholds the config flow stores for a user who leaves the field
+# alone: the old default and the current one.
+_SD_STORED_DEFAULT_FINISH_W = (
+    _SD_OLD_DEFAULT_FINISH_W, DEFAULT_DEV_SD_FINISH_POWER)
 
 
 def _sd_finish_not_chosen(standby_w, finish_w):
-    """True for a finish threshold the user did not pick on purpose: equal
-    to the standby power (the old 3 W / 3 W default and the old help text
-    "Usually same as standby"), or the old 3 W default left alone while the
-    standby power was raised above it."""
-    return finish_w == standby_w or (
-        finish_w == _SD_OLD_DEFAULT_FINISH_W and finish_w < standby_w)
+    """True for a finish threshold the user did not pick on purpose.
+
+    - Equal to a standby power of 3 W or more: the old 3 W / 3 W default,
+      or a pair raised together as the old help text said ("Usually same
+      as standby"). An equal pair below the old default (2 W / 2 W) can
+      only come from lowering both on purpose, so it is kept.
+    - A stored default (3 W or 4 W) left alone while the standby power was
+      raised above it.
+    """
+    if finish_w == standby_w:
+        return standby_w >= _SD_OLD_DEFAULT_FINISH_W
+    return finish_w < standby_w and finish_w in _SD_STORED_DEFAULT_FINISH_W
 
 
 def sd_finish_threshold(standby_w, finish_w, start_w):
@@ -120,12 +132,13 @@ def sd_finish_threshold(standby_w, finish_w, start_w):
     the band, the more quiet program phases (dishwasher drying) pass for
     the end.
 
-    Any other value below standby is used as set. It comes from a
+    Any other value at or below standby is used as set. It comes from a
     deliberate edit, typically for a machine that really idles lower than
     the entered standby (a plug that does not count its own draw idles at
     about 0.5 W) and whose drying phase ended the program too early.
     Raising it would bring that back, and the following pump-out would be
-    detected as a new program and its plug cut.
+    detected as a new program and its plug cut. Kept as set, it at worst
+    leaves the end to Max runtime, as before.
 
     It never exceeds the start threshold: a finished machine idling between
     the two would be detected as a new program at once and its plug cut.
@@ -311,8 +324,9 @@ class DeviceManager:
             msg = (f"finish threshold {finish_cfg:g} W is not above standby "
                    f"{standby:g} W, so a machine idling at its standby never "
                    f"finishes: using {finish:g} W")
-        elif finish < standby:
-            msg = (f"finish threshold {finish:g} W is below standby "
+        elif finish <= standby:
+            relation = "is below" if finish < standby else "equals"
+            msg = (f"finish threshold {finish:g} W {relation} standby "
                    f"{standby:g} W, kept as set: a program counts as "
                    f"finished only once the power stays below {finish:g} W")
         else:
