@@ -482,6 +482,22 @@ class BudgetManager:
     #  ADAPTIVE CONSUMPTION PROFILE
     # ══════════════════════════════════════════════════════════════
 
+    def _consumption_w(self, hour):
+        """Household load assumed for this hour of day: the learned value
+        once the hour has consumption_min_samples, else avg_consumption_w."""
+        h = hour % 24
+        if self._consumption_samples[h] >= self._consumption_min_samples:
+            return self._consumption_profile[h]
+        return self.avg_consumption_w
+
+    def consumption_profile_info(self):
+        """What the budget assumes per hour of day (for diagnostics)."""
+        return {
+            "watts": [round(self._consumption_w(h)) for h in range(24)],
+            "samples": list(self._consumption_samples),
+            "default_w": self.avg_consumption_w,
+        }
+
     def _estimate_consumption_wh(self, hours_remaining):
         """Estimate consumption in Wh for remaining solar hours.
 
@@ -500,27 +516,28 @@ class BudgetManager:
         if remaining > 0:
             h = current_hour
             frac = min(remaining, 1.0 - current_frac)
-            total_wh += self._consumption_profile[h % 24] * frac
+            total_wh += self._consumption_w(h) * frac
             remaining -= frac
 
         # Full hours
         h = current_hour + 1
         while remaining >= 1.0:
-            total_wh += self._consumption_profile[h % 24]
+            total_wh += self._consumption_w(h)
             remaining -= 1.0
             h += 1
 
         # Last partial hour
         if remaining > 0:
-            total_wh += self._consumption_profile[h % 24] * remaining
+            total_wh += self._consumption_w(h) * remaining
 
         return total_wh
 
     def update_consumption_profile(self, shared):
-        """Update hourly consumption profile from today's data.
+        """Update the hourly consumption profile.
 
-        Call daily (e.g. 23:55). Reads hourly averages from shared.
-        1:1 port of HELIOS BudgetManager.update_consumption_profile()
+        The coordinator calls this at each hour boundary with the hour
+        that just ended (modules/base_load.py):
+        shared["hourly_consumption_w"] = {hour: avg_watts}.
         """
         hourly_data = shared.get("hourly_consumption_w")
         if not hourly_data:
@@ -540,10 +557,15 @@ class BudgetManager:
                     continue
 
                 self._consumption_samples[h] += 1
-                if self._consumption_samples[h] >= min_s:
-                    self._consumption_profile[h] = (
-                        alpha * avg_w
-                        + (1 - alpha) * self._consumption_profile[h])
+                n = self._consumption_samples[h]
+                # Running mean over the first samples, then the EMA. The
+                # budget keeps avg_consumption_w until n reaches min_s
+                # (_consumption_w), and then starts from the measured
+                # average instead of an EMA still 70 % on the default.
+                a = max(alpha, 1.0 / n)
+                self._consumption_profile[h] = (
+                    a * avg_w + (1 - a) * self._consumption_profile[h])
+                if n >= min_s:
                     updated.append(h)
             except (ValueError, TypeError):
                 continue

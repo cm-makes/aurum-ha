@@ -114,6 +114,13 @@ async def async_get_config_entry_diagnostics(
             "device_budget_w": data.get("device_budget_w"),
             "safety_factor": data.get("safety_factor"),
             "forecast_entity": cfg.get("pv_forecast_entity"),
+            # Household load per hour of day the budget subtracts.
+            "consumption_profile": (
+                coordinator.budget.consumption_profile_info()),
+            # Whether it is learned and, when not, why (off: missing
+            # sensor; paused: the latest cycle's skip reason, e.g.
+            # "Pool pump: switch unavailable or missing").
+            "consumption_learning": coordinator.base_load.info(),
         })
 
     # ── Devices ────────────────────────────────────────────────────

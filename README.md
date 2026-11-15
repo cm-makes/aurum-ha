@@ -94,7 +94,7 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
 | **Manual Override** | Auto-created switch per device: AURUM hands the device back to you |
 | **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
-| **State Persistence** | Device runtimes, energy counters and budget safety factor survive restarts |
+| **State Persistence** | Device runtimes, energy counters, the budget safety factor and the learned household load survive restarts |
 | **HA Diagnostics** | Download a full JSON snapshot for bug reports |
 | **No Vendor Lock-In** | Works with any grid meter, any battery, any smart plug, any price sensor |
 
@@ -195,6 +195,15 @@ In **Configure > Energy & Battery**:
 | `pv_forecast_today_entity` | Sensor with **hourly forecast data** as attribute (e.g. Solcast "Forecast Today" with `forecast` attribute) |
 
 > If your forecast entity only provides a daily total without hourly data, AURUM uses a fallback sunset estimate (19:00) for budget calculations.
+
+The budget also subtracts what your household uses until sunset. AURUM learns this per hour of the day: house consumption minus AURUM's own devices, averaged over each hour. An hour uses the learned value once it has data from 3 days; until then AURUM assumes 500 W. Loads that AURUM does not switch, such as a wallbox or a heat pump, count as household load. Short loads such as a kettle count in full; only single readings beyond ±30 kW are ignored as glitches. The learned values survive restarts.
+
+Learning needs:
+
+- a PV **power** sensor that reports the total PV production of all PV systems in the house (every inverter, including a balcony plant). Production it doesn't see is missing from the house consumption, so the learned load would come out too low. With a hybrid inverter, use its PV (DC input) power, not its AC output: the AC output already includes the battery, which would then be counted twice.
+- with a battery (any battery sensor configured), **both** the battery charge and the battery discharge power sensor. Each reports one direction only, so with just one of them the other direction goes unseen.
+
+AURUM pauses learning while the grid meter, the PV sensor or a battery power sensor has failed, while a device that is on has no working power sensor, and while a device's switch is unavailable or missing (it may be on). The diagnostics (`budget` → `consumption_learning`) show whether learning is active and, if not, why, naming the device.
 
 ### Price-Aware Scheduling (optional)
 
@@ -497,7 +506,7 @@ Download a full JSON snapshot of AURUM's internal state for troubleshooting:
 
 **Settings > Devices & Services > AURUM > Download Diagnostics**
 
-The file contains: energy values, battery state, budget info, device states, override switch states, and coordinator health.
+The file contains: energy values, battery state, budget info (including the learned household load and why its learning is paused, if it is), device states, override switch states, and coordinator health.
 
 ---
 
