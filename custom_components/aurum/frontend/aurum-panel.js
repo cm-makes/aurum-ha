@@ -25,10 +25,10 @@ const HUB = {
 };
 
 // Hub entity → key of its unique_id ("<config entry id>_<key>"). The ids
-// above are only the defaults: hub sensors created before 1.16.1 got their
-// entity_id from their name, and renaming the AURUM device in HA can rename
-// them (e.g. sensor.aurumsolopt_aurum_pv_power, issue #31). The panel looks
-// up the actual ids in the entity registry by unique_id.
+// above are only the defaults: after the AURUM device is renamed, HA's
+// "Recreate entity IDs" renames them (e.g. sensor.smarthome_aurumsolopt_
+// pv_power, issue #31). Per-device ids are renamed back on every start,
+// these are not. The panel looks up the actual ids by unique_id.
 const HUB_KEYS = {
   pv: "pv_power",
   grid: "grid_power",

@@ -71,9 +71,10 @@ def _device_icon(name: str) -> str:
 
 
 # Every AURUM entity sets a fixed entity_id: the dashboard panel, devices.py
-# and the docs rely on these ids. A name-derived id changes when the AURUM
-# device is renamed and HA regenerates the entity IDs (HA 2026.11). HA uses
-# the fixed id only when it registers an entity: existing ids stay as they are.
+# and the docs rely on these ids. HA uses it when it registers an entity
+# (existing ids stay as they are), and HA 2026.11's "Recreate entity IDs"
+# keeps it unless the entity has a name of its own. Renaming the device gives
+# every entity one, so the panel looks up the hub entities by unique_id.
 def _hub_device_info(entry_id):
     """Return device info for the AURUM hub."""
     # Keyword form works both where DeviceInfo is a TypedDict (< 2026.11)
