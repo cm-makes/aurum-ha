@@ -320,7 +320,7 @@ A meter that drops out or freezes must not leave devices running on grid power. 
 | **PV power**: unavailable, or frozen above 0 W | Counts as 0 W, so the solar power threshold (PV gate) stays closed. |
 | **Price** sensors: no data for 30 min | The price counts as not cheap: cheap-grid runs end and none start. Shorter gaps keep the current state. |
 | A device's **switch**: unavailable, or the entity is missing | No commands, no power reserved, no runtime counted; startup detection pauses. Shown as `unavailable` with reason `switch_unavailable`. When the switch reports again, AURUM checks it: off means the run has ended. A switch in state `unknown` counts as off and is still commanded, as before. |
-| A startup-detection device's **power sensor**: unavailable | No new program is detected, and a running program is not marked finished (only *Max runtime* can end it meanwhile). Quiet time before the gap does not count: a finish needs *Finish time* of observed standby power. |
+| A startup-detection device's **power sensor**: unavailable | No new program is detected, and a running program is not marked finished (only *Max runtime* can end it meanwhile). Quiet time before the gap does not count: a finish needs *Finish time* of observed power below the *Finish threshold*. |
 
 Details:
 - A single missed reading is bridged with the last value. `nan` and `inf` count as unavailable.

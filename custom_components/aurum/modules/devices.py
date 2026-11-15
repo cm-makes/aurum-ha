@@ -89,6 +89,30 @@ _NOTIFY_STRINGS = {
     },
 }
 
+# How far above the standby power a finish threshold that is not above it
+# is raised (see sd_finish_threshold).
+_SD_FINISH_MARGIN_W = 1
+
+
+def sd_finish_threshold(standby_w, finish_w, start_w):
+    """Program-finished threshold that startup detection uses (W).
+
+    The finish check is strict (power < threshold), and an idle machine
+    does not draw less than its own standby, so a threshold at or below
+    the standby power is never reached: only Max runtime ends the program,
+    hours late. Up to 1.16.3 the default and the help text put it exactly
+    there (3 W for 3 W standby). Such a value is raised 1 W above standby,
+    enough for a meter that reads a little above the entered standby
+    (3.2-3.4 W for 3 W), but no further: the wider the band, the more
+    quiet program phases (dishwasher drying) pass for the end.
+
+    It never exceeds the start threshold: a finished machine idling between
+    the two would be detected as a new program at once and its plug cut.
+    """
+    if finish_w <= standby_w:
+        finish_w = standby_w + _SD_FINISH_MARGIN_W
+    return min(finish_w, start_w)
+
 
 class DeviceManager:
     """Manage priority-based device switching (HELIOS-compatible logic)."""
@@ -124,6 +148,17 @@ class DeviceManager:
     def _init_device(self, cfg):
         """Initialize a device from config dict."""
         name = cfg.get("name", "Unknown")
+        sd_start = cfg.get("sd_power_threshold", 5)
+        sd_standby = cfg.get("sd_standby_power", 3)
+        # The config flow stores every SD field, so devices set up with the
+        # old 3 W default keep it: correct it here, not only for new ones.
+        sd_finish_cfg = cfg.get("sd_finish_power", sd_standby)
+        sd_finish = sd_finish_threshold(sd_standby, sd_finish_cfg, sd_start)
+        if cfg.get("startup_detection") and sd_finish != sd_finish_cfg:
+            self.hass.log(
+                f"AURUM SD [{name}]: finish threshold {sd_finish_cfg:g} W "
+                f"must be above standby {sd_standby:g} W and not above the "
+                f"start threshold {sd_start:g} W, using {sd_finish:g} W")
         return {
             # Identity
             "name": name,
@@ -188,12 +223,11 @@ class DeviceManager:
             # Startup detection
             "startup_detection": cfg.get("startup_detection", False),
             "sd_state": "",
-            "sd_power_threshold": cfg.get("sd_power_threshold", 5),
+            "sd_power_threshold": sd_start,
             "sd_detection_time": cfg.get("sd_detection_time", 5),
             "sd_max_runtime": cfg.get("sd_max_runtime", 10800),
-            "sd_standby_power": cfg.get("sd_standby_power", 3),
-            "sd_finish_power": cfg.get("sd_finish_power",
-                                       cfg.get("sd_standby_power", 3)),
+            "sd_standby_power": sd_standby,
+            "sd_finish_power": sd_finish,
             "sd_finish_time": cfg.get("sd_finish_time", 600),
             "sd_min_runtime": cfg.get("sd_min_runtime", 300),
             "sd_detected_at": None,
