@@ -62,7 +62,7 @@ AURUM lässt Waschmaschine, Spülmaschine, Poolpumpe und Warmwasser-Boiler mit d
 - **Pünktlich fertig:** Mit *Muss heute* und *Fertig bis* startet AURUM notfalls rechtzeitig mit Netzstrom. Das geht auch für Poolpumpe und Boiler.
 - **Einrichtung komplett in der Oberfläche:** Netzzähler auswählen, Geräte anlegen, Prioritäten setzen. Kein YAML.
 - **Batterie zuerst, wenn du willst:** Mindest-Ladestand pro Gerät, Batterie-Vorrang und PV-Prognose (Solcast, Open-Meteo), damit die Batterie ihr Ladeziel trotzdem erreicht.
-- **Dynamische Stromtarife:** Geräte laufen auf Wunsch auch bei günstigem Netzstrom (Tibber, Nordpool, aWATTar, EPEX Spot).
+- **Dynamische Stromtarife:** Geräte laufen auf Wunsch auch bei günstigem Netzstrom (Tibber, Nordpool, aWATTar, EPEX Spot). Bei einem Tag/Nacht-Tarif (HT/NT) trägst du die NT-Stunden in einen Zeitplan-Helfer ein.
 - **Erklärt jede Entscheidung:** Das Panel und der Sensor *Current Decision* zeigen, warum ein Gerät läuft, wartet oder aus ist.
 - **Nicht dabei:** E-Auto laden, Batterie oder Wechselrichter steuern. AURUM liest den Netzzähler (und den Akkustand) und schaltet Steckdosen und Relais.
 - Oberfläche und Dashboard auf Deutsch und Englisch.
@@ -88,7 +88,7 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **Daily Reset Hour** | Per-device reset hour for runtime counters — align a cheap-grid device to the solar day |
 | **Priority-Based** | Higher priority devices get power first |
 | **PV Forecast Budget** | Uses Solcast or Open-Meteo forecast to limit device runtime so the battery reliably reaches target SOC |
-| **Price-Aware Scheduling** | Devices can run on cheap grid power (Tibber, Nordpool, aWATTar, EPEX Spot) — even without PV surplus |
+| **Price-Aware Scheduling** | Devices can run on cheap grid power (Tibber, Nordpool, aWATTar, EPEX Spot, or the night hours of a day/night tariff via a Schedule helper) — even without PV surplus |
 | **Per-Device SOC Threshold** | Each device can have its own minimum battery level |
 | **Energy Tracking** | Per-device kWh/day tracking, compatible with HA Energy Dashboard |
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
@@ -217,10 +217,23 @@ In **Configure > Energy & Battery**, set one or more of these:
 |-------|---------------|---------|
 | `price_entity` | Current electricity price in ct/kWh | `sensor.tibber_aktueller_strompreis` |
 | `price_level_entity` | Price level enum (very_cheap/cheap/normal/expensive/very_expensive) | `sensor.tibber_aktuelles_preisniveau` |
-| `cheap_period_entity` | Binary sensor ON during cheap periods | `binary_sensor.tibber_bestpreis_zeitraum` |
-| `cheap_period_starts_in_entity` | Minutes until next cheap period (for dashboard countdown) | `sensor.tibber_bestpreis_startet_in` |
+| `cheap_period_entity` | ON during cheap periods: a binary sensor, a Schedule helper or a toggle (`input_boolean`) | `binary_sensor.tibber_bestpreis_zeitraum`, `schedule.night_tariff` |
+| `cheap_period_starts_in_entity` | Minutes until next cheap period (for dashboard countdown). Not needed with a Schedule helper | `sensor.tibber_bestpreis_startet_in` |
 
 > All fields are optional. You only need one price source — AURUM checks them in order: max_price threshold → cheap period → price level.
+
+**Day/night tariff without a price sensor** (HT/NT, Economy 7, the German
+grid-fee module 3): mark your cheap hours in a Home Assistant **Schedule**
+helper and use it as `cheap_period_entity`. For NT 22:00–06:00, go to
+**Settings → Devices & services → Helpers → Create helper → Schedule**, name
+it e.g. *Night tariff*, and add two blocks on every day, 00:00–06:00 and
+22:00–24:00 (a block can't cross midnight). Devices in `cheap_grid` mode
+then run in those hours when the sun isn't enough. AURUM reads the
+countdown to the next cheap block from the schedule, so
+`cheap_period_starts_in_entity` can stay empty. Without a price sensor,
+`sensor.aurum_electricity_price` stays unavailable; `cheap_period` and
+`cheap_period_starts_in_min` are on each cheap-grid device's
+`sensor.aurum_{slug}`.
 
 > ⚠️ **Price unit: AURUM works in ct/kWh**, the hundredth of your currency
 > (cents, Rappen, öre, pence). A `price_entity` that reports a whole
@@ -252,7 +265,7 @@ Edit a device and set:
 A device with `cheap_grid` mode turns on when **any** of these is true:
 1. PV surplus is sufficient (normal solar logic)
 2. `max_price` is set and current price ≤ threshold
-3. `cheap_period_entity` is ON (best price window active)
+3. `cheap_period_entity` is ON (best price window active, or inside the cheap hours of your schedule)
 4. `price_level_entity` is `very_cheap` or `cheap`
 
 Debounce timers still apply to prevent flapping on price edges.
@@ -284,6 +297,7 @@ floor; leave it on `cheap_grid` when price should always win.
 - [EPEX Spot](https://github.com/mampfes/hacs_epex_spot) — day-ahead prices
 - [Innostrom](https://github.com/LukasSkywalker/ha-innostrom) — Swiss dynamic tariffs (AEW, Swisspower and others), price sensor in CHF/kWh
 - Any sensor providing a price per kWh (or MWh) or price levels
+- Home Assistant's own **Schedule** helper — fixed day/night tariffs, no integration needed
 
 ---
 

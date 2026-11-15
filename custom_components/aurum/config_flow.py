@@ -116,8 +116,12 @@ _WEATHER = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="weather"))
 _SWITCH = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["switch", "input_boolean"]))
-_BINARY_SENSOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="binary_sensor"))
+# Cheap period: anything that is on/off. A binary sensor from a price
+# integration, or a Schedule helper (or toggle) holding the cheap hours of
+# a fixed day/night tariff. HA's selector rejects every other domain.
+_CHEAP_PERIOD_DOMAINS = ["binary_sensor", "schedule", "input_boolean"]
+_CHEAP_PERIOD = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=_CHEAP_PERIOD_DOMAINS))
 
 
 # ── Validation ───────────────────────────────────────────────────
@@ -298,7 +302,7 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
         vol.Optional(
             CONF_CHEAP_PERIOD_ENTITY,
             default=d.get(CONF_CHEAP_PERIOD_ENTITY, vol.UNDEFINED),
-        ): _BINARY_SENSOR,
+        ): _CHEAP_PERIOD,
         vol.Optional(
             CONF_CHEAP_PERIOD_STARTS_IN_ENTITY,
             default=d.get(CONF_CHEAP_PERIOD_STARTS_IN_ENTITY, vol.UNDEFINED),
