@@ -203,6 +203,11 @@ class DeviceManager:
             "sd_power_above_since": None,
             "sd_power_below_since": None,
             "sd_power_samples": [],
+            # Runtime counted for the current program, as in runtime_today_s
+            # (the 'finished' push reports it). None: not tracked (a run
+            # restored from an older state file); the push then falls back
+            # to the time since sd_running_since.
+            "sd_run_runtime_s": None,
             # Set when a program is finished by max_runtime while it still
             # draws power. Blocks re-detection until the power has stayed
             # at standby for sd_finish_time, so the still-running program
@@ -391,13 +396,20 @@ class DeviceManager:
                 continue
 
             # ── 1. Manual override → skip device ────────────────
+            # No switch command. Startup detection keeps watching the
+            # power, so a program run under override is not cut on release.
             if self._is_manual_override(dev):
-                self._restart_sd_timers(dev)
                 if was_on:
                     dev["_pending_off"] = None
                     if dev["on_since"] is None:
                         dev["on_since"] = now
                     devices_on += 1
+                if dev["startup_detection"]:
+                    self._sd_observe_override(
+                        dev, was_on, actual_power, now, excess,
+                        battery_soc, power_known=power_known)
+                else:
+                    self._restart_sd_timers(dev)
                 continue
 
             # ── 1b. Device on but not managed → track, apply turn-off logic ──
@@ -935,7 +947,9 @@ class DeviceManager:
         power_known is False while the configured power sensor is
         unavailable: actual_power is then the nominal fallback, which must
         not be read as a program start (STANDBY) or as a program still
-        drawing power (RUNNING).
+        drawing power (RUNNING). _sd_observe_override also passes False
+        for a RUNNING program whose plug the user switched off while it
+        drew power: 0 W there is an interruption, not standby.
 
         Returns (counted_as_on, newly_started_power).
         """
@@ -969,52 +983,22 @@ class DeviceManager:
                 dev["sd_power_above_since"] = None
                 return False, 0
 
-            # Finished by max_runtime while still drawing power (eco
-            # programmes run 3.5-4 h, the default max is 3 h): wait until
-            # the power has stayed at standby for sd_finish_time — the same
-            # criterion as a smart finish — before detecting the next
-            # program. Otherwise the still-running program is re-detected
-            # and paused mid-cycle.
-            if dev.get("sd_rearm_pending") and not dev.get("power_entity"):
-                # Power sensor removed while a hold was pending (restored
-                # from persistence): the nominal fallback can never drop.
-                dev["sd_rearm_pending"] = False
-                dev["_sd_rearm_below_since"] = None
-            if dev.get("sd_rearm_pending"):
-                dev["sd_power_above_since"] = None
-                if actual_power > dev["sd_power_threshold"]:
-                    dev["_sd_rearm_below_since"] = None
-                    return False, 0
-                if dev.get("_sd_rearm_below_since") is None:
-                    dev["_sd_rearm_below_since"] = now
-                    return False, 0
-                below_s = (now - dev["_sd_rearm_below_since"]).total_seconds()
-                if below_s < dev["sd_finish_time"]:
-                    return False, 0
-                dev["sd_rearm_pending"] = False
-                dev["_sd_rearm_below_since"] = None
-
-            if actual_power > dev["sd_power_threshold"]:
-                if dev["sd_power_above_since"] is None:
-                    dev["sd_power_above_since"] = now
-                elapsed = (
-                    now - dev["sd_power_above_since"]).total_seconds()
-                if elapsed >= dev["sd_detection_time"]:
-                    # Program start detected!
-                    self.hass.log(
-                        f"AURUM SD [{dev['name']}]: Program detected "
-                        f"({actual_power:.0f}W for {elapsed:.0f}s)")
-                    dev["sd_state"] = SD_STATE_DETECTED
-                    dev["sd_detected_at"] = now
-                    sd_state = SD_STATE_DETECTED  # fall through
-                    self._notify(
-                        self._t("sd_detected", name=dev['name']),
-                        tag=f"aurum_sd_{dev['name']}")
-                else:
-                    return False, 0
-            else:
-                dev["sd_power_above_since"] = None
+            if self._sd_rearm_held(dev, actual_power, now):
                 return False, 0
+
+            elapsed = self._sd_start_seen(dev, actual_power, now)
+            if elapsed is None:
+                return False, 0
+            # Program start detected!
+            self.hass.log(
+                f"AURUM SD [{dev['name']}]: Program detected "
+                f"({actual_power:.0f}W for {elapsed:.0f}s)")
+            dev["sd_state"] = SD_STATE_DETECTED
+            dev["sd_detected_at"] = now
+            sd_state = SD_STATE_DETECTED  # fall through
+            self._notify(
+                self._t("sd_detected", name=dev['name']),
+                tag=f"aurum_sd_{dev['name']}")
 
         # ── DETECTED: Turn OFF immediately → WAITING (transient) ─
         if sd_state == SD_STATE_DETECTED:
@@ -1047,6 +1031,8 @@ class DeviceManager:
             if self._is_device_on(dev):
                 self._turn_off(dev, now, excess, battery_soc,
                                "sd_waiting_enforce_off")
+            # A start half-seen under Manual override must be seen again.
+            dev["sd_power_above_since"] = None
 
             # Runtime target reached: stay paused for the rest of the
             # day — blocks both deadline force-start and excess start.
@@ -1070,6 +1056,7 @@ class DeviceManager:
                               "deadline_forced")
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now
+                dev["sd_run_runtime_s"] = 0
                 dev["sd_power_samples"] = []
                 dev["sd_lockout_until"] = now + timedelta(
                     seconds=dev["sd_max_runtime"])
@@ -1098,6 +1085,7 @@ class DeviceManager:
                               "excess_sufficient")
                 dev["sd_state"] = SD_STATE_RUNNING
                 dev["sd_running_since"] = now
+                dev["sd_run_runtime_s"] = 0
                 dev["sd_power_samples"] = []
                 dev["sd_lockout_until"] = now + timedelta(
                     seconds=dev["sd_max_runtime"])
@@ -1159,7 +1147,13 @@ class DeviceManager:
 
             if smart_finish or max_expired:
                 reason = "smart_finish" if smart_finish else "max_runtime"
-                runtime_min = int(runtime_s / 60)
+                # Report the runtime counted for this program, not the time
+                # since its start: the off time of an interruption under
+                # Manual override is not program runtime.
+                self._accumulate_runtime(dev, now)
+                run_s = dev.get("sd_run_runtime_s")
+                runtime_min = int(
+                    (runtime_s if run_s is None else run_s) / 60)
                 self.hass.log(
                     f"AURUM SD [{dev['name']}]: Program complete "
                     f"({reason}, {actual_power:.0f}W, "
@@ -1183,7 +1177,6 @@ class DeviceManager:
                     if (dev["sd_rearm_pending"]
                         and actual_power <= dev["sd_power_threshold"])
                     else None)
-                self._accumulate_runtime(dev, now)
                 dev["on_since"] = None
                 dev["_runtime_tick"] = None
                 self._notify(
@@ -1197,6 +1190,123 @@ class DeviceManager:
             return True, 0
 
         return False, 0
+
+    def _sd_observe_override(self, dev, was_on, actual_power, now, excess,
+                             battery_soc, power_known=True):
+        """Startup detection while the Manual override is on: AURUM sends
+        no switch command, but keeps watching the power.
+
+        A frozen state machine cut the user's program on release: WAITING
+        enforced the plug off, STANDBY read the running program as a new
+        start and paused it, and a program that had ended meanwhile kept
+        the plug off until the next surplus. So a program drawing more than
+        sd_power_threshold for sd_detection_time is adopted as RUNNING (no
+        pause, no push), and its finish is detected as usual. After the
+        release an adopted program runs untouched until it finishes.
+        """
+        state = dev["sd_state"] or SD_STATE_STANDBY
+        dev["sd_state"] = state
+        if state == SD_STATE_RUNNING:
+            # Quiet time is being observed: the last reading was below the
+            # finish threshold (any reading above it clears the timer).
+            quiet = dev["sd_power_below_since"] is not None
+            if not was_on:
+                # The plug is off: the off time is never runtime. Switched
+                # off while the program drew power (e.g. to add laundry),
+                # the run is interrupted, not finished: the off time is no
+                # quiet time either, so only max_runtime can end the run
+                # meanwhile, and switching the plug back on continues it.
+                # Switched off while already quiet (the program has ended,
+                # e.g. unplugged after unloading), the quiet time keeps
+                # counting toward sd_finish_time, so the end is detected as
+                # usual. A pause at the appliance and then a plug-off reads
+                # the same way.
+                dev["_runtime_tick"] = now
+            # Finish detection only: the RUNNING branch never switches.
+            self._handle_startup_detection(
+                dev, 0, battery_soc, actual_power, now, excess,
+                power_known=power_known and (was_on or quiet))
+            return
+        if not was_on or not power_known or not dev.get("power_entity"):
+            # Nothing to observe. Without a power sensor the reading is the
+            # nominal fallback: a plug that is on would be adopted as a
+            # program, run after phantom run. With the plug off, a program
+            # still running after a max_runtime finish has been cut: the
+            # hold ends.
+            if not was_on:
+                dev["sd_rearm_pending"] = False
+            self._restart_sd_timers(dev)
+            return
+        if (state == SD_STATE_STANDBY
+                and self._sd_rearm_held(dev, actual_power, now)):
+            return
+        if self._sd_start_seen(dev, actual_power, now) is None:
+            return
+        # STANDBY: started at the appliance. WAITING: the user switched the
+        # plug on and the paused program resumed. Either way it is running.
+        self.hass.log(
+            f"AURUM SD [{dev['name']}]: Program running under manual "
+            f"override ({actual_power:.0f}W), tracked as running")
+        dev["sd_state"] = SD_STATE_RUNNING
+        dev["sd_detected_at"] = None
+        dev["sd_waiting_since"] = None
+        dev["sd_running_since"] = now
+        dev["sd_run_runtime_s"] = 0
+        dev["sd_power_samples"] = []
+        dev["sd_lockout_until"] = now + timedelta(
+            seconds=dev["sd_max_runtime"])
+        dev["sd_power_above_since"] = None
+        dev["sd_power_below_since"] = None
+        dev["excess_since"] = None
+        # Started by the user, not by AURUM: no deadline immunity, and no
+        # stale surplus reason (the Advisor shows plain "running").
+        dev["force_started"] = False
+        dev["_scheduling_reason"] = None
+        # Standby time before the start is not program runtime.
+        dev["_runtime_tick"] = now
+
+    def _sd_rearm_held(self, dev, actual_power, now):
+        """True while a max_runtime finish blocks the next detection.
+
+        Finished by max_runtime while still drawing power (eco programmes
+        run 3.5-4 h, the default max is 3 h): wait until the power has
+        stayed at standby for sd_finish_time, the same criterion as a smart
+        finish, before detecting the next program. Otherwise the
+        still-running program is re-detected and paused mid-cycle.
+        """
+        if dev.get("sd_rearm_pending") and not dev.get("power_entity"):
+            # Power sensor removed while a hold was pending (restored
+            # from persistence): the nominal fallback can never drop.
+            dev["sd_rearm_pending"] = False
+            dev["_sd_rearm_below_since"] = None
+        if not dev.get("sd_rearm_pending"):
+            return False
+        dev["sd_power_above_since"] = None
+        if actual_power > dev["sd_power_threshold"]:
+            dev["_sd_rearm_below_since"] = None
+            return True
+        if dev.get("_sd_rearm_below_since") is None:
+            dev["_sd_rearm_below_since"] = now
+            return True
+        below_s = (now - dev["_sd_rearm_below_since"]).total_seconds()
+        if below_s < dev["sd_finish_time"]:
+            return True
+        dev["sd_rearm_pending"] = False
+        dev["_sd_rearm_below_since"] = None
+        return False
+
+    def _sd_start_seen(self, dev, actual_power, now):
+        """Seconds above sd_power_threshold once that has lasted
+        sd_detection_time (a program start), else None."""
+        if actual_power <= dev["sd_power_threshold"]:
+            dev["sd_power_above_since"] = None
+            return None
+        if dev["sd_power_above_since"] is None:
+            dev["sd_power_above_since"] = now
+        elapsed = (now - dev["sd_power_above_since"]).total_seconds()
+        if elapsed < dev["sd_detection_time"]:
+            return None
+        return elapsed
 
     def _restart_sd_timers(self, dev):
         """The SD state machine did not observe this cycle: quiet, standby
@@ -1214,6 +1324,7 @@ class DeviceManager:
         dev["sd_power_above_since"] = None
         dev["sd_power_below_since"] = None
         dev["sd_running_since"] = None
+        dev["sd_run_runtime_s"] = None
         dev["sd_power_samples"] = []
         dev["force_started"] = False
 
@@ -1240,7 +1351,9 @@ class DeviceManager:
             if not dev.get("_cached_on", False):
                 continue
             if not dev["managed_on"]:
-                continue  # manual override, don't preempt
+                continue  # switched on by the user, don't preempt
+            if self._is_manual_override(dev):
+                continue  # Manual override: AURUM never switches it
             if not dev["interruptible"]:
                 continue  # non-interruptible, don't preempt
             if dev["priority"] >= sd_device["priority"]:
@@ -1491,6 +1604,10 @@ class DeviceManager:
             elapsed = max(0, (now - tick).total_seconds())
             dev["runtime_today_s"] += elapsed
             dev["energy_today_wh"] += power_w * elapsed / 3600
+            # The program's own count, unaffected by the daily reset.
+            if (dev.get("sd_state") == SD_STATE_RUNNING
+                    and dev.get("sd_run_runtime_s") is not None):
+                dev["sd_run_runtime_s"] += elapsed
         dev["_runtime_tick"] = now
 
     def _publish_device_states(self, shared, battery_soc):

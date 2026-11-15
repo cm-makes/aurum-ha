@@ -30,6 +30,9 @@ _VALUE_FIELDS = (
     # is off.
     "_scheduling_reason",
     "sd_rearm_pending",
+    # Runtime counted for the running program (the 'finished' push). Not
+    # zeroed at a day rollover: the program goes on across the boundary.
+    "sd_run_runtime_s",
     "_mh_runtime_base",
     # Last seen muss_heute state: without it, an arm made after the last
     # save (or right after a restart) was not seen as a new job.
