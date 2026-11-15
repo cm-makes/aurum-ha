@@ -8,6 +8,11 @@ smartly: only Max runtime (3 h) ended the program, the finished push and the
 Must-run-today reset came hours late. The config flow stores every SD field,
 so existing devices keep the old 3 W and need the runtime correction.
 
+Only values that were not chosen on purpose are raised: finish == standby,
+or the old 3 W default left alone below a raised standby. Any other value
+below standby is a deliberate edit (a machine that really idles lower) and
+is used as set.
+
 The threshold must also stay at or below the start threshold, or a finished
 machine idling between the two is detected as a new program and its plug cut.
 """
@@ -94,10 +99,17 @@ def finished_pushes(hass):
 class TestRule:
     @pytest.mark.parametrize("standby, finish, start, expected", [
         (3, 3, 5, 4),       # old default: at standby, never reached
-        (3, 2, 5, 4),       # below standby
+        (3.0, 3.0, 5.0, 4.0),   # as the number selector stores it
         (0, 0, 5, 1),       # a device that idles at 0 W
-        (10, 10, 50, 11),   # high idle, high start threshold
+        (10, 10, 50, 11),   # = standby, as the old help text said
         (3, 3, 50, 4),      # washer with 50 W start: not raised further
+        (5, 3, 10, 6),      # old 3 W default left below a raised standby
+        (5, 3, 5, 5),       # ... raised, then capped at the start threshold
+        (3, 2, 5, 2),       # deliberately below standby: used as set
+        (3, 1, 5, 1),
+        (3, 0, 5, 0),
+        (5, 4, 10, 4),      # below a raised standby, not the old default
+        (1, 3, 5, 3),       # old default above a lowered standby: usable
         (3, 4, 5, 4),       # a usable value is kept
         (3, 4, 50, 4),
         (3, 10, 5, 5),      # above the start threshold: capped
@@ -199,6 +211,139 @@ class TestStoredOldDefault:
         assert dev["sd_state"] == SD_STATE_RUNNING
         assert finished_pushes(hass) == []
 
+    def test_old_default_below_a_raised_standby_is_raised(
+            self, hass, make_manager, make_device):
+        # Standby raised to 5 W for a machine that idles there, Finish left
+        # at the stored 3 W: the idle machine never dropped below it.
+        mgr = make_manager([flow_device(
+            make_device, sd_standby_power=5, sd_power_threshold=10)])
+        start = datetime(2026, 11, 15, 9, 0)
+        dev = running_since(hass, mgr, start)
+        t = run(hass, mgr, start, start + timedelta(minutes=60), 1900)
+        run(hass, mgr, t, t + timedelta(minutes=11), 5.3)
+
+        assert dev["sd_finish_power"] == 6
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        pushes = finished_pushes(hass)
+        assert len(pushes) == 1 and "smart_finish" in pushes[0]
+        assert ("OFF", SW) not in hass.actions
+        assert any("using 6 W" in m for m in hass.logs)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  A finish threshold deliberately set below standby
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestBelowStandbyKeptAsSet:
+    """A finish threshold below standby only comes from a deliberate edit,
+    typically for a machine that really idles lower than the entered 3 W
+    standby (a plug that does not count its own draw idles at ~0.5 W) and
+    whose drying phase ended the program too early. Raising it to
+    standby + 1 W brought that back, and the pump-out after the drying
+    phase was detected as a new program and its plug cut."""
+
+    @pytest.mark.parametrize("finish, drying", [(1, 2.0), (2, 2.5)])
+    def test_drying_phase_does_not_end_the_program(
+            self, hass, make_manager, make_device, finish, drying):
+        mgr = make_manager([flow_device(make_device, sd_finish_power=finish)])
+        start = datetime(2026, 11, 15, 9, 0)
+        dev = running_since(hass, mgr, start)
+        t = run(hass, mgr, start, start + timedelta(minutes=60), 1900)
+        t = run(hass, mgr, t, t + timedelta(minutes=30), drying)
+        t = run(hass, mgr, t, t + timedelta(minutes=2), 80)   # pump-out
+
+        assert ("OFF", SW) not in hass.actions   # pump-out not cut
+        assert finished_pushes(hass) == []
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        assert hass.states[MH] == "on"           # job not reset early
+
+        run(hass, mgr, t, t + timedelta(minutes=11), 0.5)   # real idle
+        assert dev["sd_state"] == SD_STATE_STANDBY
+        pushes = finished_pushes(hass)
+        assert len(pushes) == 1 and "smart_finish" in pushes[0]
+        assert hass.states[MH] == "off"
+        assert ("OFF", SW) not in hass.actions
+        assert dev["sd_finish_power"] == finish
+
+    def test_finish_zero_is_left_to_max_runtime(
+            self, hass, make_manager, make_device):
+        # 0 W is never undercut: the user left the end to Max runtime.
+        mgr = make_manager([flow_device(make_device, sd_finish_power=0)])
+        start = datetime(2026, 11, 15, 9, 0)
+        dev = running_since(hass, mgr, start)
+        t = run(hass, mgr, start, start + timedelta(minutes=60), 1900)
+        t = run(hass, mgr, t, t + timedelta(minutes=30), 2.0)
+        run(hass, mgr, t, t + timedelta(minutes=30), 0.5)
+
+        assert ("OFF", SW) not in hass.actions
+        assert finished_pushes(hass) == []
+        assert dev["sd_state"] == SD_STATE_RUNNING
+        assert dev["sd_finish_power"] == 0
+
+    def test_hint_is_logged_once_per_setup(
+            self, hass, make_manager, make_device):
+        mgr = make_manager([flow_device(make_device, sd_finish_power=2)])
+        start = datetime(2026, 11, 15, 9, 0)
+        running_since(hass, mgr, start)
+        run(hass, mgr, start, start + timedelta(minutes=10), 1900)
+
+        notes = [m for m in hass.logs if "AURUM SD [Test Device]: " in m
+                 and "finish threshold" in m]
+        assert len(notes) == 1
+        assert "kept as set" in notes[0]
+        assert "using" not in notes[0]
+
+
+# ══════════════════════════════════════════════════════════════════
+#  The setup log line
+# ══════════════════════════════════════════════════════════════════
+
+
+class TestThresholdLog:
+    @staticmethod
+    def sd_notes(hass):
+        return [m for m in hass.logs if m.startswith("AURUM SD [Test Device]")]
+
+    @pytest.mark.parametrize("standby, finish, start, expected", [
+        (3, 3, 5, "finish threshold 3 W is not above standby 3 W"),
+        (5, 3, 10, "finish threshold 3 W is not above standby 5 W"),
+        (3, 10, 5, "finish threshold 10 W must not be above the start "
+                   "threshold 5 W, using 5 W"),
+        (3, 2, 5, "finish threshold 2 W is below standby 3 W, kept as set"),
+    ])
+    def test_one_line_names_the_problem(self, hass, make_manager, make_device,
+                                        standby, finish, start, expected):
+        make_manager([flow_device(
+            make_device, sd_standby_power=standby, sd_finish_power=finish,
+            sd_power_threshold=start)])
+        notes = self.sd_notes(hass)
+        assert len(notes) == 1
+        assert expected in notes[0]
+
+    @pytest.mark.parametrize("standby, finish, start, using", [
+        (6, 6, 5, ", using finish threshold 5 W instead of 6 W"),
+        (5, 5, 5, ""),      # raised to 6, capped back to 5: unchanged
+        (6, 2, 5, ""),      # below standby: kept
+    ])
+    def test_standby_at_or_above_start_names_the_standby(
+            self, hass, make_manager, make_device, standby, finish, start,
+            using):
+        # The finish threshold cannot be both above standby and not above
+        # the start threshold here: the standby power is what to fix.
+        make_manager([flow_device(
+            make_device, sd_standby_power=standby, sd_finish_power=finish,
+            sd_power_threshold=start)])
+        notes = self.sd_notes(hass)
+        assert notes == [
+            f"AURUM SD [Test Device]: standby {standby} W must be below "
+            f"the start threshold {start} W{using}"]
+
+    def test_consistent_config_logs_nothing(self, hass, make_manager,
+                                            make_device):
+        make_manager([flow_device(make_device, sd_finish_power=4)])
+        assert self.sd_notes(hass) == []
+
 
 # ══════════════════════════════════════════════════════════════════
 #  Finish threshold above the start threshold
@@ -261,4 +406,25 @@ class TestHelpTexts:
                 "sd_finish_power"]
             assert default.format(const.DEFAULT_DEV_SD_FINISH_POWER) in text
             assert "same as standby" not in text
-            assert "gleich dem Standby" not in text
+            assert "Meist gleich dem Standby" not in text
+
+    @pytest.mark.parametrize("path, gone, kept", [
+        ("strings.json", "never draws less than its own standby",
+         "Other values are used as set."),
+        ("translations/en.json", "never draws less than its own standby",
+         "Other values are used as set."),
+        ("translations/de.json", "nie weniger als seinen Standby",
+         "Andere Werte gelten wie eingestellt."),
+    ])
+    def test_finish_help_allows_a_value_below_standby(self, path, gone, kept):
+        # A finish threshold below standby is used as set (a machine that
+        # really idles lower): the help must not say it is pointless.
+        data = json.loads((COMPONENT / path).read_text(encoding="utf-8"))
+        steps = data["options"]["step"]
+        long_text = steps["add_device"]["data_description"]["sd_finish_power"]
+        assert kept in long_text
+        for step in ("add_device", "edit_device"):
+            text = steps[step]["data_description"]["sd_finish_power"]
+            assert gone not in text
+            assert "corrects other values" not in text
+            assert "andere Werte korrigiert" not in text

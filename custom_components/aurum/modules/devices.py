@@ -89,27 +89,48 @@ _NOTIFY_STRINGS = {
     },
 }
 
-# How far above the standby power a finish threshold that is not above it
-# is raised (see sd_finish_threshold).
+# How far above the standby power a finish threshold that was not chosen on
+# purpose is raised (see sd_finish_threshold).
 _SD_FINISH_MARGIN_W = 1
+
+# Finish threshold the config flow stored up to 1.16.3 for every device
+# whose user left the field alone.
+_SD_OLD_DEFAULT_FINISH_W = 3
+
+
+def _sd_finish_not_chosen(standby_w, finish_w):
+    """True for a finish threshold the user did not pick on purpose: equal
+    to the standby power (the old 3 W / 3 W default and the old help text
+    "Usually same as standby"), or the old 3 W default left alone while the
+    standby power was raised above it."""
+    return finish_w == standby_w or (
+        finish_w == _SD_OLD_DEFAULT_FINISH_W and finish_w < standby_w)
 
 
 def sd_finish_threshold(standby_w, finish_w, start_w):
     """Program-finished threshold that startup detection uses (W).
 
-    The finish check is strict (power < threshold), and an idle machine
-    does not draw less than its own standby, so a threshold at or below
-    the standby power is never reached: only Max runtime ends the program,
-    hours late. Up to 1.16.3 the default and the help text put it exactly
-    there (3 W for 3 W standby). Such a value is raised 1 W above standby,
-    enough for a meter that reads a little above the entered standby
-    (3.2-3.4 W for 3 W), but no further: the wider the band, the more
-    quiet program phases (dishwasher drying) pass for the end.
+    The finish check is strict (power < threshold), so a threshold at the
+    standby power is never reached by a machine idling at its standby: only
+    Max runtime ends the program, hours late. Up to 1.16.3 the default and
+    the help text put it exactly there (3 W for 3 W standby). Only values
+    that were not chosen on purpose (_sd_finish_not_chosen) are raised, to
+    1 W above standby: enough for a meter that reads a little above the
+    entered standby (3.2-3.4 W for 3 W), but no further, because the wider
+    the band, the more quiet program phases (dishwasher drying) pass for
+    the end.
+
+    Any other value below standby is used as set. It comes from a
+    deliberate edit, typically for a machine that really idles lower than
+    the entered standby (a plug that does not count its own draw idles at
+    about 0.5 W) and whose drying phase ended the program too early.
+    Raising it would bring that back, and the following pump-out would be
+    detected as a new program and its plug cut.
 
     It never exceeds the start threshold: a finished machine idling between
     the two would be detected as a new program at once and its plug cut.
     """
-    if finish_w <= standby_w:
+    if _sd_finish_not_chosen(standby_w, finish_w):
         finish_w = standby_w + _SD_FINISH_MARGIN_W
     return min(finish_w, start_w)
 
@@ -154,11 +175,9 @@ class DeviceManager:
         # old 3 W default keep it: correct it here, not only for new ones.
         sd_finish_cfg = cfg.get("sd_finish_power", sd_standby)
         sd_finish = sd_finish_threshold(sd_standby, sd_finish_cfg, sd_start)
-        if cfg.get("startup_detection") and sd_finish != sd_finish_cfg:
-            self.hass.log(
-                f"AURUM SD [{name}]: finish threshold {sd_finish_cfg:g} W "
-                f"must be above standby {sd_standby:g} W and not above the "
-                f"start threshold {sd_start:g} W, using {sd_finish:g} W")
+        if cfg.get("startup_detection"):
+            self._log_sd_thresholds(
+                name, sd_standby, sd_finish_cfg, sd_finish, sd_start)
         return {
             # Identity
             "name": name,
@@ -270,6 +289,35 @@ class DeviceManager:
             # against the switch on the first cycle it reports again.
             "_switch_recheck": False,
         }
+
+    def _log_sd_thresholds(self, name, standby, finish_cfg, finish, start):
+        """One log line per setup for a startup-detection device whose
+        finish threshold AURUM changes or whose thresholds look off; none
+        for a consistent config."""
+        if standby >= start:
+            # The standby power is what to fix: a machine idling there is
+            # above the start threshold and detected as a new program, and
+            # no finish threshold is both above standby and not above the
+            # start threshold.
+            msg = (f"standby {standby:g} W must be below the start "
+                   f"threshold {start:g} W")
+            if finish != finish_cfg:
+                msg += (f", using finish threshold {finish:g} W instead of "
+                        f"{finish_cfg:g} W")
+        elif finish_cfg > start:
+            msg = (f"finish threshold {finish_cfg:g} W must not be above "
+                   f"the start threshold {start:g} W, using {finish:g} W")
+        elif finish != finish_cfg:
+            msg = (f"finish threshold {finish_cfg:g} W is not above standby "
+                   f"{standby:g} W, so a machine idling at its standby never "
+                   f"finishes: using {finish:g} W")
+        elif finish < standby:
+            msg = (f"finish threshold {finish:g} W is below standby "
+                   f"{standby:g} W, kept as set: a program counts as "
+                   f"finished only once the power stays below {finish:g} W")
+        else:
+            return
+        self.hass.log(f"AURUM SD [{name}]: {msg}")
 
     # ══════════════════════════════════════════════════════════════
     #  MAIN UPDATE (HELIOS-compatible)
