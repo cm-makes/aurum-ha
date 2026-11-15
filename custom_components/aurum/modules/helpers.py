@@ -38,18 +38,36 @@ def get_float(hass, entity_id, default=0.0):
 # (the pre-1.15.4 behaviour).
 _POWER_TO_W = {"W": 1.0, "kW": 1000.0, "MW": 1_000_000.0, "mW": 0.001}
 _ENERGY_TO_KWH = {"Wh": 0.001, "kWh": 1.0, "MWh": 1000.0}
-# Price entities are documented as ct/kWh. The native Tibber integration
-# (and most EUR sources) report EUR/kWh, which made every price look cheap.
-_PRICE_TO_CT = {"EUR/kWh": 100.0, "€/kWh": 100.0}
+# Price entities are documented as ct/kWh: the hundredth of the currency
+# (cent, Rappen, öre, pence). Sources that report a whole currency unit per
+# kWh made every price look cheap: native Tibber (EUR/kWh, NOK/kWh), Nord
+# Pool (SEK/kWh, DKK/kWh), Innostrom (CHF/kWh). A price per MWh (85 EUR/MWh
+# = 8.5 ct/kWh) looked 10x too dear. Only currencies divided into 100 are
+# scaled; a unit already in the hundredth (ct/kWh, Rp./kWh) or without a
+# currency passes through.
+_PRICE_CURRENCIES = frozenset({
+    "EUR", "€", "CHF", "GBP", "£", "USD", "$", "SEK", "NOK", "DKK", "KR",
+    "PLN", "CZK", "AUD", "NZD", "CAD",
+})
+_PRICE_PER_ENERGY = {"KWH": 100.0, "MWH": 0.1}
 
 
-def _get_scaled(hass, entity_id, default, factors):
+def _price_to_ct(unit):
+    """Factor from a price unit to ct/kWh, or None to keep the value."""
+    currency, slash, energy = "".join(unit.split()).upper().partition("/")
+    if not slash or currency not in _PRICE_CURRENCIES:
+        return None
+    return _PRICE_PER_ENERGY.get(energy)
+
+
+def _get_scaled(hass, entity_id, default, factor_of):
+    """Read a numeric state and scale it by factor_of(unit), if known."""
     value = get_float(hass, entity_id, default=None)
     if value is None:
         return default
     unit = hass.get_state(entity_id, attribute="unit_of_measurement")
     if isinstance(unit, str):
-        factor = factors.get(unit.strip())
+        factor = factor_of(unit.strip())
         if factor is not None:
             # Round away float noise: 0.28 EUR * 100 must compare equal to
             # a max_price of 28 ct, not as 28.000000000000004.
@@ -59,17 +77,17 @@ def _get_scaled(hass, entity_id, default, factors):
 
 def get_power_w(hass, entity_id, default=0.0):
     """Read a power sensor in W, converting kW / MW / mW."""
-    return _get_scaled(hass, entity_id, default, _POWER_TO_W)
+    return _get_scaled(hass, entity_id, default, _POWER_TO_W.get)
 
 
 def get_energy_kwh(hass, entity_id, default=0.0):
     """Read an energy sensor in kWh, converting Wh / MWh."""
-    return _get_scaled(hass, entity_id, default, _ENERGY_TO_KWH)
+    return _get_scaled(hass, entity_id, default, _ENERGY_TO_KWH.get)
 
 
 def get_price_ct(hass, entity_id, default=None):
-    """Read a price sensor in ct/kWh, converting EUR/kWh."""
-    return _get_scaled(hass, entity_id, default, _PRICE_TO_CT)
+    """Read a price sensor in ct/kWh, converting <currency>/kWh and /MWh."""
+    return _get_scaled(hass, entity_id, default, _price_to_ct)
 
 
 def get_state_safe(hass, entity_id, default=None):

@@ -95,6 +95,9 @@ CONDITION_OP_ABOVE = "above"
 # ── Device config keys: Price-aware scheduling ──────────────────
 CONF_DEV_PRICE_MODE = "price_mode"
 CONF_DEV_MAX_PRICE = "max_price"
+# Upper limit for max_price in the hundredth of the currency per kWh.
+# 1000, not 100: Nordic prices in öre/øre often exceed 100.
+MAX_PRICE_LIMIT = 1000
 
 # ── Device config keys: PV-power gate ───────────────────────────
 # Raw-PV turn-on: run the device whenever actual PV generation is at

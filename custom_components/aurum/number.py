@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
+    MAX_PRICE_LIMIT,
     PRICE_MODE_CHEAP_GRID,
     PRICE_MODE_CHEAP_GRID_SOC,
 )
@@ -215,7 +216,7 @@ class AurumDeviceMaxPrice(_AurumRestoreNumber):
     """
 
     _attr_native_min_value = 0
-    _attr_native_max_value = 100
+    _attr_native_max_value = MAX_PRICE_LIMIT
     _attr_native_step = 1
     _attr_native_unit_of_measurement = "ct/kWh"
     _attr_mode = NumberMode.BOX

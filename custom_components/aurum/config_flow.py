@@ -26,6 +26,7 @@ _RESERVED_SLUGS = {
 
 from .const import (
     DOMAIN,
+    MAX_PRICE_LIMIT,
     CONF_GRID_POWER_ENTITY,
     CONF_PV_POWER_ENTITY,
     CONF_BATTERY_SOC_ENTITY,
@@ -474,7 +475,7 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             CONF_DEV_MAX_PRICE,
             default=d.get(CONF_DEV_MAX_PRICE, 0),
         ): selector.NumberSelector(selector.NumberSelectorConfig(
-            min=0, max=100, step=1,
+            min=0, max=MAX_PRICE_LIMIT, step=1,
             unit_of_measurement="ct/kWh",
             mode=selector.NumberSelectorMode.BOX)),
         vol.Optional(

@@ -686,13 +686,14 @@ class AurumPanel extends HTMLElement {
       priceInput = document.createElement("input");
       priceInput.type = "number";
       priceInput.min = "0";
-      priceInput.max = "100";
+      priceInput.max = "1000";
       priceInput.step = "1";
       priceInput.className = "aurum-num";
       priceInput.addEventListener("change", () => {
         // Empty/invalid input must NOT silently commit 0 ("never buy grid")
         if (priceInput.value === "") return;
-        const v = Math.min(100, Math.max(0, Number(priceInput.value)));
+        // 1000: Nordic prices in öre/øre often exceed 100 per kWh
+        const v = Math.min(1000, Math.max(0, Number(priceInput.value)));
         this._callService("number", "set_value", {
           entity_id: e.maxPrice,
           value: v,
