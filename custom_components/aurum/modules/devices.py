@@ -54,6 +54,13 @@ _LOGGER = logging.getLogger(__name__)
 # logged or published.
 _BLIND_DEFICIT_W = -1_000_000.0
 
+# Pending turn-off reasons that do not depend on the measured deficit: the
+# shedding stage executes them even when the meter shows no import. Other
+# reasons (excess_deficit, soc_grid_deficit, price_no_longer_cheap) stay
+# deficit-limited, so a price-ended device that surplus still covers keeps
+# running instead of an off/on.
+_FORCED_STOP_REASONS = frozenset({"pv_below_threshold"})
+
 # User-facing push/persistent notification texts. The HA config-flow
 # strings live in strings.json/translations, but these runtime
 # notifications are emitted from control-loop code, so they carry their
@@ -699,6 +706,18 @@ class DeviceManager:
 
             deficit = -(dec_excess_raw - newly_allocated)
 
+            # Stage 0: stops decided by the device's own rule act whatever
+            # the meter shows. The PV-gate release (PV below its threshold,
+            # or SOC below the device's threshold) used to wait for a visible
+            # deficit, so a gated pool pump kept running while the battery
+            # fed it and the meter showed no import (audit #5). Their power
+            # counts as freed before any deficit victim is picked.
+            forced = [(dev, self._get_device_power(dev))
+                      for dev in candidates
+                      if dev["_pending_off"] in _FORCED_STOP_REASONS]
+            victims = [dev for dev in candidates
+                       if dev["_pending_off"] not in _FORCED_STOP_REASONS]
+
             # The deficit is measured (excess_raw), so account freed power
             # by each victim's *actual* draw (falling back to nominal when
             # no power sensor is configured). This keeps the basis consistent
@@ -706,8 +725,8 @@ class DeviceManager:
             # would over-/under-shed for modulating loads (e.g. heat pumps).
             # Stage 1: greedy pick until deficit is covered.
             planned = []
-            freed = 0.0
-            for dev in candidates:
+            freed = sum(power_w for _dev, power_w in forced)
+            for dev in victims:
                 if freed >= deficit:
                     break
                 power_w = self._get_device_power(dev)
@@ -730,7 +749,10 @@ class DeviceManager:
                 # Re-sort by priority ascending for deterministic shed order.
                 planned.sort(key=lambda x: x[0]["priority"])
 
-            # Stage 3: actually turn off the selected devices.
+            # Stage 3: actually turn off the selected devices (forced stops
+            # always; Stage 2 only ever drops deficit victims).
+            planned = sorted(forced + planned,
+                             key=lambda x: x[0]["priority"])
             for dev, _power_w in planned:
                 self._turn_off(dev, now, excess, battery_soc,
                                dev["_pending_off"])
