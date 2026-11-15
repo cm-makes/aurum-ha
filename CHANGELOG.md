@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.3] - 2026-11-15
+
+### Changed
+- **README** leads with washing machines and dishwashers (startup detection) and with deadlines, and says what AURUM doesn't do: no EV charging, no battery or inverter control.
+
 ### Fixed
 - **Price sensors in CHF, SEK, NOK, DKK, GBP and other currencies were read 100 times too low** ([#35](https://github.com/cm-makes/aurum-ha/discussions/35)). AURUM compares prices in ct/kWh, the hundredth of the currency, but converted only EUR/kWh and €/kWh. A Swiss price sensor in CHF/kWh (for example from the Innostrom integration) reporting `0.28` was read as 0.28 Rappen, so with a *Maximum price* of 20 every price looked cheap and a cheap-grid device ran on grid around the clock. Nord Pool and the native Tibber integration in SEK, NOK or DKK had the same problem. AURUM now converts a whole currency unit per kWh (EUR, CHF, GBP, SEK, NOK, DKK, kr, PLN, CZK, USD, AUD, NZD, CAD and the symbols €, £, $) by 100 and a price per MWh by 0.1. A sensor already in the hundredth (ct/kWh, Rp./kWh) or without a unit is used as before. *Maximum price* now goes up to 1000 instead of 100, in the setup dialog, as an entity and in the panel, because prices in öre or øre often exceed 100 per kWh.
 

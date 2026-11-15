@@ -2,7 +2,7 @@
   <img src="custom_components/aurum/brand/logo.png" alt="AURUM – Solar Surplus Optimizer" width="400">
 </p>
 
-<h3 align="center">Automatically route your PV surplus to household devices.<br>Zero YAML. Battery-aware. Forecast-smart. Price-aware.</h3>
+<h3 align="center">Run your washing machine, dishwasher, pool pump and water heater on solar surplus.<br>Press Start whenever you like. AURUM waits for the sun.</h3>
 
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=cm-makes&repository=aurum-ha&category=integration"><img src="https://img.shields.io/badge/Marketplace-Default-41BDF5.svg" alt="In the Home Assistant Marketplace"></a>
@@ -24,9 +24,11 @@
 
 ---
 
-**AURUM** (*Latin: Gold*) turns your solar surplus into gold: it runs your pool pump, water heater, washing machine and other household devices on excess PV power — priority-based, battery-aware, and fully configurable through the Home Assistant UI.
+**AURUM** (*Latin: Gold*) runs the devices in your house on solar surplus: washing machine, dishwasher, pool pump, water heater, heating rod. Anything on a smart plug or relay. Press Start on the washer in the morning: with a power-metering plug, AURUM holds the program until the sun delivers. Need it done by 18:00? Switch on *Must run today*, and AURUM starts it on grid in time if the sun doesn't come.
 
 > **No coding required.** Install AURUM from the Home Assistant Marketplace, pick your grid meter, add your devices in the UI — done.
+>
+> **What AURUM doesn't do:** charge electric cars, or control your battery or inverter. It reads your grid meter (and your battery level, if you have one) and switches plugs and relays.
 
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=cm-makes&repository=aurum-ha&category=integration"><img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open AURUM in the Home Assistant Marketplace"></a>
@@ -42,24 +44,27 @@
 
 ## Why AURUM?
 
-- **For the devices you already have.** Pool pump, water heater, heating rod, IR heaters, washing machine, dishwasher: anything behind a switchable plug or relay. AURUM switches them on surplus, highest priority first, and off again when the surplus drops. No YAML, no blueprints, no extra cards.
-- **It tells you why.** A banner in the panel and the *Current decision* sensor say in plain words why each device is running, waiting or off: waiting for surplus, battery below reserve, run condition not met. You can use the sensor in your own automations.
-- **Battery, forecast and price in one place.** Let the battery charge first, use the Solcast or Open-Meteo forecast so it still reaches its target, and use cheap hours from Tibber, Nordpool, aWATTar or EPEX Spot when the sun isn't enough.
-- **Washers and dishwashers that finish on time.** With a plug that measures power, AURUM notices when you press Start, holds the program until there is surplus, then switches the plug back on (the appliance has to resume its program when power returns). Switch on *Must run today* with a deadline, and AURUM starts it on grid in time if the sun doesn't come.
-- **Works on any installation.** It's a regular integration, not an add-on, so it runs on every Home Assistant installation type and needs no automations of your own.
+- **Press Start, AURUM waits for the sun.** Load the washer or dishwasher and press Start whenever it suits you. With a plug that measures power, AURUM notices the start, holds the program until there is surplus, then switches the plug back on. The appliance has to resume its program when power returns. Once the program runs, AURUM doesn't cut it, not even when the battery reaches its minimum.
+- **Done by the time you need it.** Switch on *Must run today* and set a deadline. If the sun doesn't deliver, AURUM starts the device on grid just in time. This works for the pool pump and the water heater too, sized to the runtime you set.
+- **For the devices you already have.** Pool pump, water heater, heating rod, IR heaters: anything behind a switchable plug or relay. AURUM switches them on surplus, highest priority first, and off again when the surplus drops. A run condition such as *tank below 55 °C* stops the water heater once the tank is hot.
+- **It tells you why.** A banner in the panel and the *Current decision* sensor say in plain words why each device is running, waiting or off: waiting for surplus, battery below reserve, run condition not met.
+- **Battery, forecast and price, if you have them.** Let the battery charge first, use the Solcast or Open-Meteo forecast so it still reaches its target, and use cheap hours from Tibber, Nordpool, aWATTar or EPEX Spot when the sun isn't enough.
+- **Small and simple.** A handful of entities per device, one panel, no YAML, no blueprints, no extra cards. It's a regular integration, not an add-on, so it runs on every Home Assistant installation type.
 
 <details>
 <summary>🇩🇪 <b>Kurz auf Deutsch</b></summary>
 
 <br>
 
-AURUM nutzt deinen PV-Überschuss für Geräte im Haus: Poolpumpe, Warmwasser-Boiler, Heizstab, Infrarotheizung, Waschmaschine, Spülmaschine. Alles, was an einer schaltbaren Steckdose oder einem Relais hängt.
+AURUM lässt Waschmaschine, Spülmaschine, Poolpumpe und Warmwasser-Boiler mit deinem PV-Überschuss laufen. Alles, was an einer schaltbaren Steckdose oder einem Relais hängt.
 
+- **Start drücken, AURUM wartet auf die Sonne:** Mit einer Steckdose, die die Leistung misst, erkennt AURUM, wenn du Start drückst, und hält das Programm an, bis genug Sonne da ist. Das Gerät muss sein Programm fortsetzen, wenn der Strom zurückkommt. Läuft das Programm, unterbricht AURUM es nicht mehr, auch nicht, wenn die Batterie ihren Mindest-Ladestand erreicht.
+- **Pünktlich fertig:** Mit *Muss heute* und *Fertig bis* startet AURUM notfalls rechtzeitig mit Netzstrom. Das geht auch für Poolpumpe und Boiler.
 - **Einrichtung komplett in der Oberfläche:** Netzzähler auswählen, Geräte anlegen, Prioritäten setzen. Kein YAML.
 - **Batterie zuerst, wenn du willst:** Mindest-Ladestand pro Gerät, Batterie-Vorrang und PV-Prognose (Solcast, Open-Meteo), damit die Batterie ihr Ladeziel trotzdem erreicht.
 - **Dynamische Stromtarife:** Geräte laufen auf Wunsch auch bei günstigem Netzstrom (Tibber, Nordpool, aWATTar, EPEX Spot).
-- **Waschmaschine und Spülmaschine:** Mit einer Steckdose, die die Leistung misst, erkennt AURUM, wenn du Start drückst, und hält das Programm an, bis genug Sonne da ist. Das Gerät muss sein Programm fortsetzen, wenn der Strom zurückkommt. Mit *Muss heute* und *Fertig bis* startet AURUM notfalls rechtzeitig mit Netzstrom.
 - **Erklärt jede Entscheidung:** Das Panel und der Sensor *Current Decision* zeigen, warum ein Gerät läuft, wartet oder aus ist.
+- **Nicht dabei:** E-Auto laden, Batterie oder Wechselrichter steuern. AURUM liest den Netzzähler (und den Akkustand) und schaltet Steckdosen und Relais.
 - Oberfläche und Dashboard auf Deutsch und Englisch.
 
 Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach **AURUM** suchen, **Installieren**. Fragen kannst du gerne auch auf Deutsch in den [Discussions](https://github.com/cm-makes/aurum-ha/discussions) stellen.
@@ -72,6 +77,8 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 
 | Feature | Description |
 |---|---|
+| **Startup Detection** | Detects washing machine / dishwasher program start, pauses until PV surplus is available, resumes automatically |
+| **Must-run-today & Deadline** | Starts a device on grid just in time if the sun doesn't deliver by your deadline |
 | **Built-in Dashboard** | A self-adapting **AURUM** sidebar panel ships with the integration — no YAML, no extra cards. Add or remove a device and it updates automatically |
 | **PV Surplus Steering** | Turns devices on/off based on available excess power |
 | **Battery Priority** | Optional: only genuine grid export counts as surplus, so the battery charges first |
@@ -80,13 +87,12 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **PV Power Gate** | Optional per-device threshold: run on raw PV generation above a limit (with healthy SOC), bypassing the budget cap |
 | **Daily Reset Hour** | Per-device reset hour for runtime counters — align a cheap-grid device to the solar day |
 | **Priority-Based** | Higher priority devices get power first |
-| **Startup Detection** | Detects washing machine / dishwasher program start, pauses until PV surplus is available, resumes automatically |
 | **PV Forecast Budget** | Uses Solcast or Open-Meteo forecast to limit device runtime so the battery reliably reaches target SOC |
 | **Price-Aware Scheduling** | Devices can run on cheap grid power (Tibber, Nordpool, aWATTar, EPEX Spot) — even without PV surplus |
 | **Per-Device SOC Threshold** | Each device can have its own minimum battery level |
 | **Energy Tracking** | Per-device kWh/day tracking, compatible with HA Energy Dashboard |
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
-| **Manual Override & Must-run-today** | Auto-created switches per device for manual control and deadline forcing |
+| **Manual Override** | Auto-created switch per device: AURUM hands the device back to you |
 | **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
 | **State Persistence** | Device runtimes, energy counters and budget safety factor survive restarts |
 | **HA Diagnostics** | Download a full JSON snapshot for bug reports |
