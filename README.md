@@ -94,7 +94,7 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
 | **Manual Override** | Auto-created switch per device: AURUM hands the device back to you |
 | **Hysteresis & Debounce** | Prevents rapid switching with configurable margins |
-| **State Persistence** | Device runtimes, energy counters and budget safety factor survive restarts |
+| **State Persistence** | Device runtimes, energy counters, the budget safety factor and the learned household load survive restarts |
 | **HA Diagnostics** | Download a full JSON snapshot for bug reports |
 | **No Vendor Lock-In** | Works with any grid meter, any battery, any smart plug, any price sensor |
 
@@ -195,6 +195,15 @@ In **Configure > Energy & Battery**:
 | `pv_forecast_today_entity` | Sensor with **hourly forecast data** as attribute (e.g. Solcast "Forecast Today" with `forecast` attribute) |
 
 > If your forecast entity only provides a daily total without hourly data, AURUM uses a fallback sunset estimate (19:00) for budget calculations.
+
+The budget also subtracts what your household uses until sunset. AURUM learns this per hour of the day: house consumption minus AURUM's own devices, averaged over each hour. An hour uses the learned value once it has data from 3 days; until then AURUM assumes 500 W. Loads that AURUM does not switch, such as a wallbox or a heat pump, count as household load. Short loads such as a kettle count in full; only single readings beyond ±30 kW are ignored as glitches. The learned values survive restarts.
+
+Learning needs:
+
+- a PV **power** sensor that reports the total PV production of all PV systems in the house (every inverter, including a balcony plant). Production it doesn't see is missing from the house consumption, so the learned load would come out too low. With a hybrid inverter, use its PV (DC input) power, not its AC output: the AC output already includes the battery, which would then be counted twice.
+- with a battery (any battery sensor configured), **both** the battery charge and the battery discharge power sensor. Each reports one direction only, so with just one of them the other direction goes unseen.
+
+AURUM pauses learning while the grid meter, the PV sensor or a battery power sensor has failed, while a device that is on has no working power sensor, and while a device's switch is unavailable or missing (it may be on). The diagnostics (`budget` → `consumption_learning`) show whether learning is active and, if not, why, naming the device.
 
 ### Price-Aware Scheduling (optional)
 
@@ -320,7 +329,7 @@ A meter that drops out or freezes must not leave devices running on grid power. 
 | **PV power**: unavailable, or frozen above 0 W | Counts as 0 W, so the solar power threshold (PV gate) stays closed. |
 | **Price** sensors: no data for 30 min | The price counts as not cheap: cheap-grid runs end and none start. Shorter gaps keep the current state. |
 | A device's **switch**: unavailable, or the entity is missing | No commands, no power reserved, no runtime counted; startup detection pauses. Shown as `unavailable` with reason `switch_unavailable`. When the switch reports again, AURUM checks it: off means the run has ended. A switch in state `unknown` counts as off and is still commanded, as before. |
-| A startup-detection device's **power sensor**: unavailable | No new program is detected, and a running program is not marked finished (only *Max runtime* can end it meanwhile). Quiet time before the gap does not count: a finish needs *Finish time* of observed standby power. |
+| A startup-detection device's **power sensor**: unavailable | No new program is detected, and a running program is not marked finished (only *Max runtime* can end it meanwhile). Quiet time before the gap does not count: a finish needs *Finish time* of observed power below the *Finish threshold*. |
 
 Details:
 - A single missed reading is bridged with the last value. `nan` and `inf` count as unavailable.
@@ -333,9 +342,11 @@ Details:
 
 | Situation | AURUM behavior |
 |-----------|---------------|
-| Override switch **ON** | AURUM ignores the device completely — no turn-on, no turn-off |
+| Override switch **ON** | AURUM never switches the device — no turn-on, no turn-off |
 | Device physically on, override switch **OFF** | AURUM applies normal turn-off logic (e.g. battery protection) |
 | AURUM turned the device on | Full management — turns off when surplus drops |
+
+With *Startup detection* and a power sensor, AURUM keeps reading the power while the override is on. A program you run meanwhile shows as `running` (reason `running`) and its end is detected as usual. If you switch the plug off while the program is drawing power, the program is interrupted, not finished: the off time counts neither as runtime nor toward *Finish time*, only *Max runtime* can end it meanwhile, and the same program continues when you switch the plug back on. If the power was already below the *Finish threshold* at AURUM's last reading, for example because the program had ended and you unplugged it after unloading, the off time counts toward *Finish time* (but not as runtime), so the end is detected as usual. AURUM reads it the same way when you pause the program at the appliance and then switch the plug off: unless you switch the plug back on and resume within *Finish time*, the program counts as finished. The *finished* message reports the runtime AURUM counted for the program, without the time the plug was off under the override. When you switch the override off, a program AURUM has seen running under the override runs to its end untouched. AURUM has seen it once it has drawn more than the *Start threshold* for the *Detection time*. That takes at least two readings. AURUM reads the devices every second update cycle (every 30 s with the default 15 s update interval), so allow up to a minute before you switch the override off. This also works while the battery is at its reserve. A program you start or resume just before switching the override off is handled like any program start: AURUM pauses it until there is surplus. A paused program that isn't drawing power stays paused until there is surplus. Without a power sensor AURUM can't tell a program from standby, so it adopts no program under the override.
 
 ---
 
@@ -439,6 +450,7 @@ The `devices` attribute lists every device with a machine-readable `reason`:
 | `solar_pv` | Running via the raw-PV gate (`pv_power_threshold`) |
 | `cheap_grid` | Running on cheap grid power |
 | `manual_override` | You took over — AURUM hands off |
+| `running` | Running, but not for surplus, cheap power or a deadline (e.g. a program you ran under Manual override) |
 | `forced_deadline` | Deadline start (must finish today) |
 | `runtime_done` / `program_done` | Done for today |
 | `program_standby` | Waiting for you to start a program (washer/dishwasher) |
@@ -494,7 +506,7 @@ Download a full JSON snapshot of AURUM's internal state for troubleshooting:
 
 **Settings > Devices & Services > AURUM > Download Diagnostics**
 
-The file contains: energy values, battery state, budget info, device states, override switch states, and coordinator health.
+The file contains: energy values, battery state, budget info (including the learned household load and why its learning is paused, if it is), device states, override switch states, and coordinator health.
 
 ---
 

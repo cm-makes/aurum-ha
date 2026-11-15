@@ -1,7 +1,7 @@
 """AURUM – Constants and configuration keys."""
 
 DOMAIN = "aurum"
-VERSION = "1.16.3"
+VERSION = "1.16.4"
 
 PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "time"]
 
@@ -146,7 +146,11 @@ DEFAULT_DEV_RESIDUAL_POWER = 100
 DEFAULT_DEV_SD_POWER_THRESHOLD = 5
 DEFAULT_DEV_SD_DETECTION_TIME = 5
 DEFAULT_DEV_SD_STANDBY_POWER = 3
-DEFAULT_DEV_SD_FINISH_POWER = 3
+# Between standby and the start threshold: the finish check is strict
+# (power < finish), so a threshold at standby is never reached by an idle
+# device, and one above the start threshold re-detects a finished machine.
+# See devices.sd_finish_threshold().
+DEFAULT_DEV_SD_FINISH_POWER = 4
 DEFAULT_DEV_SD_FINISH_TIME = 600
 DEFAULT_DEV_SD_MAX_RUNTIME = 10800
 

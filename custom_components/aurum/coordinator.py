@@ -24,6 +24,7 @@ from .modules.budget import BudgetManager
 from .modules.devices import DeviceManager
 from .modules.pricing import PricingManager
 from .modules.advisor import AdvisorManager
+from .modules.base_load import BaseLoadSampler
 from .modules.helpers import CSVLogger, get_float
 from .modules.persistence import PersistenceManager
 
@@ -133,14 +134,24 @@ class AurumCoordinator(DataUpdateCoordinator):
         self.devices.pricing = self.pricing  # expose to device manager
         self.advisor = AdvisorManager(self.bridge, self.config)
         self.persistence = PersistenceManager(self.bridge, self.config)
+        # Learns the budget's hourly household load (used with a budget).
+        self.base_load = BaseLoadSampler(self.config)
+        if self.budget and not self.base_load.enabled:
+            _LOGGER.info(
+                "AURUM budget: household load is not learned (%s), the "
+                "budget assumes %s W per hour",
+                self.base_load.disabled_reason,
+                self.budget.avg_consumption_w)
 
         # ── Daily adaptation tracking ──────────────────────────────
         self._last_adapt_day: int = -1          # day of year for 17:00 adapt
         self._last_weather_learning_hour: int = -1  # hour for hourly learning
-        self._last_consumption_update_day: int = -1  # day for 23:55 profile
 
         # ── Device state cache (used on odd cycles) ────────────────
         self._cached_device_states: list[dict] = []
+        # False after a failed device step until the next good one: odd
+        # cycles then reuse a stale cache (see Step 3).
+        self._device_step_ok = True
 
         # ── CSV loggers (initialized in async_setup) ───────────────
         self.action_csv = None
@@ -229,6 +240,20 @@ class AurumCoordinator(DataUpdateCoordinator):
             shared["advisor"] = self.advisor.update(shared)
         except Exception as e:
             _LOGGER.warning("Advisor error: %s", e)
+
+    def _learn_base_load(self, shared):
+        """Sample the household load without AURUM's devices (after the
+        device step, which sets device_power_total). At each hour
+        boundary the finished hour goes into the budget's consumption
+        profile, so a restart loses at most the hour in progress. Never
+        raises into the control loop."""
+        try:
+            finished = self.base_load.sample(shared)
+            if finished:
+                self.budget.update_consumption_profile(
+                    {"hourly_consumption_w": finished})
+        except Exception as e:  # noqa: BLE001 – learning is best effort
+            _LOGGER.warning("Base load error: %s", e)
 
     def _grid_ready(self):
         """The grid meter reports a number."""
@@ -367,15 +392,12 @@ class AurumCoordinator(DataUpdateCoordinator):
                         self.budget.update_weather_learning(shared)
                         self._last_weather_learning_hour = current_hour
 
-                    # Late night: update consumption profile (23:55)
-                    if (current_hour == 23 and now.minute >= 55
-                            and adapt_day != self._last_consumption_update_day):
-                        self.budget.update_consumption_profile(shared)
-                        self._last_consumption_update_day = adapt_day
+                    # The consumption profile is fed at each hour boundary
+                    # (step 4b), not here: it needs this cycle's device power.
 
                     # Daily: safety-factor adaptation at 17:00
-                    # Use a 5-minute window (like the 23:55 job) so a larger
-                    # configured update_interval can't step over a 60s window
+                    # Use a 5-minute window so a larger configured
+                    # update_interval can't step over a 60s window
                     # and skip the daily adaptation. _last_adapt_day still
                     # guards against running it more than once per day.
                     if (current_hour == 17 and now.minute < 5
@@ -414,7 +436,9 @@ class AurumCoordinator(DataUpdateCoordinator):
                         self.devices.update, shared)
                     self._cached_device_states = shared.get(
                         "device_states", [])
+                    self._device_step_ok = True
                 except Exception as e:
+                    self._device_step_ok = False
                     _LOGGER.warning("Devices error: %s", e)
             else:
                 shared["device_states"] = self._cached_device_states
@@ -423,12 +447,20 @@ class AurumCoordinator(DataUpdateCoordinator):
                 (shared["devices_on"], shared["device_power_total"],
                  shared["cheap_grid_active"]) = summarize_cached_states(
                     self._cached_device_states)
+                if not self._device_step_ok:
+                    # The cache is from before the failing device step:
+                    # the base-load sampler must not learn from it.
+                    shared["base_load_device_data_stale"] = True
 
             # ── Step 4: Update device_states cache ─────────────────
             # Keep the previous list when the device step failed: an empty
             # list dropped every per-device sensor (energy too) to 0.
             if "device_states" in shared:
                 self.device_states = shared["device_states"]
+
+            # ── Step 4b: Household base load (budget only) ─────────
+            if self.budget:
+                self._learn_base_load(shared)
 
             # ── Step 5: CSV flush ──────────────────────────────────
             if self.action_csv and self.cycle % 2 == 0:
