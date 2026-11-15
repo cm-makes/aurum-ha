@@ -333,9 +333,11 @@ Details:
 
 | Situation | AURUM behavior |
 |-----------|---------------|
-| Override switch **ON** | AURUM ignores the device completely — no turn-on, no turn-off |
+| Override switch **ON** | AURUM never switches the device — no turn-on, no turn-off |
 | Device physically on, override switch **OFF** | AURUM applies normal turn-off logic (e.g. battery protection) |
 | AURUM turned the device on | Full management — turns off when surplus drops |
+
+With *Startup detection*, AURUM keeps reading the power while the override is on. A program you run meanwhile shows as `running` (reason `running`) and its end is detected as usual. When you switch the override off, a running program runs to its end untouched. A paused program that isn't drawing power stays paused until there is surplus.
 
 ---
 
@@ -439,6 +441,7 @@ The `devices` attribute lists every device with a machine-readable `reason`:
 | `solar_pv` | Running via the raw-PV gate (`pv_power_threshold`) |
 | `cheap_grid` | Running on cheap grid power |
 | `manual_override` | You took over — AURUM hands off |
+| `running` | Running, but not for surplus, cheap power or a deadline (e.g. a program you ran under Manual override) |
 | `forced_deadline` | Deadline start (must finish today) |
 | `runtime_done` / `program_done` | Done for today |
 | `program_standby` | Waiting for you to start a program (washer/dishwasher) |
