@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Download count in the Marketplace.** Every release now carries `aurum.zip` (built by the *Release ZIP* workflow from `tools/build_release_zip.py`), and `hacs.json` sets `zip_release`, so the Marketplace installs that file and shows how often it was downloaded. The count is per release: it starts at 0 with every new version. Releases up to 1.16.1 have no ZIP and still install from the source archive.
+
 ## [1.16.1] - 2026-11-15
 
 ### Fixed
