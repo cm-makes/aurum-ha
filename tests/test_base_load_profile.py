@@ -15,7 +15,8 @@ PV budget always assumed a flat 500 W household load.
   not.
 - Coordinator end to end: real update cycles learn the hour and keep it
   across a restart; diagnostics name the device that pauses learning.
-- The PV power sensor text asks for the total AC output of all PV systems.
+- The PV power sensor text asks for the total PV production of all PV
+  systems and, with a hybrid inverter, its PV (DC input) power.
 """
 
 import asyncio
@@ -34,6 +35,7 @@ from custom_components.aurum.const import (
 )
 from custom_components.aurum.modules.base_load import (
     MAX_PLAUSIBLE_W,
+    SKIP_ENERGY_STEP,
     SKIP_IMPLAUSIBLE,
 )
 
@@ -158,6 +160,26 @@ class TestSampler:
                         battery_charge_power_entity=None,
                         battery_discharge_power_entity=None).enabled
 
+        # Without a SOC sensor (the config flow allows that) one battery
+        # power sensor still means a battery whose other direction goes
+        # unseen: PV 300 W + an unseen 500 W discharge would be learned
+        # as 300 W (true load 800 W), and those hours would be used once
+        # a SOC sensor is added.
+        no_soc_charge = _sampler(battery_soc_entity=None,
+                                 battery_discharge_power_entity=None)
+        assert not no_soc_charge.enabled
+        assert no_soc_charge.disabled_reason == (
+            "no battery discharge power sensor")
+        _feed(no_soc_charge, T10, 60, pv=300.0, grid=0.0, net=0.0,
+              devices=0.0, device_states=[])
+        assert _close_hour(no_soc_charge) is None
+        no_soc_discharge = _sampler(battery_soc_entity=None,
+                                    battery_charge_power_entity=None)
+        assert no_soc_discharge.disabled_reason == (
+            "no battery charge power sensor")
+        # Both power sensors without a SOC sensor are enough.
+        assert _sampler(battery_soc_entity=None).enabled
+
     @pytest.mark.parametrize("extra", [
         {"surplus_blind": True},
         {"input_health": {"grid": INPUT_UNAVAILABLE}},
@@ -169,6 +191,9 @@ class TestSampler:
         {"input_health": {"battery_discharge": INPUT_STALE}},
         # The device step failed this cycle.
         {"device_power_total": None},
+        # The energy step failed before it published input health: the
+        # powers are missing and would read as 0 W.
+        {"input_health": None},
     ])
     def test_unhealthy_cycles_give_no_sample(self, extra):
         s = _sampler()
@@ -326,6 +351,7 @@ class TestSkipReasons:
          "battery discharge power sensor unavailable"),
         ({"surplus_blind": True}, "surplus blind"),
         ({"device_power_total": None}, "device step failed"),
+        ({"input_health": None}, SKIP_ENERGY_STEP),
         ({"device_states": [{"name": "Heater", "power": 0}]},
          "devices starting up"),
         ({"grid": 65535.0}, SKIP_IMPLAUSIBLE),
@@ -567,6 +593,26 @@ class TestCoordinator:
         assert learning["last_hour"]["learned_w"] is None
         assert learning["last_hour"]["skipped_cycles"] == {UNREACHABLE: 12}
 
+    def test_failed_energy_step_learns_nothing(
+            self, monkeypatch, hass, tmp_path, setup):
+        # EnergyManager.update raises before it publishes its readings:
+        # PV, grid and battery are missing. With no AURUM device drawing
+        # power, every cycle would read as a 0 W house and the hour would
+        # be learned as 0 W, which inflates the budget.
+        setup = {**setup, "devices": []}
+        coord = _coordinator(monkeypatch, hass, tmp_path, setup)
+
+        def _broken(shared):
+            raise RuntimeError("energy step broke")
+
+        monkeypatch.setattr(coord.energy, "update", _broken)
+        start = datetime(2026, 6, 15, 9, 0)
+        _run_cycles(coord, start, start + timedelta(hours=2), 300)
+        assert coord.budget._consumption_profile[10] == pytest.approx(500.0)
+        info = coord.base_load.info()
+        assert info["last_hour"]["hour"] == 10
+        assert info["last_hour"]["skipped_cycles"] == {SKIP_ENERGY_STEP: 12}
+
 
 # ══════════════════════════════════════════════════════════════════
 #  The PV power sensor must cover all PV production
@@ -581,25 +627,47 @@ def _pv_descriptions(path):
             if "pv_power_entity" in step.get("data_description", {})]
 
 
+_EN_PHRASES = (
+    "the total PV production of all PV systems in the house (every "
+    "inverter, including a balcony plant)",
+    "With a hybrid inverter, use its PV (DC input) power, not its AC "
+    "output",
+)
+
+
 class TestPvSensorText:
     """An unmetered balcony plant or a second inverter is missing from
     the house consumption, so the learned load comes out too low: the
-    field and the README ask for the total AC output."""
+    field and the README ask for the total PV production. A hybrid
+    inverter's AC output already includes the battery (PV 3000 W DC,
+    charging 1500 W: AC 1500 W), so the battery would count twice: they
+    ask for its PV (DC input) power, never for an AC output."""
 
-    @pytest.mark.parametrize("path, phrase", [
-        ("custom_components/aurum/strings.json",
-         "total AC output of all PV systems in the house"),
-        ("custom_components/aurum/translations/en.json",
-         "total AC output of all PV systems in the house"),
-        ("custom_components/aurum/translations/de.json",
-         "gesamte AC-Leistung aller PV-Anlagen im Haus"),
+    @pytest.mark.parametrize("path, phrases", [
+        ("custom_components/aurum/strings.json", _EN_PHRASES),
+        ("custom_components/aurum/translations/en.json", _EN_PHRASES),
+        ("custom_components/aurum/translations/de.json", (
+            "die gesamte PV-Erzeugung aller PV-Anlagen im Haus",
+            "(alle Wechselrichter, auch ein Balkonkraftwerk)",
+            "Bei einem Hybrid-Wechselrichter nimm dessen PV-Leistung "
+            "(DC-Eingang), nicht die AC-Leistung",
+        )),
     ])
-    def test_field_description(self, path, phrase):
+    def test_field_description(self, path, phrases):
         texts = _pv_descriptions(REPO / path)
         assert len(texts) == 2      # setup and options
-        assert all(phrase in text for text in texts)
+        for text in texts:
+            for phrase in phrases:
+                assert phrase in text
+            # The AC output is only named as what not to use.
+            assert "total AC output" not in text
+            assert "gesamte AC-Leistung" not in text
 
     def test_readme(self):
         readme = (REPO / "README.md").read_text(encoding="utf-8")
-        assert ("PV **power** sensor that reports the total AC output of "
-                "all PV systems in the house") in readme
+        assert ("PV **power** sensor that reports the total PV production "
+                "of all PV systems in the house (every inverter, including "
+                "a balcony plant)") in readme
+        assert ("With a hybrid inverter, use its PV (DC input) power, not "
+                "its AC output") in readme
+        assert "total AC output" not in readme

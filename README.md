@@ -200,8 +200,8 @@ The budget also subtracts what your household uses until sunset. AURUM learns th
 
 Learning needs:
 
-- a PV **power** sensor that reports the total AC output of all PV systems in the house (every inverter, including a balcony plant). Production it doesn't see is missing from the house consumption, so the learned load would come out too low.
-- with a battery, **both** the battery charge and the battery discharge power sensor. Each reports one direction only, so with just one of them the other direction goes unseen.
+- a PV **power** sensor that reports the total PV production of all PV systems in the house (every inverter, including a balcony plant). Production it doesn't see is missing from the house consumption, so the learned load would come out too low. With a hybrid inverter, use its PV (DC input) power, not its AC output: the AC output already includes the battery, which would then be counted twice.
+- with a battery (any battery sensor configured), **both** the battery charge and the battery discharge power sensor. Each reports one direction only, so with just one of them the other direction goes unseen.
 
 AURUM pauses learning while the grid meter, the PV sensor or a battery power sensor has failed, while a device that is on has no working power sensor, and while a device's switch is unavailable or missing (it may be on). The diagnostics (`budget` → `consumption_learning`) show whether learning is active and, if not, why, naming the device.
 

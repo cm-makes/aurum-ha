@@ -17,13 +17,18 @@ average, so a restart loses at most the hour in progress.
 A cycle only gives a sample while the balance can be trusted:
 - a PV power sensor is configured. Without it, grid + battery is about
   0 W while PV produces, and the budget only uses the production hours.
-  It must report the total AC output of all PV systems in the house: an
-  unmetered balcony plant would be missing from the house consumption.
-- with a battery (SOC sensor), both battery power sensors are configured.
-  They are unsigned, one direction each: with only the charge sensor a
+  It must report the total PV production of all PV systems in the house
+  (every inverter, including a balcony plant): an unmetered balcony
+  plant would be missing from the house consumption. With a hybrid
+  inverter it must be the PV (DC input) power, not the AC output: that
+  already includes the battery, which would then count twice.
+- with a battery (any of SOC, charge or discharge power sensor
+  configured), both battery power sensors are configured. They are
+  unsigned, one direction each: with only the charge sensor a
   discharging battery is invisible and the household load it covers is
   missed (and with only the discharge sensor, charging counts as load).
-- the grid, PV and battery power sensors report (input health).
+- the energy step ran (it publishes input health) and the grid, PV and
+  battery power sensors report.
 - every AURUM device that is on reports measured power. The nominal
   power of a device without a power sensor is a guess: a heating rod at
   temperature draws nothing while AURUM still counts it. An unreachable
@@ -71,6 +76,7 @@ NEGATIVE_TOLERANCE_W = 100.0
 
 # Skip reasons that don't name a device.
 SKIP_SURPLUS_BLIND = "surplus blind"
+SKIP_ENERGY_STEP = "energy step failed"
 SKIP_DEVICE_STEP = "device step failed"
 SKIP_DEVICES_STARTING = "devices starting up"
 SKIP_IMPLAUSIBLE = "implausible sample (beyond +-30 kW)"
@@ -86,9 +92,14 @@ class BaseLoadSampler:
                 ("charge", "battery_charge_power_entity"),
                 ("discharge", "battery_discharge_power_entity"))
             if not config.get(key)]
+        # Any battery sensor means there is a battery, also one power
+        # sensor without a SOC sensor (the config flow allows that).
+        has_battery = any(config.get(key) for key in (
+            "battery_soc_entity", "battery_charge_power_entity",
+            "battery_discharge_power_entity"))
         if not config.get("pv_power_entity"):
             self.disabled_reason = "no PV power sensor"
-        elif config.get("battery_soc_entity") and missing_battery:
+        elif has_battery and missing_battery:
             # Both directions are needed (unsigned sensors, see above).
             self.disabled_reason = "no battery %s power sensor" % (
                 " or ".join(missing_battery))
@@ -153,7 +164,11 @@ class BaseLoadSampler:
         Not clamped at 0: meters that update out of step err both ways,
         and the hour's average evens that out.
         """
-        health = shared.get("input_health") or {}
+        health = shared.get("input_health")
+        if health is None:
+            # The energy step failed before it checked its inputs: the
+            # powers below may be missing and would read as 0 W.
+            return None, SKIP_ENERGY_STEP
         for key, name in _BALANCE_INPUTS.items():
             status = health.get(key, INPUT_OK)
             if status != INPUT_OK:
