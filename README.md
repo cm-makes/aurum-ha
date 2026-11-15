@@ -160,7 +160,7 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Switch entity** | The switch that controls the device |
 | **Power sensor** | Optional: Real-time power measurement |
 | **Nominal power** | Expected power draw in watts |
-| **Priority** | 1–100, higher = turned on first |
+| **Priority** | 1–100, higher = turned on first. While a device waits out its *Debounce ON* for a surplus start, devices with a lower priority only get the surplus left after its nominal power, so a shorter debounce cannot overtake it. Devices with the same priority don't hold each other back. |
 | **SOC threshold** | Device only runs when battery is above this level |
 | **Startup detection** | Enable for appliances with programs (washers, dishwashers). AURUM keeps the plug on in standby, detects when you press Start, pauses immediately, and resumes when PV surplus is sufficient. If a deadline is set and PV never arrives, AURUM starts on grid power as a fallback. |
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
@@ -605,7 +605,7 @@ You probably have a battery but didn't configure **Battery charge power** and **
 
 Open the device entity and check:
 
-- **Priority** — lower-priority devices wait while higher-priority ones get power first
+- **Priority** — lower-priority devices wait while higher-priority ones get power first. This includes the wait itself: while a higher-priority device counts down its *Debounce ON*, its nominal power is reserved, and a lower-priority device starts only if the surplus covers both. The reservation ends as soon as that device starts or something other than the surplus blocks it (run condition, *Minimum OFF time*, runtime target reached, budget cap, SOC threshold, force-off, manual override)
 - **SOC threshold** — device won't run if battery is below this level (during `low_soc` mode)
 - **Hysteresis ON** — AURUM needs `nominal_power + hysteresis_on` of surplus before turning on, to avoid flapping
 - **Debounce ON** — surplus must stay sufficient for this many seconds before AURUM commits
