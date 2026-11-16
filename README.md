@@ -348,6 +348,17 @@ Details:
 
 With *Startup detection* and a power sensor, AURUM keeps reading the power while the override is on. A program you run meanwhile shows as `running` (reason `running`) and its end is detected as usual. If you switch the plug off while the program is drawing power, the program is interrupted, not finished: the off time counts neither as runtime nor toward *Finish time*, only *Max runtime* can end it meanwhile, and the same program continues when you switch the plug back on. If the power was already below the *Finish threshold* at AURUM's last reading, for example because the program had ended and you unplugged it after unloading, the off time counts toward *Finish time* (but not as runtime), so the end is detected as usual. AURUM reads it the same way when you pause the program at the appliance and then switch the plug off: unless you switch the plug back on and resume within *Finish time*, the program counts as finished. The *finished* message reports the runtime AURUM counted for the program, without the time the plug was off under the override. When you switch the override off, a program AURUM has seen running under the override runs to its end untouched. AURUM has seen it once it has drawn more than the *Start threshold* for the *Detection time*. That takes at least two readings. AURUM reads the devices every second update cycle (every 30 s with the default 15 s update interval), so allow up to a minute before you switch the override off. This also works while the battery is at its reserve. A program you start or resume just before switching the override off is handled like any program start: AURUM pauses it until there is surplus. A paused program that isn't drawing power stays paused until there is surplus. Without a power sensor AURUM can't tell a program from standby, so it adopts no program under the override.
 
+### Two machines on one surplus (start reserve)
+
+A washer takes in water at about 25 W for several minutes before it heats at about 2,000 W. So that a second machine doesn't start on that surplus and both then heat from the grid or the battery, a running *Startup detection* program with a power sensor keeps its *Nominal power* minus what it draws free for others until it has drawn 90 % of its *Nominal power* once, for at most 30 minutes after it starts. A cold program that never gets there releases it after 30 minutes. Enter the heating power as *Nominal power* (about 2,000 W for a washer), not an average.
+
+- Other *Startup detection* programs and non-interruptible devices don't start on the reserved surplus. Deadline, cheap-grid and PV-gate starts ignore it.
+- Interruptible devices (a pool pump) may use it: AURUM switches them off as usual once the heating leaves too little surplus. Holding them back too would leave the surplus unused for up to 30 minutes after a cold program. This doesn't apply while a device of higher priority is held back by the reserve: the surplus is kept for that device, so a pump can't take it and keep it after the release.
+- AURUM smooths the surplus it starts devices on, so it reacts to a heating that has just begun only over a few minutes. So while a reserve is held and for 3 minutes after its release, the starts that respect it are checked against the lower of the smoothed and the current surplus.
+- While a reserve is held, a waiting program doesn't switch off lower-priority devices to make room for itself. Neither does it in the update in which another program with a power sensor starts.
+- The Advisor shows a device held back by a reserve with reason `start_reserve`.
+- Without a power sensor, or while its plug is off, a program keeps no reserve. While its plug is unreachable, or while its power sensor is unavailable before the program has reached 90 %, its whole *Nominal power* stays reserved (still for at most 30 minutes).
+
 ---
 
 ## Entities Created
@@ -455,6 +466,7 @@ The `devices` attribute lists every device with a machine-readable `reason`:
 | `runtime_done` / `program_done` | Done for today |
 | `program_standby` | Waiting for you to start a program (washer/dishwasher) |
 | `program_paused` | Program paused, waiting for surplus to resume |
+| `start_reserve` | There is enough surplus, but a program that has just started still needs it for its heating (see [start reserve](#two-machines-on-one-surplus-start-reserve)) |
 | `battery_charging` | Battery below reserve |
 | `below_soc_threshold` | Battery below this device's SOC threshold |
 | `condition_not_met` | Run condition blocks it (e.g. boiler already hot) |
@@ -609,6 +621,7 @@ Open the device entity and check:
 - **SOC threshold** — device won't run if battery is below this level (during `low_soc` mode)
 - **Hysteresis ON** — AURUM needs `nominal_power + hysteresis_on` of surplus before turning on, to avoid flapping
 - **Debounce ON** — surplus must stay sufficient for this many seconds before AURUM commits
+- **Start reserve** — another program that has just started still needs the surplus for its heating (Advisor reason `start_reserve`, see [start reserve](#two-machines-on-one-surplus-start-reserve))
 
 For diagnostic detail, look at the device entity's `scheduling_reason` attribute.
 

@@ -18,6 +18,9 @@ _DATETIME_FIELDS = (
     "on_since", "last_on", "last_off",
     "sd_detected_at", "sd_waiting_since", "sd_running_since",
     "sd_lockout_until", "sd_power_above_since", "sd_power_below_since",
+    # The run whose expected peak was measured: a restart during the
+    # program must not bring its start reserve back.
+    "sd_peak_run",
 )
 
 # Fields that are simple values (save/restore as-is)
