@@ -161,6 +161,7 @@
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
           "condition_value": "Condition limit",
+          "condition_margin": "Restart margin",
           "day_start_hour": "Daily reset hour"
         },
         "data_description": {
@@ -193,6 +194,7 @@
           "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s.",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
           "condition_value": "Threshold for the run condition sensor.",
+          "condition_margin": "Works like a thermostat: once the sensor has reached the limit, the device may only start again when the sensor is this far back on the allowed side. Example: below 55 with margin 3 → off at 55, allowed again below 52, so a tank at 54.9 does not restart the heater. In the sensor's unit. 0 = no margin (default).",
           "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
         }
       },
@@ -237,6 +239,7 @@
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
           "condition_value": "Condition limit",
+          "condition_margin": "Restart margin",
           "day_start_hour": "Daily reset hour"
         },
         "data_description": {
@@ -267,6 +270,7 @@
           "min_off_time": "Minimum time the device stays off after being turned off (seconds).",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
           "condition_value": "Threshold for the run condition sensor.",
+          "condition_margin": "Thermostat band in the sensor's unit: after the limit is reached, the device may only start again once the sensor is this far back on the allowed side (below 55, margin 3: again below 52). 0 = off.",
           "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
         }
       },

@@ -40,6 +40,10 @@ _VALUE_FIELDS = (
     # Last seen muss_heute state: without it, an arm made after the last
     # save (or right after a restart) was not seen as a new job.
     "_mh_prev",
+    # Run condition latch (restart margin): without it, a restart reopened
+    # the band and a tank cooling from 55 to 53 was heated again at once.
+    # Not zeroed at a day rollover: it follows the sensor, not the day.
+    "_cond_latch",
 )
 
 
