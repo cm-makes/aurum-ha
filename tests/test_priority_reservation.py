@@ -459,3 +459,82 @@ class TestOtherStartPathsUnchanged:
         _run(mgr, hass, now, 0.5, base=1900)
         assert hass.states[L_SW] == "on"
         assert mgr.devices[1]["force_started"] is True
+
+
+class TestSmoothedSurplusAfterAStart:
+    """The reservation ends when the higher device starts, but the
+    smoothed surplus shows its load only minutes later. A lower device with
+    a short Debounce ON started on that stale surplus (review of v1.17)."""
+
+    def test_lower_device_waits_until_the_smoothed_surplus_catches_up(
+            self, hass, make_manager, make_device, now):
+        mgr = make_manager([_heater(make_device, debounce_on=60),
+                            _pump(make_device, debounce_on=30)])
+        t = now
+        # 1900 W free: the heater debounces and starts, the pump waits.
+        while hass.states[H_SW] != "on":
+            mgr.update(_shared(t, 1900))
+            t += timedelta(seconds=30)
+        assert hass.states[L_SW] == "off"
+        # Measured surplus now 400 W; the smoothed value still reads 1900.
+        started = t
+        while (t - started).total_seconds() < 170:
+            sh = _shared(t, 1900)
+            sh["excess_raw_for_devices"] = 400
+            mgr.update(sh)
+            t += timedelta(seconds=30)
+        assert hass.states[L_SW] == "off"
+
+
+class TestPreemptionSkipsGridRuns:
+    """Audit #6: a waiting program must not switch off a device that runs
+    on the grid on purpose (cheap tariff, deadline)."""
+
+    def _setup(self, make_manager, make_device, **heater):
+        from custom_components.aurum.const import SD_STATE_WAITING
+        mgr = make_manager([
+            make_device(name="Washer", switch_entity=SD_SW,
+                        nominal_power=1800, priority=90,
+                        startup_detection=True, power_entity="sensor.w"),
+            make_device(name="Heater", switch_entity=H_SW,
+                        nominal_power=2500, priority=10, **heater),
+        ])
+        washer, heat = mgr.devices
+        washer["sd_state"] = SD_STATE_WAITING
+        return mgr, washer, heat
+
+    def _running(self, dev, now, reason):
+        dev["managed_on"] = True
+        dev["on_since"] = now - timedelta(hours=1)
+        dev["_runtime_tick"] = now
+        dev["_scheduling_reason"] = reason
+        dev["_cached_on"] = True
+
+    def test_cheap_grid_run_is_not_preempted(
+            self, hass, make_manager, make_device, now):
+        mgr, washer, heat = self._setup(
+            make_manager, make_device, price_mode="cheap_grid")
+        hass.states[H_SW] = "on"
+        self._running(heat, now, "cheap_grid")
+        freed = mgr._preempt_for_sd(washer, 2000, -200, 80, 20, now, -200)
+        assert freed == 0
+        assert hass.states[H_SW] == "on"
+
+    def test_deadline_run_is_not_preempted(
+            self, hass, make_manager, make_device, now):
+        mgr, washer, heat = self._setup(make_manager, make_device)
+        hass.states[H_SW] = "on"
+        self._running(heat, now, "deadline_forced")
+        heat["force_started"] = True
+        freed = mgr._preempt_for_sd(washer, 2000, -200, 80, 20, now, -200)
+        assert freed == 0
+        assert hass.states[H_SW] == "on"
+
+    def test_surplus_run_is_still_preempted(
+            self, hass, make_manager, make_device, now):
+        mgr, washer, heat = self._setup(make_manager, make_device)
+        hass.states[H_SW] = "on"
+        self._running(heat, now, "surplus_available")
+        freed = mgr._preempt_for_sd(washer, 2000, -200, 80, 20, now, -200)
+        assert freed > 0
+        assert hass.states[H_SW] == "off"

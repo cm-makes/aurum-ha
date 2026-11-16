@@ -196,6 +196,9 @@ class DeviceManager:
         # A start reserve is held or was released less than
         # _SD_RESERVE_SETTLE_S ago (_update_sd_start_reserves).
         self._reserve_settling = False
+        # When AURUM last switched a device on (_turn_on): the smoothed
+        # surplus shows that load only after a few minutes.
+        self._last_start_at = None
 
         # Global settings
         self.excess_deficit_tolerance = config.get(
@@ -521,9 +524,24 @@ class DeviceManager:
         # heating began it still read the power the heating now takes, so
         # with a short debounce a second machine started on it.
         start_excess, start_grid = dec_excess, grid_excess
+        settled_excess = min(dec_excess, dec_excess_raw)
+        settled_grid = min(grid_excess, grid_excess_raw)
         if self._reserve_settling:
-            start_excess = min(dec_excess, dec_excess_raw)
-            start_grid = min(grid_excess, grid_excess_raw)
+            start_excess, start_grid = settled_excess, settled_grid
+        # The same lag after any start: a higher-priority device has just
+        # been switched on (its reservation ended with the start), but the
+        # smoothed surplus still reads the power it now takes, so a lower
+        # device with a short debounce started on it. For the settle time
+        # every surplus start uses the lower of smoothed and measured.
+        recent_start = (
+            self._last_start_at is not None
+            and (now - self._last_start_at).total_seconds()
+            < _SD_RESERVE_SETTLE_S)
+        if recent_start:
+            start_excess, start_grid = settled_excess, settled_grid
+        free_excess, free_grid = (
+            (settled_excess, settled_grid) if recent_start
+            else (dec_excess, grid_excess))
         # A device evaluated earlier this cycle (so of higher priority) is
         # held back by a start reserve: the reserved surplus is its claim,
         # so interruptible devices below it respect the reserve too.
@@ -771,7 +789,7 @@ class DeviceManager:
                     base, base_grid = start_excess, start_grid
                 else:
                     reserve_w = 0.0
-                    base, base_grid = dec_excess, grid_excess
+                    base, base_grid = free_excess, free_grid
                 # Surplus that higher-priority devices reserve while they
                 # debounce. Only surplus starts read it: cheap-grid,
                 # PV-gate and deadline starts don't depend on the surplus.
@@ -1878,6 +1896,12 @@ class DeviceManager:
                 continue  # Manual override: AURUM never switches it
             if not dev["interruptible"]:
                 continue  # non-interruptible, don't preempt
+            if (dev["force_started"]
+                    or dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID):
+                # Runs on grid on purpose (deadline, cheap tariff): what
+                # it frees is grid power, not surplus for the program
+                # (audit #6, e.g. a night-tariff water heater).
+                continue
             if dev["priority"] >= sd_device["priority"]:
                 continue
             if (dev["startup_detection"]
@@ -2024,6 +2048,7 @@ class DeviceManager:
                  reason=SCHED_REASON_SURPLUS_AVAILABLE):
         """Turn a device on."""
         self.hass.turn_on(dev["switch_entity"])
+        self._last_start_at = now
         dev["on_since"] = now
         dev["last_on"] = now
         dev["_runtime_tick"] = now
