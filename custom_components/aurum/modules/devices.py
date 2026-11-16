@@ -596,12 +596,17 @@ class DeviceManager:
             # Optional prerequisite (e.g. boiler temp below limit).
             # Blocks ALL start paths (surplus, cheap grid, deadline)
             # and stops a running device once min_on_time is honored.
+            # The restart margin only holds back starts: a device that is
+            # already on inside the band runs on up to the limit, like a
+            # thermostat, and is evaluated as usual below.
             # Non-interruptible devices are never stopped mid-run, but
             # they won't be restarted while the condition is unmet.
             # SD devices are handled inside the state machine (block
             # new starts, never interrupt a RUNNING program).
             if (not dev["startup_detection"]
-                    and not self._condition_met(dev)):
+                    and not self._condition_met(dev)
+                    and (not was_on
+                         or self._condition_limit_reached(dev))):
                 if was_on:
                     if not dev["interruptible"]:
                         devices_on += 1
@@ -823,24 +828,23 @@ class DeviceManager:
         the latch with the first met reading: the strict compare.
 
         The latch follows the readings only, not the switch, so every
-        caller of a cycle (start paths, the stop in block 1d, the WAITING
-        state, the published flag) gets the same answer, and it keeps
-        tracking under Manual override. While the sensor is unavailable it
-        is kept as is: nothing was observed, and a sensor that drops out
-        for a moment must not reopen the band. It is persisted with the
-        condition it belongs to, so a restart keeps the band and an
-        edited sensor, operator or limit starts without a latch.
+        caller of a cycle (start paths, block 1d, the WAITING state, the
+        published flag) gets the same answer, and it keeps tracking under
+        Manual override. While the sensor is unavailable it is kept as is:
+        nothing was observed, and a sensor that drops out for a moment
+        must not reopen the band. It is persisted with the condition it
+        belongs to, so a restart keeps the band and an edited sensor,
+        operator or limit starts without a latch.
+
+        The band holds back starts only. A device that is already on
+        inside it keeps running up to the limit, like a thermostat: block
+        1d stops it only once _condition_limit_reached.
         """
-        entity = dev.get("condition_entity")
-        value = dev.get("condition_value")
-        if not entity or value is None:
+        reading = self._condition_reading(dev)
+        if reading is None:
             return True
-        current = get_float(self.hass, entity, default=None)
-        if current is None:
-            return True
-        limit = float(value)
-        above = dev.get("condition_op", "below") == "above"
-        key = [entity, "above" if above else "below", limit]
+        current, limit, above = reading
+        key = [dev["condition_entity"], "above" if above else "below", limit]
         if (current <= limit) if above else (current >= limit):
             dev["_cond_latch"] = key
             return False
@@ -851,6 +855,37 @@ class DeviceManager:
                 return False
         dev["_cond_latch"] = None
         return True
+
+    def _condition_reading(self, dev):
+        """(reading, limit, above) of the run condition, or None when no
+        condition is configured or its sensor is unavailable."""
+        entity = dev.get("condition_entity")
+        value = dev.get("condition_value")
+        if not entity or value is None:
+            return None
+        current = get_float(self.hass, entity, default=None)
+        if current is None:
+            return None
+        return (current, float(value),
+                dev.get("condition_op", "below") == "above")
+
+    def _condition_limit_reached(self, dev):
+        """True when the run-condition sensor reads at or past its limit
+        (the strict compare, without the restart margin). False without
+        a condition or while the sensor is unavailable.
+
+        Only this stops a device that is on. Inside the band it keeps
+        running up to the limit, whether it was switched on by hand, left
+        on when Manual override ended, started while the sensor was
+        unavailable, or found on after a restart restored an older latch.
+        Stopping it there would only add the on/off cycle the band is
+        meant to avoid.
+        """
+        reading = self._condition_reading(dev)
+        if reading is None:
+            return False
+        current, limit, above = reading
+        return current <= limit if above else current >= limit
 
     def _runtime_target_reached(self, dev):
         """True when stop_after_runtime is set and today's runtime

@@ -5,8 +5,10 @@ Restart margin for the run condition (thermostat band).
 only below 52, so a tank that dips to 54.9 no longer restarts the water
 heater ('above' mirrored). The latch follows the readings, so every path
 that uses the condition sees the same answer: surplus start, cheap grid,
-deadline start, the startup-detection WAITING state and the stop of a
-running device. Margin 0 (the default) keeps the strict compare.
+deadline start and the startup-detection WAITING state. The band holds
+back starts only: a device that is already on inside it runs on to the
+limit, like a thermostat, and only reaching the limit stops it. Margin 0
+(the default) keeps the strict compare.
 """
 
 import ast
@@ -249,10 +251,11 @@ class TestPaths:
         assert ("OFF", SW) not in hass.actions
         assert dev["sd_state"] == SD_STATE_RUNNING
 
-    def test_device_switched_on_by_hand_inside_the_band_is_stopped(
+    def test_device_switched_on_by_hand_inside_the_band_runs_to_the_limit(
             self, hass, make_manager, make_device):
-        # Inside the band the condition counts as unmet, like above the
-        # limit: block 1d stops the device once min_on_time is honoured.
+        # The band holds back starts only. A heater someone switches on
+        # inside it heats up to the limit, like a thermostat, instead of
+        # being cut once min_on_time is honoured.
         mgr = make_manager([heater(make_device, min_on_time=600)])
         clock = Clock(mgr)
         hass.states[TEMP] = "55"
@@ -260,8 +263,82 @@ class TestPaths:
         hass.states[TEMP] = "53"
         hass.states[SW] = "on"                    # by hand, no override
         clock.cycle(3000)
-        assert hass.states[SW] == "on"            # min_on_time first
         clock.now += timedelta(seconds=600)
+        clock.cycle(3000, n=3)
+        assert hass.states[SW] == "on"
+        assert ("OFF", SW) not in hass.actions
+
+        hass.states[TEMP] = "55"                  # the limit stops it
+        clock.cycle(3000)
+        assert hass.states[SW] == "off"
+        hass.states[TEMP] = "54"                  # and the band holds it
+        clock.cycle(3000, n=3)
+        assert hass.states[SW] == "off"
+
+    def test_device_on_inside_the_band_is_shed_as_usual_then_held(
+            self, hass, make_manager, make_device):
+        # Inside the band a device that is on gets the regular surplus
+        # evaluation; once off, the band keeps it off.
+        mgr = make_manager([heater(make_device, debounce_off=0)])
+        clock = Clock(mgr)
+        hass.states[TEMP] = "55"
+        clock.cycle(3000)
+        hass.states[TEMP] = "53"
+        hass.states[SW] = "on"                    # by hand
+        clock.cycle(3000, n=2)
+        assert hass.states[SW] == "on"
+        clock.cycle(-1500, n=3)                   # deficit: shed
+        assert hass.states[SW] == "off"
+        clock.cycle(3000, n=3)                    # surplus, still 53
+        assert hass.states[SW] == "off"
+
+    def test_left_on_when_manual_override_ends_inside_the_band(
+            self, hass, make_manager, make_device):
+        # Same as on main with margin 0: released at 53, the heater the
+        # user switched on keeps heating to the limit.
+        mgr = make_manager([heater(make_device, min_on_time=600)])
+        clock = Clock(mgr)
+        hass.states[TEMP] = "55"
+        clock.cycle(3000)
+        hass.states[TEMP] = "53"
+        hass.states[OVR] = "on"
+        hass.states[SW] = "on"                    # by hand under override
+        clock.cycle(3000, n=2)
+        hass.states[OVR] = "off"                  # released while on
+        clock.cycle(3000)
+        clock.now += timedelta(seconds=600)
+        clock.cycle(3000, n=3)
+        assert hass.states[SW] == "on"
+        assert ("OFF", SW) not in hass.actions
+
+        hass.states[TEMP] = "55"
+        clock.cycle(3000)
+        assert hass.states[SW] == "off"
+
+    def test_sensor_outage_inside_the_band_adds_no_short_cycle(
+            self, hass, make_manager, make_device):
+        # An unavailable sensor fails open, so surplus may start the
+        # heater while the latch is kept. Back inside the band, the
+        # heater runs on to the limit: no OFF after min_on_time.
+        mgr = make_manager([heater(make_device, min_on_time=600)])
+        dev = mgr.devices[0]
+        clock = Clock(mgr)
+        hass.states[TEMP] = "55"
+        clock.cycle(3000)
+        hass.states[TEMP] = "53"
+        clock.cycle(3000, n=2)
+        assert ("ON", SW) not in hass.actions
+        hass.states[TEMP] = "unavailable"
+        clock.cycle(3000, n=2)
+        assert hass.states[SW] == "on"            # fail-open, as before
+
+        hass.states[TEMP] = "53.2"
+        clock.now += timedelta(seconds=600)
+        clock.cycle(3000, n=3)
+        assert hass.states[SW] == "on"
+        assert ("OFF", SW) not in hass.actions
+        assert dev["_cond_latch"] is not None     # the band still holds
+        hass.states[TEMP] = "55"
         clock.cycle(3000)
         assert hass.states[SW] == "off"
 
@@ -312,6 +389,30 @@ class TestPersistence:
         mgr2 = make_manager([heater(make_device)])
         PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
         assert mgr2._condition_met(mgr2.devices[0]) is False
+
+    def test_older_latch_does_not_stop_a_heater_that_is_on(
+            self, hass, make_manager, make_device, tmp_path):
+        # Unclean shutdown: the latch from 55 was saved, the heater then
+        # started at 51.9 and HA crashed before the next save (every 5
+        # min). Restarted at 53, the older latch comes back; the heater
+        # that is on runs to the limit instead of getting an OFF.
+        sf = self._latched_state_file(
+            hass, make_manager, make_device, tmp_path)
+        hass.states[TEMP] = "53"
+        hass.states[SW] = "on"
+        hass.actions.clear()
+        mgr2 = make_manager([heater(make_device, min_on_time=600)])
+        PersistenceManager(hass, {"state_file": sf}).restore(mgr2)
+        assert mgr2.devices[0]["_cond_latch"] is not None
+        clock = Clock(mgr2, datetime.now())
+        clock.cycle(3000)
+        clock.now += timedelta(seconds=600)
+        clock.cycle(3000, n=3)
+        assert ("OFF", SW) not in hass.actions
+
+        hass.states[TEMP] = "55"
+        clock.cycle(3000)
+        assert hass.states[SW] == "off"
 
     @pytest.mark.parametrize("edit", [
         {"condition_value": 56},
