@@ -95,8 +95,8 @@ def _entity_id(value):
 
 def configured_entities(config):
     """Every entity the config refers to, as dicts with entity, device
-    (the device name, None for a hub field) and field. Empty fields are
-    skipped."""
+    (the device name, None for a hub field) and field. Empty fields, and
+    a run condition sensor without a limit, are skipped."""
     refs = []
     for field in HUB_FIELDS:
         entity = _entity_id(config.get(field))
@@ -104,6 +104,11 @@ def configured_entities(config):
             refs.append({"entity": entity, "device": None, "field": field})
     for dev in config.get("devices") or []:
         for field in DEVICE_FIELDS:
+            # A run condition without a limit is ignored
+            # (DeviceManager._condition_met), so its sensor has no effect.
+            if (field == "condition_entity"
+                    and dev.get("condition_value") is None):
+                continue
             entity = _entity_id(dev.get(field))
             if entity:
                 refs.append({"entity": entity,
@@ -139,6 +144,7 @@ class MissingEntityCheck:
         self.missing = []        # confirmed refs, in config order
         self._since = {}         # entity -> first check that missed it
         self._last_check = None
+        self.first_check = None  # when the first check ran
 
     def due(self, now):
         """A check is due: the first one, or CHECK_INTERVAL_S after the
@@ -153,6 +159,8 @@ class MissingEntityCheck:
         Returns True when the list of confirmed missing entities
         changed."""
         self._last_check = now
+        if self.first_check is None:
+            self.first_check = now
         reported = self.missing_entities()
         gone = {ref["entity"] for ref in self.refs
                 if not exists(ref["entity"])}

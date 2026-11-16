@@ -10,8 +10,9 @@ ignored. On the maintainer's HA the configured Tibber price sensors no
 longer existed and nobody noticed.
 
 - configured_entities: hub fields and each device's switch, power
-  measurement and run condition sensor; empty fields skipped; the field
-  lists and labels match the settings forms (EN/DE).
+  measurement and run condition sensor; empty fields and a run condition
+  sensor without a limit skipped; the field lists and labels match the
+  settings forms (EN/DE).
 - MissingEntityCheck: two-pass (still missing 10 minutes later), an
   entity created late or a reload blip is not reported, self-clearing,
   a clock that goes back keeps the report.
@@ -19,6 +20,9 @@ longer existed and nobody noticed.
   repair issue listing the missing entities with their role, updated and
   deleted as they come back, no second "unavailable" issue for a missing
   hub sensor, an unavailable entity is not missing, logged once.
+- Handover: a missing hub sensor's "unavailable" issue is held while the
+  check may still report it (no "unavailable" for a few minutes before
+  "not found"), with a cap so it still appears if the check never runs.
 - End to end: real update cycles raise the issue about 10 minutes after
   startup and clear it when the entity exists again.
 """
@@ -93,7 +97,8 @@ class TestConfiguredEntities:
                 {"name": "Washer", "switch_entity": WASHER_SW,
                  "power_entity": WASHER_PW, "condition_entity": None},
                 {"name": "Boiler", "switch_entity": "switch.boiler",
-                 "power_entity": "", "condition_entity": "sensor.boiler_t"},
+                 "power_entity": "", "condition_entity": "sensor.boiler_t",
+                 "condition_value": 55},
             ],
         })
         assert [(r["entity"], r["device"], r["field"]) for r in refs] == [
@@ -105,6 +110,23 @@ class TestConfiguredEntities:
             ("switch.boiler", "Boiler", "switch_entity"),
             ("sensor.boiler_t", "Boiler", "condition_entity"),
         ]
+
+    def test_run_condition_sensor_without_limit_is_skipped(self):
+        # The form accepts a run condition sensor without a limit, and
+        # DeviceManager ignores such a condition: a missing sensor there
+        # changes nothing, so it is not reported. A limit of 0 is a limit.
+        refs = configured_entities({"devices": [
+            {"name": "Pump", "switch_entity": "switch.pump",
+             "condition_entity": "sensor.pool_t"},
+            {"name": "Boiler", "switch_entity": "switch.boiler",
+             "condition_entity": "sensor.boiler_t",
+             "condition_value": None},
+            {"name": "Heater", "switch_entity": "switch.heater",
+             "condition_entity": "sensor.outdoor_t", "condition_value": 0},
+        ]})
+        assert [r["entity"] for r in refs] == [
+            "switch.pump", "switch.boiler",
+            "switch.heater", "sensor.outdoor_t"]
 
     @pytest.mark.parametrize("lang", ["en", "de"])
     def test_fields_and_labels_match_the_settings_forms(self, lang):
@@ -352,7 +374,8 @@ class TestCoordinatorIssue:
         assert list(c._issues) == ["missing_entities"]
         assert c._issues["missing_entities"][1] == {
             "entities": "- Grid meter: `sensor.grid`"}
-        assert ("delete", "input_grid") in ir
+        # Not shown as "unavailable" first, while the check confirmed it.
+        assert [call[1] for call in ir] == ["missing_entities"]
 
     def test_unavailable_grid_meter_keeps_its_issue(self, renamed, ir):
         renamed.states.update({PRICE: "0.25", WASHER_PW: "0",
@@ -379,6 +402,128 @@ class TestCoordinatorIssue:
         _run(c, T0, T0 + 10 * MIN)
         c._clear_repair_issues()
         assert ir[-1] == ("delete", "missing_entities")
+
+
+def _grid_fault(since, status="unavailable"):
+    return {"input": "grid", "status": status, "entity": GRID,
+            "since": since}
+
+
+def _created(ir):
+    return [call[1] for call in ir if call[0] == "create"]
+
+
+class TestInputIssueHandover:
+    """A missing grid meter, battery power sensor or SOC is also an input
+    fault. Its "unavailable" issue would come after ISSUE_DELAY_S, the
+    "not found" issue only once HA is running plus CONFIRM_S."""
+
+    @pytest.fixture
+    def gone(self, hass):
+        """The grid meter no longer exists; everything else does."""
+        hass.states.update({SOC: "60", PRICE: "0.25", WASHER_SW: "off",
+                            WASHER_PW: "0"})
+        return hass
+
+    def test_ha_running_late_shows_only_not_found(self, gone, ir):
+        # HA reaches RUNNING 8 min after AURUM's first cycle: the check
+        # confirms the grid meter at 18 min, after the 15 min input delay.
+        # Repairs showed "unavailable" from 15 to 18 min.
+        gone.state = SimpleNamespace(value="STARTING")
+        c = _coordinator(gone, **CONFIG)
+        fault = [_grid_fault(T0)]
+        _run(c, T0, T0 + 8 * MIN - timedelta(seconds=15), faults=fault)
+        gone.state = _running()
+        _run(c, T0 + 8 * MIN, T0 + 17 * MIN + timedelta(seconds=45),
+             faults=fault)
+        assert ir == []
+        _run(c, T0 + 18 * MIN, T0 + 30 * MIN, faults=fault)
+        assert _created(ir) == ["missing_entities"]
+        assert list(c._issues) == ["missing_entities"]
+
+    def test_check_never_running_still_shows_the_input_issue(
+            self, gone, ir, monkeypatch):
+        # The hold waits for the check's latest start (1 h) plus the
+        # confirmation, then gives up: the sensor fault is not hidden.
+        def _broken(*a, **k):
+            raise RuntimeError("broken")
+
+        gone.state = SimpleNamespace(value="STARTING")
+        c = _coordinator(gone, **CONFIG)
+        monkeypatch.setattr(c.entity_check, "check", _broken)
+        fault = [_grid_fault(T0)]
+        _run(c, T0, T0 + 79 * MIN, step=MIN, faults=fault)
+        assert ir == []
+        _run(c, T0 + 80 * MIN, T0 + 81 * MIN, step=MIN, faults=fault)
+        assert _created(ir) == ["input_grid"]
+
+    def test_check_stopping_still_shows_the_input_issue(
+            self, gone, ir, monkeypatch):
+        # Checks ran from T0 on; the grid meter disappears at 10 min and
+        # the check stops working. The input issue comes 20 min after the
+        # fault, when a working check would have reported it.
+        gone.states[GRID] = "100"
+        gone.state = _running()
+        c = _coordinator(gone, **CONFIG)
+        _run(c, T0, T0 + 10 * MIN)
+        del gone.states[GRID]
+
+        def _broken(*a, **k):
+            raise RuntimeError("broken")
+
+        monkeypatch.setattr(c.entity_check, "check", _broken)
+        fault = [_grid_fault(T0 + 10 * MIN)]
+        _run(c, T0 + 10 * MIN + timedelta(seconds=15),
+             T0 + 30 * MIN - timedelta(seconds=15), faults=fault)
+        assert ir == []
+        _run(c, T0 + 30 * MIN, T0 + 31 * MIN, faults=fault)
+        assert _created(ir) == ["input_grid"]
+
+    def test_shown_input_issue_stays_until_not_found_replaces_it(
+            self, gone, ir):
+        # The grid meter was unavailable (issue shown), then disappears.
+        # The shown issue is not withdrawn for the hold; it stays until
+        # the "not found" issue replaces it.
+        gone.states[GRID] = "unavailable"
+        gone.state = _running()
+        c = _coordinator(gone, **CONFIG)
+        fault = [_grid_fault(T0 + 10 * MIN)]
+        _run(c, T0, T0 + 10 * MIN - timedelta(seconds=15))
+        _run(c, T0 + 10 * MIN, T0 + 26 * MIN, faults=fault)
+        assert ir[-1][1] == "input_grid"
+        del gone.states[GRID]
+        _run(c, T0 + 26 * MIN + timedelta(seconds=15),
+             T0 + 40 * MIN - timedelta(seconds=15), faults=fault)
+        assert [call[:2] for call in ir] == [("create", "input_grid")]
+        _run(c, T0 + 40 * MIN, T0 + 41 * MIN, faults=fault)
+        assert [call[:2] for call in ir] == [
+            ("create", "input_grid"), ("delete", "input_grid"),
+            ("create", "missing_entities")]
+
+    def test_lookup_error_does_not_hold_or_block_issues(
+            self, gone, ir, monkeypatch):
+        # The hold is best effort: an error in it raises the input issue
+        # on time and does not stop the other issues.
+        def _get_state(entity_id, *a, **k):
+            raise RuntimeError("bridge error")
+
+        gone.state = _running()
+        c = _coordinator(gone, **CONFIG)
+        monkeypatch.setattr(gone, "get_state", _get_state)
+        _run(c, T0, T0 + 15 * MIN, faults=[_grid_fault(T0)])
+        assert _created(ir) == ["input_grid"]
+
+    def test_existing_unavailable_sensor_is_not_held(self, gone, ir):
+        # The entity exists, so the check never reports it: the input
+        # issue comes after the usual 15 minutes.
+        gone.states[GRID] = "unavailable"
+        gone.state = _running()
+        c = _coordinator(gone, **CONFIG)
+        fault = [_grid_fault(T0)]
+        _run(c, T0, T0 + 15 * MIN - timedelta(seconds=15), faults=fault)
+        assert ir == []
+        _run(c, T0 + 15 * MIN, T0 + 15 * MIN, faults=fault)
+        assert _created(ir) == ["input_grid"]
 
 
 # ══════════════════════════════════════════════════════════════════

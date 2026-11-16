@@ -343,6 +343,38 @@ class AurumCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("AURUM entity check failed: %s", e)
         shared["missing_entities"] = list(check.missing)
 
+    def _input_issue_held(self, fault, now):
+        """A failed hub input whose entity does not exist belongs in the
+        missing-entities issue ("not found"). Hold back its input_* issue
+        while the entity check may still report it: the check starts only
+        once Home Assistant is running and confirms CONFIRM_S later, so
+        Repairs would otherwise show "unavailable" for a few minutes
+        before "not found" replaces it.
+
+        The hold ends CONFIRM_S + 2 * CHECK_INTERVAL_S after the fault
+        began or after the check first ran (before that: its latest
+        start, ENTITY_CHECK_MAX_WAIT_S after cycle 1), whichever is
+        later. A check that runs on time has reported the entity by then,
+        so the input_* issue still appears if the check does not run."""
+        try:
+            check = self.entity_check
+            entity = fault.get("entity")
+            since = fault.get("since")
+            if (since is None
+                    or entity not in {r["entity"] for r in check.refs}
+                    or self.bridge.get_state(entity) is not None):
+                return False
+            first = check.first_check
+            if first is None:
+                if self._first_cycle_at is None:
+                    return False
+                first = self._first_cycle_at + timedelta(
+                    seconds=self.ENTITY_CHECK_MAX_WAIT_S)
+            held_s = check.CONFIRM_S + 2 * check.CHECK_INTERVAL_S
+            return (now - max(since, first)).total_seconds() < held_s
+        except Exception:  # noqa: BLE001 – never hold on an error
+            return False
+
     def _update_repair_issues(self, shared):
         """Raise an HA repair issue for a hub input that has failed for
         ISSUE_DELAY_S, and one listing the configured entities that no
@@ -369,7 +401,12 @@ class AurumCoordinator(DataUpdateCoordinator):
                 if (since is None or (now - since).total_seconds()
                         < self.ISSUE_DELAY_S):
                     continue
-                wanted[f"input_{fault['input']}"] = (
+                issue_id = f"input_{fault['input']}"
+                # Delays an issue, never withdraws one already shown.
+                if (issue_id not in self._issues
+                        and self._input_issue_held(fault, now)):
+                    continue
+                wanted[issue_id] = (
                     f"input_{fault['status']}",
                     {"entity": fault["entity"] or "?"})
             if missing:
