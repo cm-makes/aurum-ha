@@ -61,6 +61,16 @@ _BLIND_DEFICIT_W = -1_000_000.0
 # running instead of an off/on.
 _FORCED_STOP_REASONS = frozenset({"pv_below_threshold"})
 
+# A device reserves surplus for itself while it debounces (see update())
+# only while its starts take. After this many AURUM starts within the
+# window that were seen off on the next cycle (broken relay, tripped
+# overpower protection, an automation switching it straight back off, a
+# switch stuck at 'unknown'), it reserves nothing until it is seen on or
+# the failures are older than the window. Otherwise it kept re-arming and
+# held every lower-priority device back for good.
+_RESERVE_MAX_FAILED_STARTS = 2
+_FAILED_START_WINDOW = timedelta(hours=1)
+
 # User-facing push/persistent notification texts. The HA config-flow
 # strings live in strings.json/translations, but these runtime
 # notifications are emitted from control-loop code, so they carry their
@@ -329,6 +339,8 @@ class DeviceManager:
             "_switch_times": [],            # Recent switch timestamps
             "_pending_off": None,           # Deferred turn-off reason
             "_cached_on": False,            # Cached is_on state for shedding
+            "_start_unconfirmed": False,    # 'on' sent, not yet seen on
+            "_failed_starts": [],           # Starts next seen off (times)
 
             # Manual override
             "managed_on": False,
@@ -483,6 +495,18 @@ class DeviceManager:
         available_excess = excess
         devices_on = 0
         newly_allocated = 0.0
+        # Priority reservation: (priority, W) of every off device that is
+        # waiting out its debounce toward a surplus start this cycle, with
+        # the surplus that start needs (_start_need_w). Lower-priority
+        # devices see the surplus minus these watts for their own surplus
+        # start. Without it a device with a shorter debounce_on further
+        # down started first, its load pushed the surplus below the higher
+        # device's need and reset that device's timer, so the higher device
+        # never started. A device whose start is blocked for another reason
+        # (budget cap, min_off_time, run condition, runtime target, SOC,
+        # disabled, override) or whose starts don't take does not reserve,
+        # so it cannot strand surplus.
+        reservations = []
 
         # Surplus for starts that respect start reserves: while one is held
         # or settling, the lower of the smoothed and the measured surplus.
@@ -536,6 +560,16 @@ class DeviceManager:
                         dev, switch == "on", now, keep_managed=True)
             was_on = switch == "on"
             dev["_cached_on"] = was_on
+            # A start AURUM sent that is seen off on the next cycle did not
+            # take. Seen on, the device's starts work: forget the failures.
+            # Only the latest ones count (a cheap-grid start is retried
+            # every cycle).
+            if was_on:
+                dev["_failed_starts"] = []
+            elif dev["_start_unconfirmed"]:
+                dev["_failed_starts"] = (dev["_failed_starts"] + [now])[
+                    -_RESERVE_MAX_FAILED_STARTS:]
+            dev["_start_unconfirmed"] = False
             actual_power, power_known = (
                 self._read_device_power(dev) if was_on else (0, True))
 
@@ -664,7 +698,8 @@ class DeviceManager:
 
             # ── 2. Startup detection devices ─────────────────────
             if dev["startup_detection"]:
-                sd_turnon = start_excess - newly_allocated
+                sd_turnon = (start_excess - newly_allocated
+                             - self._reserved_w(reservations, dev))
                 counted, sd_new = self._handle_startup_detection(
                     dev, sd_turnon, battery_soc, actual_power, now, excess,
                     power_known=power_known,
@@ -677,6 +712,12 @@ class DeviceManager:
                 reserve_claimed |= dev["_start_reserve_hold"]
                 if counted:
                     devices_on += 1
+                elif (dev["sd_state"] == SD_STATE_WAITING
+                        and dev["excess_since"] is not None
+                        and self._sd_surplus_ok(dev, sd_turnon, battery_soc)):
+                    # Waiting program debouncing toward its surplus start
+                    # (runtime target and run condition clear the timer).
+                    self._reserve(reservations, dev, now)
                 continue
 
             # ── 3. Regular devices ───────────────────────────────
@@ -720,10 +761,15 @@ class DeviceManager:
                 else:
                     reserve_w = 0.0
                     base, base_grid = dec_excess, grid_excess
+                # Surplus that higher-priority devices reserve while they
+                # debounce. Only surplus starts read it: cheap-grid,
+                # PV-gate and deadline starts don't depend on the surplus.
+                reserved = self._reserved_w(reservations, dev)
                 # EMA excess for turn-on (stable, prevents flapping)
-                turnon_excess = base - newly_allocated - reserve_w
+                turnon_excess = base - newly_allocated - reserve_w - reserved
                 # Grid-only fallback for SOC-below-threshold case
-                turnon_grid = base_grid - newly_allocated - reserve_w
+                turnon_grid = (base_grid - newly_allocated - reserve_w
+                               - reserved)
 
                 # ── Deadline force-start: bypass budget cap + surplus ──
                 # When muss_heute is ON and the deadline window is reached,
@@ -805,6 +851,13 @@ class DeviceManager:
                     # surplus was short, its documented purpose.
                     if turnon_excess < needed and not pv_gate:
                         dev["excess_since"] = None
+                    # Debouncing toward a surplus start: reserve. The PV
+                    # gate debounces independently of the surplus, so a
+                    # lower device's load cannot reset it: no reservation.
+                    if not pv_gate and self._surplus_debounce_pending(
+                            dev, turnon_excess, turnon_grid, battery_soc,
+                            soc_threshold, now):
+                        self._reserve(reservations, dev, now)
 
         # ── Priority-based shedding ──────────────────────────────
         candidates = []
@@ -972,6 +1025,78 @@ class DeviceManager:
             return False
         return self._pv_power_now >= threshold
 
+    def _start_blocked(self, dev, now):
+        """True while something other than the surplus keeps a regular
+        device from starting: daily runtime target reached, run condition
+        not met (e.g. boiler already hot), or min_off_time not over yet
+        (don't turn back on too quickly)."""
+        if self._runtime_target_reached(dev):
+            return True
+        if not self._condition_met(dev):
+            return True
+        return bool(dev["last_off"]
+                    and (now - dev["last_off"]).total_seconds()
+                    < dev["min_off_time"])
+
+    def _surplus_covers(self, dev, available_excess, available_grid_excess,
+                        battery_soc, soc_threshold):
+        """True when the surplus covers a surplus start of a regular device
+        (nominal + hysteresis_on + residual_power).
+
+        Below the device's SOC threshold (HELIOS-compatible) only genuine
+        grid export counts (PV surplus going to grid), not battery
+        discharge.
+        """
+        if battery_soc >= 0 and battery_soc < soc_threshold:
+            eff_excess = available_grid_excess
+        else:
+            eff_excess = available_excess
+        return eff_excess >= self._start_need_w(dev)
+
+    @staticmethod
+    def _start_need_w(dev):
+        """Surplus a surplus start needs: nominal + hysteresis_on, plus
+        residual_power for a regular device (a waiting startup-detection
+        program's test does not add it). Also what such a device reserves
+        while it debounces: reserving only its nominal power let a lower
+        device with a smaller margin start first and still leave too
+        little for it."""
+        need = dev["nominal_power"] + dev["hysteresis_on"]
+        if not dev["startup_detection"]:
+            need += dev["residual_power"]
+        return need
+
+    def _surplus_debounce_pending(self, dev, available_excess,
+                                  available_grid_excess, battery_soc,
+                                  soc_threshold, now):
+        """True while an off regular device waits only for its surplus
+        debounce: its timer runs, the surplus covers its start this cycle
+        and nothing else blocks the start. Such a device reserves its
+        start need for itself (see update())."""
+        return (dev["excess_since"] is not None
+                and not self._start_blocked(dev, now)
+                and self._surplus_covers(
+                    dev, available_excess, available_grid_excess,
+                    battery_soc, soc_threshold))
+
+    def _reserve(self, reservations, dev, now):
+        """Reserve dev's start need for the lower-priority devices of this
+        cycle, unless _RESERVE_MAX_FAILED_STARTS of its starts within
+        _FAILED_START_WINDOW did not take."""
+        cutoff = now - _FAILED_START_WINDOW
+        dev["_failed_starts"] = [
+            t for t in dev["_failed_starts"] if t > cutoff]
+        if len(dev["_failed_starts"]) >= _RESERVE_MAX_FAILED_STARTS:
+            return
+        reservations.append((dev["priority"], self._start_need_w(dev)))
+
+    @staticmethod
+    def _reserved_w(reservations, dev):
+        """Watts that devices of strictly higher priority have reserved
+        this cycle. Equal priorities do not reserve against each other."""
+        return sum(watts for prio, watts in reservations
+                   if prio > dev["priority"])
+
     def _should_turn_on(self, dev, available_excess, available_grid_excess,
                         battery_soc, soc_threshold, now, reserve_w=0.0):
         """Check if device should be turned on. Returns True/False.
@@ -980,27 +1105,9 @@ class DeviceManager:
         both excess values; only used to tell the Advisor that they are
         what holds the device back.
         """
-        # Runtime target reached: stay off for the rest of the day
-        if self._runtime_target_reached(dev):
+        # Runtime target reached, run condition not met, or min_off_time
+        if self._start_blocked(dev, now):
             return False
-
-        # Run condition not met (e.g. boiler already hot) → stay off
-        if not self._condition_met(dev):
-            return False
-
-        # Min off-time: don't turn back on too quickly
-        if (dev["last_off"]
-                and (now - dev["last_off"]).total_seconds()
-                < dev["min_off_time"]):
-            return False
-
-        # Select effective excess based on SOC (HELIOS-compatible):
-        # Below threshold: device may only run on genuine grid export
-        # (PV surplus going to grid), not on battery discharge.
-        if battery_soc >= 0 and battery_soc < soc_threshold:
-            eff_excess = available_grid_excess
-        else:
-            eff_excess = available_excess
 
         # ── Price-aware: cheap grid power allows immediate turn-on ──
         # No debounce needed: electricity prices change on 15-min/hourly
@@ -1028,11 +1135,14 @@ class DeviceManager:
             return True
 
         # Enough excess? (nominal + hysteresis_on + residual_power)
-        needed = (dev["nominal_power"] + dev["hysteresis_on"]
-                  + dev["residual_power"])
-        if eff_excess < needed:
+        if not self._surplus_covers(dev, available_excess,
+                                    available_grid_excess, battery_soc,
+                                    soc_threshold):
             dev["_start_reserve_hold"] = (
-                reserve_w > 0 and eff_excess + reserve_w >= needed)
+                reserve_w > 0 and self._surplus_covers(
+                    dev, available_excess + reserve_w,
+                    available_grid_excess + reserve_w, battery_soc,
+                    soc_threshold))
             return False
 
         # Debounce: excess must persist for debounce_on * penalty seconds
@@ -1322,7 +1432,7 @@ class DeviceManager:
             needed = nominal + dev["hysteresis_on"]
             soc_ok = battery_soc < 0 or battery_soc >= soc_threshold
             free_excess = turnon_excess - start_reserve_w
-            if free_excess >= needed and soc_ok:
+            if self._sd_surplus_ok(dev, free_excess, battery_soc):
                 # Debounce: conditions must persist
                 if dev["excess_since"] is None:
                     dev["excess_since"] = now
@@ -1456,6 +1566,14 @@ class DeviceManager:
             return True, 0
 
         return False, 0
+
+    @staticmethod
+    def _sd_surplus_ok(dev, turnon_excess, battery_soc):
+        """True when surplus (nominal + hysteresis_on) and SOC allow a
+        waiting program to start. Unknown SOC (<0) counts as OK."""
+        soc_ok = battery_soc < 0 or battery_soc >= dev["soc_threshold"]
+        return soc_ok and (
+            turnon_excess >= DeviceManager._start_need_w(dev))
 
     def _sd_observe_override(self, dev, was_on, actual_power, now, excess,
                              battery_soc, power_known=True):
@@ -1708,6 +1826,13 @@ class DeviceManager:
         if not candidates:
             return 0
 
+        # Shed only when the candidates together cover the deficit (as
+        # HELIOS does). Shedding less cannot start the program: the victims
+        # came back on after min_off_time and were shed again each time
+        # their min_on_time ended, an off/on every few minutes for hours.
+        if sum(power_w for _dev, power_w in candidates) < deficit:
+            return 0
+
         candidates.sort(key=lambda x: x[0]["priority"])
 
         # ── Stage 1: greedy shed in priority-ascending order ─────
@@ -1837,6 +1962,8 @@ class DeviceManager:
         dev["_runtime_tick"] = now
         dev["total_switches"] += 1
         dev["managed_on"] = True
+        # Checked on the next cycle: seen off there, the start did not take.
+        dev["_start_unconfirmed"] = True
         # A plain turn-on is NOT a forced start: clear any stale force-started
         # immunity so the device stays sheddable (SOC/surplus protection).
         # Deadline force-starts re-set force_started=True right after calling
@@ -1860,6 +1987,7 @@ class DeviceManager:
         dev["last_off"] = now
         dev["_runtime_tick"] = None
         dev["managed_on"] = False
+        dev["_start_unconfirmed"] = False
         dev["force_started"] = False
         dev["excess_since"] = None
         dev["_excess_deficit_since"] = None
