@@ -8,8 +8,10 @@ lost to a pump (600 W, priority 10, Debounce ON 60 s): the pump started
 first, its load pushed the surplus below the heater's need (nominal +
 hysteresis_on + residual = 1800 W) and reset the heater's timer, so the
 heater never started. Now a lower-priority device sees the surplus minus
-the nominal power of every higher-priority device that is debouncing toward
-a surplus start, unless that device's start is blocked for another reason.
+what every higher-priority device that is debouncing toward a surplus start
+needs for that start (nominal + hysteresis_on + residual_power; a waiting
+program: nominal + hysteresis_on), unless that device's start is blocked
+for another reason or two of its starts within the hour did not take.
 """
 
 from datetime import timedelta
@@ -91,6 +93,27 @@ def _ever_on(hass, switch):
     return ("ON", switch) in hass.actions
 
 
+def _first_on(hass, switch):
+    return hass.actions.index(("ON", switch))
+
+
+def _ignore_on(hass, switch, times=None):
+    """The switch ignores AURUM's 'on' command (every time, or the first
+    `times`): a broken relay or a tripped overpower protection."""
+    real_turn_on = hass.turn_on
+    left = [times]
+
+    def turn_on(entity_id):
+        if entity_id == switch and left[0] != 0:
+            if left[0] is not None:
+                left[0] -= 1
+            hass.actions.append(("ON", entity_id))
+            return
+        real_turn_on(entity_id)
+
+    hass.turn_on = turn_on
+
+
 class TestHigherPriorityKeepsItsClaim:
     def test_higher_device_starts_lower_waits(
             self, hass, make_manager, make_device, now):
@@ -140,6 +163,27 @@ class TestHigherPriorityKeepsItsClaim:
         assert hass.states["switch.c"] == "off"
         assert not _ever_on(hass, "switch.c")
 
+    @pytest.mark.parametrize("heater_over, pump_over, base", [
+        # Heater needs 1500 + 500 + 100 = 2100 W, the pump 900 W.
+        (dict(hysteresis_on=500), {}, 2500),
+        # Heater needs 1500 + 200 + 300 = 2000 W, the pump 600 + 200 = 800.
+        (dict(residual_power=300), dict(residual_power=0), 2400),
+    ], ids=["hysteresis_on", "residual_power"])
+    def test_lower_device_with_smaller_margin_cannot_overtake(
+            self, hass, make_manager, make_device, now,
+            heater_over, pump_over, base):
+        # The heater reserves its whole start need, so the pump sees 400 W
+        # and waits. Reserving only its 1500 W nominal power left the pump
+        # 1000 / 900 W: the pump started, the heater then saw 1900 / 1800 W,
+        # short of its need, and never started.
+        mgr = make_manager([_heater(make_device, **heater_over),
+                            _pump(make_device, **pump_over)])
+        _run(mgr, hass, now, 10, base=base)
+        assert hass.states[H_SW] == "on"
+        # Once the heater runs, base - 1500 W still covers the pump.
+        assert hass.states[L_SW] == "on"
+        assert _first_on(hass, H_SW) < _first_on(hass, L_SW)
+
     def test_equal_priorities_keep_todays_order(
             self, hass, make_manager, make_device, now):
         # Same priority: no reservation, the shorter debounce wins as
@@ -179,12 +223,45 @@ class TestStartupDetection:
         assert washer["sd_state"] == SD_STATE_WAITING
         assert not _ever_on(hass, SD_SW)
 
-    def test_program_short_of_surplus_does_not_reserve_after_preempting(
+    def test_lower_waiting_program_with_bigger_margin_cannot_overtake(
             self, hass, make_manager, make_device, now):
-        # The washer (needs 2200 W) sees 1400 W, preempts the 600 W pump
-        # and keeps its old timer, but its surplus test fails: it must not
-        # hold back the fan (300 W, needs 600 W), which starts after its
-        # own 60 s debounce.
+        # The heater (needs 1800 W) reserves its start need: the washer
+        # (2000 W, needs 2200 W) sees 3750 - 1800 = 1950 W and waits. With
+        # only the heater's 1500 W reserved it saw 2250 W and started, and
+        # the heater then saw 1750 W for the whole program and never ran.
+        mgr = make_manager([
+            _heater(make_device),
+            _washer(make_device, priority=50, debounce_on=60),
+        ])
+        washer = next(d for d in mgr.devices if d["name"] == "Washer")
+        washer["sd_state"] = SD_STATE_WAITING
+        _run(mgr, hass, now, 10, base=3750)
+        assert hass.states[H_SW] == "on"
+        # 3750 - 1500 = 2250 W once the heater runs: the program starts.
+        assert washer["sd_state"] == SD_STATE_RUNNING
+        assert _first_on(hass, H_SW) < _first_on(hass, SD_SW)
+
+    def test_waiting_program_reserves_what_its_own_test_needs(
+            self, hass, make_manager, make_device, now):
+        # A waiting program's start test is nominal + hysteresis_on (no
+        # residual_power): the washer reserves 2200 W, so the pump (needs
+        # 900 W) sees 3100 - 2200 = 900 W and may start during the wait.
+        mgr = make_manager([_washer(make_device), _pump(make_device)])
+        mgr.devices[0]["sd_state"] = SD_STATE_WAITING
+        t = _run(mgr, hass, now, 2, base=3100)
+        assert hass.states[L_SW] == "on"
+        assert not _ever_on(hass, SD_SW)
+        # 3100 - 600 = 2500 W still covers the program.
+        _run(mgr, hass, t, 5, base=3100)
+        assert mgr.devices[0]["sd_state"] == SD_STATE_RUNNING
+
+    def test_program_short_of_surplus_neither_sheds_nor_reserves(
+            self, hass, make_manager, make_device, now):
+        # The washer (needs 2200 W) sees 1400 W. The 600 W pump cannot
+        # cover the 800 W deficit, so it is not shed (it used to be, and
+        # came back on minutes later). The washer's old timer is cleared
+        # and it does not hold back the fan (300 W, needs 600 W), which
+        # starts after its own 60 s debounce.
         mgr = make_manager([
             _washer(make_device),
             _pump(make_device, priority=50),
@@ -198,8 +275,34 @@ class TestStartupDetection:
         pump.update(managed_on=True, _cached_on=True,
                     on_since=now - timedelta(hours=1))
         _run(mgr, hass, now, 1.5, base=2000)   # ticks at 0, 30 and 60 s
-        assert ("OFF", L_SW) in hass.actions   # preempted for the washer
+        assert ("OFF", L_SW) not in hass.actions
+        assert washer["excess_since"] is None
         assert hass.states["switch.fan"] == "on"
+
+    @pytest.mark.parametrize("base", [3000, 3600])
+    def test_no_pump_churn_for_a_program_that_cannot_fit(
+            self, hass, make_manager, make_device, now, base):
+        # Heater (priority 90) starts first, the waiting washer (priority
+        # 50, needs 2200 W) never fits next to it, even with the pump off.
+        # It used to shed the running 600 W pump anyway, each time the
+        # pump's min_on_time ended: 5 off/on per hour. Now the pump keeps
+        # running.
+        mgr = make_manager([
+            _heater(make_device),
+            _washer(make_device, priority=50, debounce_on=60),
+            _pump(make_device),
+        ])
+        washer = next(d for d in mgr.devices if d["name"] == "Washer")
+        pump = next(d for d in mgr.devices if d["name"] == "Pump")
+        washer["sd_state"] = SD_STATE_WAITING
+        hass.states[L_SW] = "on"
+        pump.update(managed_on=True, _cached_on=True,
+                    on_since=now - timedelta(hours=1))
+        _run(mgr, hass, now, 60, base=base)
+        assert hass.states[H_SW] == "on"
+        assert washer["sd_state"] == SD_STATE_WAITING
+        assert ("OFF", L_SW) not in hass.actions
+        assert hass.states[L_SW] == "on"
 
 
 def _block_run_condition(hass, mgr):
@@ -271,6 +374,60 @@ class TestBlockedDeviceDoesNotReserve:
         _run(mgr, hass, now, 3, base=1900)
         assert hass.states[H_SW] == "off"
         assert hass.states[L_SW] == "on"
+
+
+class TestStartThatDoesNotTake:
+    @pytest.mark.parametrize("fault", ["relay", "unknown"])
+    def test_reservation_ends_after_two_starts_that_did_not_take(
+            self, hass, make_manager, make_device, now, fault):
+        # The heater's switch never turns on: a broken relay, or a
+        # non-optimistic MQTT switch stuck at 'unknown'. It kept re-arming
+        # and reserved forever, so the pump never ran. Now it is commanded
+        # at 300 s and 630 s, seen off after each, and the pump starts
+        # after its own 60 s debounce from then on.
+        mgr = make_manager([_heater(make_device), _pump(make_device)])
+        if fault == "relay":
+            _ignore_on(hass, H_SW)
+        else:
+            hass.states[H_SW] = "unknown"
+        _run(mgr, hass, now, 20, base=1900)
+        assert hass.actions.count(("ON", H_SW)) == 2
+        assert hass.states[L_SW] == "on"
+
+    def test_one_lost_command_keeps_the_reservation(
+            self, hass, make_manager, make_device, now):
+        # A single 'on' that does not arrive is not enough: the heater
+        # keeps its claim, starts on the next attempt, and the failure is
+        # forgotten once it is seen on.
+        mgr = make_manager([_heater(make_device), _pump(make_device)])
+        _ignore_on(hass, H_SW, times=1)
+        _run(mgr, hass, now, 20, base=1900)
+        assert hass.states[H_SW] == "on"
+        assert not _ever_on(hass, L_SW)
+        assert mgr.devices[0]["_failed_starts"] == []
+
+    def test_failed_starts_stay_bounded(
+            self, hass, make_manager, make_device, now):
+        # A cheap-grid start is retried every cycle: a broken relay must
+        # not grow the list of failed starts without end.
+        mgr = make_manager([_pump(make_device, price_mode="cheap_grid")])
+        mgr.pricing = FakePricing(price_ok=True)
+        _ignore_on(hass, L_SW)
+        _run(mgr, hass, now, 30, base=0)
+        assert hass.actions.count(("ON", L_SW)) == 60
+        assert len(mgr.devices[0]["_failed_starts"]) == 2
+
+    @pytest.mark.parametrize("age_min, pump_waits", [
+        (10, False),    # two recent failures: no reservation
+        (61, True),     # older than an hour: the heater reserves again
+    ])
+    def test_failed_starts_count_for_an_hour(
+            self, hass, make_manager, make_device, now, age_min, pump_waits):
+        mgr = make_manager([_heater(make_device), _pump(make_device)])
+        mgr.devices[0]["_failed_starts"] = [
+            now - timedelta(minutes=age_min)] * 2
+        _run(mgr, hass, now, 3, base=1900)
+        assert _ever_on(hass, L_SW) is not pump_waits
 
 
 class TestOtherStartPathsUnchanged:

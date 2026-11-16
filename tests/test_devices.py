@@ -446,6 +446,30 @@ class TestPreemptForSD:
         assert freed == 800
         assert mgr.hass.states["switch.low"] == "off"
 
+    def test_does_not_preempt_when_victims_cannot_cover_deficit(
+            self, make_manager, make_device, now):
+        mgr = make_manager([
+            make_device(name="SD", priority=80, startup_detection=True,
+                        nominal_power=1200),
+            make_device(name="Low", priority=10, nominal_power=800,
+                        switch_entity="switch.low"),
+        ])
+        sd = mgr.devices[0]
+        low = mgr.devices[1]
+        low["_cached_on"] = True
+        low["managed_on"] = True
+        low["on_since"] = now - timedelta(hours=1)
+        mgr.hass.states["switch.low"] = "on"
+
+        # SD needs 1200, turnon_excess = 0 → deficit = 1200. Low's 800 W
+        # cannot start the program: shedding it would only cost its run.
+        freed = mgr._preempt_for_sd(
+            sd_device=sd, needed_w=1200, turnon_excess=0,
+            battery_soc=80, soc_threshold=20, now=now, excess=0)
+        assert freed == 0
+        assert mgr.hass.states["switch.low"] == "on"
+        assert ("OFF", "switch.low") not in mgr.hass.actions
+
     def test_refuses_to_preempt_higher_priority_device(
             self, make_manager, make_device, now):
         mgr = make_manager([
