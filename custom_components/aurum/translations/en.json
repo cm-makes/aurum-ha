@@ -37,6 +37,9 @@
           "update_interval": "Update speed",
           "sensor_timeout": "Sensor timeout",
           "battery_priority": "Battery priority",
+          "notify_service": "Mobile push notifications (optional)",
+          "price_entity": "Electricity price sensor (optional)",
+          "price_level_entity": "Price level sensor (optional)",
           "cheap_period_entity": "Cheap period – sensor or schedule (optional)",
           "cheap_period_starts_in_entity": "Cheap period countdown (optional)"
         },
@@ -47,6 +50,9 @@
           "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed.",
           "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen. A frozen grid meter: AURUM starts nothing on surplus and switches off devices running on surplus after their turn-off delay; programs, deadline jobs and cheap-grid runs continue. A frozen solar sensor counts as 0 W. An unavailable sensor is always detected. 0 = off. Default: 10 min. Raise it above your meter's update interval if it updates less often (e.g. a cloud integration).",
           "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard.",
+          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
+          "price_entity": "Current electricity price in ct/kWh (the hundredth of your currency, e.g. cents or Rappen). A sensor in EUR/kWh, CHF/kWh or another currency per kWh or MWh is converted automatically. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
+          "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
           "cheap_period_entity": "ON while grid power is cheap. Either a binary sensor from your price integration (e.g. tibber_prices best price period) or, for a day/night tariff (HT/NT, Economy 7), a Schedule helper with your cheap hours, e.g. 22:00–06:00 (Settings → Devices & services → Helpers → Schedule). A toggle (input_boolean) works too. Devices with 'cheap grid' mode will run during these periods. Can be left empty.",
           "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Not needed with a Schedule helper: AURUM reads the next start from the schedule. Can be left empty."
         }

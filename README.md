@@ -227,8 +227,12 @@ grid-fee module 3): mark your cheap hours in a Home Assistant **Schedule**
 helper and use it as `cheap_period_entity`. For NT 22:00–06:00, go to
 **Settings → Devices & services → Helpers → Create helper → Schedule**, name
 it e.g. *Night tariff*, and add two blocks on every day, 00:00–06:00 and
-22:00–24:00 (a block can't cross midnight). Devices in `cheap_grid` mode
-then run in those hours when the sun isn't enough. AURUM reads the
+22:00–24:00 (a block can't cross midnight). Regular devices in
+`cheap_grid` mode (water heater, heating rod, pool pump) then run in those
+hours when the sun isn't enough. Washers and dishwashers with *Startup
+detection* don't start in the cheap hours by themselves: AURUM pauses a
+program you start and resumes it on PV surplus, or on grid in time if you
+switch on *Must run today* and set a deadline. AURUM reads the
 countdown to the next cheap block from the schedule, so
 `cheap_period_starts_in_entity` can stay empty. Without a price sensor,
 `sensor.aurum_electricity_price` stays unavailable; `cheap_period` and

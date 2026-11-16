@@ -389,6 +389,37 @@ class TestNightTariffDevice:
         _run(mgr, pm, t, 30)
         assert hass.states[SW] == "off"
 
+    def test_a_paused_washer_does_not_start_in_the_cheap_hours(
+            self, hass, make_manager, make_device):
+        """The README says so: a startup-detection program paused by
+        AURUM resumes on surplus or at its deadline, not on the cheap
+        period (the WAITING branch never asks for a price grant, audit
+        #11). If that changes, update the README paragraph."""
+        from custom_components.aurum.modules.devices import (
+            SD_STATE_WAITING,
+        )
+        washer_sw, washer_pw = "switch.washer", "sensor.washer_power"
+        mgr = make_manager([
+            make_device(price_mode="cheap_grid"),
+            make_device(name="Washer", switch_entity=washer_sw,
+                        power_entity=washer_pw, nominal_power=2000,
+                        price_mode="cheap_grid", startup_detection=True),
+        ])
+        pm = _pm(hass)
+        mgr.pricing = pm
+        washer = next(d for d in mgr.devices if d["name"] == "Washer")
+        washer["sd_state"] = SD_STATE_WAITING
+        washer["sd_waiting_since"] = T0
+        hass.states[washer_pw] = "0"
+
+        _schedule(hass, "on", _local(T0) + timedelta(hours=9))
+        _run(mgr, pm, T0, 30)
+        assert hass.states[SW] == "on"
+        assert hass.states[washer_sw] == "off"
+        assert washer["sd_state"] == SD_STATE_WAITING
+        assert not [a for a in hass.actions
+                    if a[1] == washer_sw and a[0] == "ON"]
+
 
 # ══════════════════════════════════════════════════════════════════
 #  Advisor with only a schedule (no price, no level)
@@ -463,3 +494,44 @@ class TestTexts:
                 "22:00–24:00") in readme
         assert ("AURUM reads the countdown to the next cheap block from "
                 "the schedule") in readme
+
+    def test_readme_names_the_startup_detection_exception(self):
+        """Only regular cheap-grid devices run in the cheap hours; a
+        washer or dishwasher with startup detection does not start
+        there by itself."""
+        readme = " ".join(
+            (REPO / "README.md").read_text(encoding="utf-8").split())
+        assert ("Regular devices in `cheap_grid` mode (water heater, "
+                "heating rod, pool pump) then run in those hours") in readme
+        assert ("Washers and dishwashers with *Startup detection* don't "
+                "start in the cheap hours by themselves") in readme
+        assert ("resumes it on PV surplus, or on grid in time if you "
+                "switch on *Must run today* and set a deadline") in readme
+
+    @pytest.mark.parametrize("name", sorted(TEXTS))
+    @pytest.mark.parametrize("form_name, section, step", [
+        ("setup", "config", "battery"),
+        ("options", "options", "settings"),
+    ])
+    def test_every_field_of_the_form_has_a_text(
+            self, name, form_name, section, step):
+        """Setup step 2 showed raw keys for the price and push fields
+        (price_entity, price_level_entity, notify_service)."""
+        fields = [getattr(m, "schema", m)
+                  for m in FORMS[form_name]()["data_schema"].schema]
+        texts = _load(TEXTS[name][0])[section]["step"][step]
+        for part in ("data", "data_description"):
+            missing = [f for f in fields if not texts[part].get(f)]
+            assert not missing, f"{section}.step.{step}.{part}: {missing}"
+
+    @pytest.mark.parametrize("name", sorted(TEXTS))
+    @pytest.mark.parametrize(
+        "field", ["notify_service", "price_entity", "price_level_entity"])
+    def test_setup_and_options_explain_a_field_alike(self, name, field):
+        """Setup shows the same label and description as Options,
+        including the ct/kWh note on the price sensor."""
+        data = _load(TEXTS[name][0])
+        setup = data["config"]["step"]["battery"]
+        options = data["options"]["step"]["settings"]
+        for part in ("data", "data_description"):
+            assert setup[part].get(field) == options[part][field]

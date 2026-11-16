@@ -37,6 +37,9 @@
           "update_interval": "Aktualisierung",
           "sensor_timeout": "Sensor-Zeitlimit",
           "battery_priority": "Batterie-Vorrang",
+          "notify_service": "Mobile Push-Benachrichtigungen (optional)",
+          "price_entity": "Strompreis-Sensor (optional)",
+          "price_level_entity": "Preisstufen-Sensor (optional)",
           "cheap_period_entity": "Günstige Phase – Sensor oder Zeitplan (optional)",
           "cheap_period_starts_in_entity": "Countdown bis zur günstigen Phase (optional)"
         },
@@ -47,6 +50,9 @@
           "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden.",
           "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt. Eingefrorener Netzzähler: AURUM startet nichts mehr auf Überschuss und schaltet Geräte, die auf Überschuss laufen, nach ihrer Ausschaltverzögerung ab; Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter. Ein eingefrorener Solarsensor zählt als 0 W. Ein nicht verfügbarer Sensor wird immer erkannt. 0 = aus. Standard: 10 min. Erhöhe den Wert über das Aktualisierungsintervall deines Zählers, wenn er seltener meldet (z. B. eine Cloud-Integration).",
           "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte.",
+          "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_christian'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
+          "price_entity": "Aktueller Strompreis in ct/kWh (der Hundertstel deiner Währung, z. B. Cent oder Rappen). Ein Sensor in EUR/kWh, CHF/kWh oder einer anderen Währung pro kWh oder MWh wird automatisch umgerechnet. Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
+          "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
           "cheap_period_entity": "EIN, solange Netzstrom günstig ist. Entweder ein Binärsensor deiner Preis-Integration (z.B. tibber_prices Bestpreis-Phase) oder, bei einem Tag/Nacht-Tarif (HT/NT), ein Zeitplan-Helfer mit deinen günstigen Stunden, z.B. 22:00–06:00 (Einstellungen → Geräte & Dienste → Helfer → Zeitplan). Ein Schalter-Helfer (input_boolean) geht auch. Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Kann leer bleiben.",
           "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Mit einem Zeitplan-Helfer nicht nötig: AURUM liest den nächsten Start aus dem Zeitplan. Kann leer bleiben."
         }
