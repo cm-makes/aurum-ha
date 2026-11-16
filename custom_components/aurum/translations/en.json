@@ -36,7 +36,12 @@
           "min_soc": "Battery reserve",
           "update_interval": "Update speed",
           "sensor_timeout": "Sensor timeout",
-          "battery_priority": "Battery priority"
+          "battery_priority": "Battery priority",
+          "notify_service": "Mobile push notifications (optional)",
+          "price_entity": "Electricity price sensor (optional)",
+          "price_level_entity": "Price level sensor (optional)",
+          "cheap_period_entity": "Cheap period – sensor or schedule (optional)",
+          "cheap_period_starts_in_entity": "Cheap period countdown (optional)"
         },
         "data_description": {
           "battery_capacity_wh": "How large is your battery? Enter in watt-hours. Examples: 5,000 Wh = 5 kWh, 10,000 Wh = 10 kWh.",
@@ -44,7 +49,12 @@
           "min_soc": "Below what charge level should ALL devices be turned off? Protects your battery from deep discharge. Default: 10%.",
           "update_interval": "How often AURUM checks sensors and controls devices (in seconds). 15 seconds works well for most setups. Usually doesn't need to be changed.",
           "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen. A frozen grid meter: AURUM starts nothing on surplus and switches off devices running on surplus after their turn-off delay; programs, deadline jobs and cheap-grid runs continue. A frozen solar sensor counts as 0 W. An unavailable sensor is always detected. 0 = off. Default: 10 min. Raise it above your meter's update interval if it updates less often (e.g. a cloud integration).",
-          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
+          "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard.",
+          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_your_phone'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
+          "price_entity": "Current electricity price in ct/kWh (the hundredth of your currency, e.g. cents or Rappen). A sensor in EUR/kWh, CHF/kWh or another currency per kWh or MWh is converted automatically. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
+          "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
+          "cheap_period_entity": "ON while grid power is cheap. Either a binary sensor from your price integration (e.g. tibber_prices best price period) or, for a day/night tariff (HT/NT, Economy 7), a Schedule helper with your cheap hours, e.g. 22:00–06:00 (Settings → Devices & services → Helpers → Schedule). A toggle (input_boolean) works too. Devices with 'cheap grid' mode will run during these periods. Washers and dishwashers with program detection are not started by it; use Must run today with a deadline for them. Can be left empty.",
+          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Not needed with a Schedule helper: AURUM reads the next start from the schedule. Can be left empty."
         }
       }
     },
@@ -90,7 +100,7 @@
           "notify_service": "Mobile push notifications (optional)",
           "price_entity": "Electricity price sensor (optional)",
           "price_level_entity": "Price level sensor (optional)",
-          "cheap_period_entity": "Cheap price period sensor (optional)",
+          "cheap_period_entity": "Cheap period – sensor or schedule (optional)",
           "cheap_period_starts_in_entity": "Cheap period countdown (optional)",
           "battery_priority": "Battery priority"
         },
@@ -109,11 +119,11 @@
           "min_soc": "Below this level, ALL devices are turned off (battery protection).",
           "update_interval": "How often AURUM checks and controls, in seconds. Default: 15s.",
           "sensor_timeout": "Minutes without a new grid or solar power reading before AURUM treats the sensor as frozen. A frozen grid meter puts AURUM in safe mode; a frozen solar sensor counts as 0 W. 0 = off. Default: 10 min.",
-          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_christian'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
+          "notify_service": "Receive push notifications on your phone when devices are turned on/off. Enter your notify service name, e.g. 'mobile_app_your_phone'. Find it under Developer Tools → Services → notify. Leave empty to disable.",
           "price_entity": "Current electricity price in ct/kWh (the hundredth of your currency, e.g. cents or Rappen). A sensor in EUR/kWh, CHF/kWh or another currency per kWh or MWh is converted automatically. Works with Tibber, Nordpool, aWATTar, EPEX Spot or any price sensor. Enables price-aware device scheduling.",
           "price_level_entity": "Price level classification (very_cheap/cheap/normal/expensive/very_expensive). Used as fallback when no max_price is set on a device. Can be left empty.",
-          "cheap_period_entity": "Binary sensor that is ON during cheap price periods (e.g. tibber_prices best price period). Devices with 'cheap grid' mode will run during these periods. Can be left empty.",
-          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Can be left empty.",
+          "cheap_period_entity": "ON while grid power is cheap. Either a binary sensor from your price integration (e.g. tibber_prices best price period) or, for a day/night tariff (HT/NT, Economy 7), a Schedule helper with your cheap hours, e.g. 22:00–06:00 (Settings → Devices & services → Helpers → Schedule). A toggle (input_boolean) works too. Devices with 'cheap grid' mode will run during these periods. Washers and dishwashers with program detection are not started by it; use Must run today with a deadline for them. Can be left empty.",
+          "cheap_period_starts_in_entity": "Sensor showing minutes until the next cheap price period starts (e.g. tibber_prices 'Bestpreis startet in'). Used to display countdown in device status. Not needed with a Schedule helper: AURUM reads the next start from the schedule. Can be left empty.",
           "battery_priority": "When enabled, only genuine grid export counts as surplus for devices — the battery charges first — and battery discharge counts as a deficit, so running devices are shed once the battery starts feeding them (needs the battery power sensors). When disabled (default), power currently charging the battery may be diverted to devices; per-device SOC thresholds are then the only guard."
         }
       },
@@ -151,13 +161,14 @@
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
           "condition_value": "Condition limit",
+          "condition_margin": "Restart margin",
           "day_start_hour": "Daily reset hour"
         },
         "data_description": {
           "name": "Give the device a unique name, e.g. 'Washing Machine', 'Pool Pump' or 'EV Charger'. This name will appear as a sensor in Home Assistant.",
           "switch_entity": "The smart plug that turns this device on and off. Just pick it from the list — all available plugs and switches are shown.",
           "power_entity": "Does your smart plug measure power consumption? Then select its power sensor here. AURUM will use the real consumption instead of the estimate. Can be left empty.",
-          "nominal_power": "How much power does this device use when running? Usually written on the device label. Examples: Washing machine ~ 2,000W, Pool pump ~ 500W, EV charger ~ 3,700W. Used as estimate when no power sensor is set.",
+          "nominal_power": "How much power does this device use when running? Usually written on the device label. Examples: Washing machine ~ 2,000W, Pool pump ~ 500W, EV charger ~ 3,700W. Used as estimate when no power sensor is set. With program detection, enter the heating power (washer ~ 2,000W): a paused program needs this much surplus (plus Hysteresis ON) to resume, and keeps it free for its heating after it starts.",
           "priority": "Which devices should get solar power first? Higher number = more important. Recommendation: 80–100 for washing machine/dishwasher, 50–70 for pool pump/water heater, 20–40 for EV charger.",
           "soc_threshold": "When the battery drops below the charge target: at what battery level is this device still allowed to run? Set to 0 if the device should only run with full surplus.",
           "startup_detection": "Enable for appliances that run programs (washing machines, dishwashers, dryers). AURUM automatically detects when a program starts and protects it from being interrupted — even when the sun goes behind clouds.",
@@ -171,7 +182,7 @@
           "estimated_runtime": "How long should this device run per day, or how long does a typical cycle take? Examples: Pool pump ~ 400 min/day, Washing machine ~ 120 min. Used together with the deadline so AURUM knows when to start — and as the daily target for 'Stop when daily runtime is reached'.",
           "stop_after_runtime": "Turn the device off once it has run for the configured duration today. Without this option it keeps running as long as surplus and battery allow. The counter resets at midnight. Perfect for pool pumps: 'run 400 minutes, then stop'.",
           "interruptible": "Can AURUM turn this device off when surplus drops? Disable for devices that must not be interrupted (e.g. 3D printer, aquarium heater). Default: on.",
-          "price_mode": "Solar only: device runs exclusively on PV surplus — never uses grid power. Cheap grid: device primarily runs on PV surplus, but ALSO turns on when electricity is cheap (below your max price or during best-price periods) — even at night or on cloudy days, regardless of battery SOC. Cheap grid (SOC-gated): same as Cheap grid, but the price-based start is only allowed while battery SOC is at or above this device's SOC threshold — below it, only genuine solar surplus can run the device. All modes always prefer solar when available. Requires a price sensor in settings.",
+          "price_mode": "Solar only: device runs exclusively on PV surplus — never uses grid power. Cheap grid: device primarily runs on PV surplus, but ALSO turns on when electricity is cheap (below your max price or during best-price periods) — even at night or on cloudy days, regardless of battery SOC. Cheap grid (SOC-gated): same as Cheap grid, but the price-based start is only allowed while battery SOC is at or above this device's SOC threshold — below it, only genuine solar surplus can run the device. All modes always prefer solar when available. Requires a price sensor or a cheap period (e.g. a Schedule helper) in settings. A paused program (program detection) is not started by a cheap price.",
           "max_price": "Maximum electricity price in ct/kWh (the hundredth of your currency, e.g. Rappen) at which this device may use grid power. Set to 0 to use price level / cheap period detection instead. Only applies in the 'Cheap grid' and 'Cheap grid (SOC-gated)' modes.",
           "residual_power": "Extra safety margin added to the surplus requirement. Prevents the device from consuming power that's needed for grid stability. Default: 100W.",
           "pv_power_threshold": "Run this device whenever actual solar generation is at or above this many watts AND the battery is at or above the device's battery level — regardless of house load or the daily solar budget. Great for a pool pump: 'run whenever PV > 1000W and battery > 25%'. Set to 0 to disable and use only the normal surplus/price logic.",
@@ -183,6 +194,7 @@
           "min_off_time": "Once turned off, how long must the device stay off (seconds)? Useful for compressors, fans with cool-down. Default: 60s.",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
           "condition_value": "Threshold for the run condition sensor.",
+          "condition_margin": "Works like a thermostat: once the sensor has reached the limit, the device may only start again when the sensor is this far back on the allowed side. Example: below 55 with margin 3 → off at 55, allowed again below 52, so a tank at 54.9 does not restart the heater. In the sensor's unit. 0 = no margin (default).",
           "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
         }
       },
@@ -227,6 +239,7 @@
           "condition_entity": "Run condition sensor (optional)",
           "condition_op": "Condition",
           "condition_value": "Condition limit",
+          "condition_margin": "Restart margin",
           "day_start_hour": "Daily reset hour"
         },
         "data_description": {
@@ -257,6 +270,7 @@
           "min_off_time": "Minimum time the device stays off after being turned off (seconds).",
           "condition_entity": "The device may only run while this sensor is below/above the limit — e.g. a water heater only while the boiler temperature is below 55. Leave empty for no condition.",
           "condition_value": "Threshold for the run condition sensor.",
+          "condition_margin": "Thermostat band in the sensor's unit: after the limit is reached, the device may only start again once the sensor is this far back on the allowed side (below 55, margin 3: again below 52). 0 = off.",
           "day_start_hour": "Hour of day (0-23) when this device's runtime/energy counters reset. 0 = midnight (default). Set to 9 so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight before the reset."
         }
       },
@@ -311,6 +325,10 @@
     "input_stale": {
       "title": "AURUM: {entity} reports no new values",
       "description": "The grid meter **{entity}** still shows a value, but has not reported a new reading within the *Sensor timeout*. A frozen feed (an MQTT sensor without expiry, a stalled cloud connection) looks like a live value, so AURUM runs in safe mode until the meter reports again: no device is started on surplus, and devices running on surplus are switched off after their turn-off delay. Programs, deadline jobs and cheap-grid runs continue.\n\nCheck the device or integration behind this sensor. If it normally updates less often, raise *Sensor timeout* in the AURUM settings above its update interval, or set it to 0 to turn this check off. This message clears itself when the sensor reports again."
+    },
+    "missing_entities": {
+      "title": "AURUM: configured entities not found",
+      "description": "AURUM's configuration uses entities that Home Assistant does not have. They were still missing when AURUM checked again 10 minutes later:\n\n{entities}\n\nUsually such an entity was renamed (for example with *Recreate entity IDs*), disabled, or removed together with its device or integration. Until they exist again, AURUM works without them: a device without its switch is not switched, startup detection sees no program start without the power measurement, a run condition without its sensor does not apply, a missing grid meter or battery sensor puts AURUM in safe mode, and a missing price, forecast, weather or solar production sensor gives no data.\n\nOpen **Settings → Devices & services → AURUM → Configure** and select the current entities, enable them again, or empty the field if you no longer use it. This message clears itself when the entities exist again."
     }
   },
   "entity": {

@@ -62,7 +62,7 @@ AURUM lässt Waschmaschine, Spülmaschine, Poolpumpe und Warmwasser-Boiler mit d
 - **Pünktlich fertig:** Mit *Muss heute* und *Fertig bis* startet AURUM notfalls rechtzeitig mit Netzstrom. Das geht auch für Poolpumpe und Boiler.
 - **Einrichtung komplett in der Oberfläche:** Netzzähler auswählen, Geräte anlegen, Prioritäten setzen. Kein YAML.
 - **Batterie zuerst, wenn du willst:** Mindest-Ladestand pro Gerät, Batterie-Vorrang und PV-Prognose (Solcast, Open-Meteo), damit die Batterie ihr Ladeziel trotzdem erreicht.
-- **Dynamische Stromtarife:** Geräte laufen auf Wunsch auch bei günstigem Netzstrom (Tibber, Nordpool, aWATTar, EPEX Spot).
+- **Dynamische Stromtarife:** Geräte laufen auf Wunsch auch bei günstigem Netzstrom (Tibber, Nordpool, aWATTar, EPEX Spot). Bei einem Tag/Nacht-Tarif (HT/NT) trägst du die NT-Stunden in einen Zeitplan-Helfer ein.
 - **Erklärt jede Entscheidung:** Das Panel und der Sensor *Current Decision* zeigen, warum ein Gerät läuft, wartet oder aus ist.
 - **Nicht dabei:** E-Auto laden, Batterie oder Wechselrichter steuern. AURUM liest den Netzzähler (und den Akkustand) und schaltet Steckdosen und Relais.
 - Oberfläche und Dashboard auf Deutsch und Englisch.
@@ -83,12 +83,12 @@ Installation ab Home Assistant 2026.11: **Einstellungen → Marketplace**, nach 
 | **PV Surplus Steering** | Turns devices on/off based on available excess power |
 | **Battery Priority** | Optional: only genuine grid export counts as surplus, so the battery charges first |
 | **Battery-Aware** | Respects battery SOC with configurable target and minimum thresholds |
-| **Run Conditions** | Optional per-device prerequisite (a sensor below/above a limit — e.g. water heater only while the tank is below 55 °C) |
+| **Run Conditions** | Optional per-device prerequisite (a sensor below/above a limit — e.g. water heater only while the tank is below 55 °C), with an optional restart margin so it works like a thermostat |
 | **PV Power Gate** | Optional per-device threshold: run on raw PV generation above a limit (with healthy SOC), bypassing the budget cap |
 | **Daily Reset Hour** | Per-device reset hour for runtime counters — align a cheap-grid device to the solar day |
 | **Priority-Based** | Higher priority devices get power first |
 | **PV Forecast Budget** | Uses Solcast or Open-Meteo forecast to limit device runtime so the battery reliably reaches target SOC |
-| **Price-Aware Scheduling** | Devices can run on cheap grid power (Tibber, Nordpool, aWATTar, EPEX Spot) — even without PV surplus |
+| **Price-Aware Scheduling** | Devices can run on cheap grid power (Tibber, Nordpool, aWATTar, EPEX Spot, or the night hours of a day/night tariff via a Schedule helper) — even without PV surplus |
 | **Per-Device SOC Threshold** | Each device can have its own minimum battery level |
 | **Energy Tracking** | Per-device kWh/day tracking, compatible with HA Energy Dashboard |
 | **Push Notifications** | Optional mobile push when devices are turned on/off |
@@ -160,13 +160,14 @@ In the integration options (Configure), click **Add a device** and fill in:
 | **Switch entity** | The switch that controls the device |
 | **Power sensor** | Optional: Real-time power measurement |
 | **Nominal power** | Expected power draw in watts |
-| **Priority** | 1–100, higher = turned on first |
+| **Priority** | 1–100, higher = turned on first. While a device waits out its *Debounce ON* for a surplus start, devices with a lower priority only get the surplus left after what it needs to start (*Nominal power* + *Hysteresis ON* + *Power reserve*; a waiting startup-detection program without *Power reserve*), so a device with a shorter debounce cannot take that surplus first. Devices with the same priority don't hold each other back. |
 | **SOC threshold** | Device only runs when battery is above this level |
 | **Startup detection** | Enable for appliances with programs (washers, dishwashers). AURUM keeps the plug on in standby, detects when you press Start, pauses immediately, and resumes when PV surplus is sufficient. If a deadline is set and PV never arrives, AURUM starts on grid power as a fallback. |
 | **Interruptible** | If disabled, AURUM will not turn the device off mid-cycle |
 | **Deadline** | Time by which the device must have run (e.g. `18:00`). Only active while the device's *Must run today* switch is on. Regular devices: AURUM starts the device on grid just in time to reach *Estimated runtime* by the deadline, counting the runtime since *Must run today* was switched on (PV runs count); once that is reached, *Must run today* resets. With *Stop after runtime* the daily cap wins. With *Startup detection*, the deadline is sized for the pending program and *Must run today* resets when that program finishes. |
 | **Estimated runtime** | Expected runtime in minutes (used for deadline scheduling) |
 | **Run condition sensor** | Optional prerequisite: a sensor that must be **below** / **above** a limit for the device to run (e.g. water heater only while `sensor.boiler_temp` is below `55`). Blocks all start paths; an unavailable sensor fails open. |
+| **Restart margin** | Optional thermostat band for the run condition, in the sensor's unit. Once the reading has reached the limit, the condition stays unmet until the reading is this far back on the allowed side: *below* `55` with margin `3` stops at 55 and allows the next start only below 52 (*above* is mirrored), so a tank at 54.9 °C does not restart the water heater. The band only holds back starts: a device that is already on inside it (switched on by hand, for example) keeps running up to the limit. `0` = no band (default). An unavailable sensor still fails open. The band is kept across restarts and starts over when you change the sensor, the condition or the limit. |
 | **Daily reset hour** | Hour (0–23) when this device's runtime counter resets. `0` = midnight (default). Set to `9` so a cheap-grid device runs on solar first during the day and only tops up its runtime from cheap grid overnight. |
 | **PV power threshold** | Optional: run whenever *actual* PV generation is ≥ this many watts **and** battery SOC ≥ the device's SOC threshold, bypassing the daily budget cap. Expresses "run whenever PV ≥ 1000 W and battery ≥ 25 %" — useful when the surplus/budget logic reserves solar for the battery and a device (e.g. a pool pump) wouldn't otherwise start. Requires a PV **power** sensor. `0` = disabled (default). Also available as a live `number.aurum_{slug}_pv_power_threshold` entity and a dashboard control. |
 
@@ -217,10 +218,27 @@ In **Configure > Energy & Battery**, set one or more of these:
 |-------|---------------|---------|
 | `price_entity` | Current electricity price in ct/kWh | `sensor.tibber_aktueller_strompreis` |
 | `price_level_entity` | Price level enum (very_cheap/cheap/normal/expensive/very_expensive) | `sensor.tibber_aktuelles_preisniveau` |
-| `cheap_period_entity` | Binary sensor ON during cheap periods | `binary_sensor.tibber_bestpreis_zeitraum` |
-| `cheap_period_starts_in_entity` | Minutes until next cheap period (for dashboard countdown) | `sensor.tibber_bestpreis_startet_in` |
+| `cheap_period_entity` | ON during cheap periods: a binary sensor, a Schedule helper or a toggle (`input_boolean`) | `binary_sensor.tibber_bestpreis_zeitraum`, `schedule.night_tariff` |
+| `cheap_period_starts_in_entity` | Minutes until next cheap period (for dashboard countdown). Not needed with a Schedule helper | `sensor.tibber_bestpreis_startet_in` |
 
 > All fields are optional. You only need one price source — AURUM checks them in order: max_price threshold → cheap period → price level.
+
+**Day/night tariff without a price sensor** (HT/NT, Economy 7, the German
+grid-fee module 3): mark your cheap hours in a Home Assistant **Schedule**
+helper and use it as `cheap_period_entity`. For NT 22:00–06:00, go to
+**Settings → Devices & services → Helpers → Create helper → Schedule**, name
+it e.g. *Night tariff*, and add two blocks on every day, 00:00–06:00 and
+22:00–24:00 (a block can't cross midnight). Regular devices in
+`cheap_grid` mode (water heater, heating rod, pool pump) then run in those
+hours when the sun isn't enough. Washers and dishwashers with *Startup
+detection* don't start in the cheap hours by themselves: AURUM pauses a
+program you start and resumes it on PV surplus, or on grid in time if you
+switch on *Must run today* and set a deadline. AURUM reads the
+countdown to the next cheap block from the schedule, so
+`cheap_period_starts_in_entity` can stay empty. Without a price sensor,
+`sensor.aurum_electricity_price` stays unavailable; `cheap_period` and
+`cheap_period_starts_in_min` are on each cheap-grid device's
+`sensor.aurum_{slug}`.
 
 > ⚠️ **Price unit: AURUM works in ct/kWh**, the hundredth of your currency
 > (cents, Rappen, öre, pence). A `price_entity` that reports a whole
@@ -252,7 +270,7 @@ Edit a device and set:
 A device with `cheap_grid` mode turns on when **any** of these is true:
 1. PV surplus is sufficient (normal solar logic)
 2. `max_price` is set and current price ≤ threshold
-3. `cheap_period_entity` is ON (best price window active)
+3. `cheap_period_entity` is ON (best price window active, or inside the cheap hours of your schedule)
 4. `price_level_entity` is `very_cheap` or `cheap`
 
 Debounce timers still apply to prevent flapping on price edges.
@@ -284,6 +302,7 @@ floor; leave it on `cheap_grid` when price should always win.
 - [EPEX Spot](https://github.com/mampfes/hacs_epex_spot) — day-ahead prices
 - [Innostrom](https://github.com/LukasSkywalker/ha-innostrom) — Swiss dynamic tariffs (AEW, Swisspower and others), price sensor in CHF/kWh
 - Any sensor providing a price per kWh (or MWh) or price levels
+- Home Assistant's own **Schedule** helper — fixed day/night tariffs, no integration needed
 
 ---
 
@@ -334,6 +353,7 @@ A meter that drops out or freezes must not leave devices running on grid power. 
 Details:
 - A single missed reading is bridged with the last value. `nan` and `inf` count as unavailable.
 - While the grid meter, a battery power sensor or the SOC has failed, the Advisor shows `input_fault` (*Sensor fault – safe mode*). Every failed input, PV included, is listed in its `input_faults` attribute, and AURUM's own sensor for that input is `unavailable`. *House consumption* counts a PV sensor that is offline (inverter asleep) as 0 W, and goes unavailable only when PV is frozen or the grid exports while PV is offline. After 15 minutes Home Assistant also shows a repair issue for the grid meter, a battery power sensor or the SOC (*Settings → System → Repairs*); it clears itself when the sensor reports again. A failed PV sensor gets no repair issue, because many inverters take it offline every night.
+- **Entities that no longer exist.** A configured entity can disappear entirely: renamed (for example with *Recreate entity IDs*), disabled, or removed together with its device or integration. Once Home Assistant has started and AURUM's startup has ended, AURUM checks every entity in its configuration every 5 minutes: the energy, battery, forecast, weather and price sensors, and each device's switch, power measurement and run condition sensor (if a condition limit is set; without one the condition is ignored). Entities that are still missing 10 minutes after a check first missed them are listed, with device and field, in one repair issue (*AURUM: configured entities not found*) and logged once. Select the current entity in *Configure* (or enable it again); the issue clears itself when the entities exist again. An entity that exists but is `unavailable` is not listed, and a missing grid meter, battery power sensor or SOC is reported in this issue instead of the *unavailable* one.
 - *Sensor timeout* applies to the grid and PV power sensors. A reading at 0 W is not age-checked, because zero-export inverters and PV at night legitimately sit at 0 W for hours, so a meter that freezes at exactly 0 W is not detected. If your meter normally updates less often than every 10 minutes (some cloud integrations), raise the timeout above its update interval, or set it to 0 to turn this check off. Otherwise surplus starts pause between updates, and when the gap is longer than *Sensor timeout* plus *Debounce OFF*, devices running on surplus are switched off and on again with every update. An unavailable sensor is always detected.
 - At startup AURUM waits for the grid meter and the SOC sensor, up to 5 minutes, before it controls devices.
 - After a restart, a device you switched on yourself stays yours (`manual_override`); AURUM takes over only devices it had started, or devices it has no saved state for (newly added or renamed).
@@ -347,6 +367,17 @@ Details:
 | AURUM turned the device on | Full management — turns off when surplus drops |
 
 With *Startup detection* and a power sensor, AURUM keeps reading the power while the override is on. A program you run meanwhile shows as `running` (reason `running`) and its end is detected as usual. If you switch the plug off while the program is drawing power, the program is interrupted, not finished: the off time counts neither as runtime nor toward *Finish time*, only *Max runtime* can end it meanwhile, and the same program continues when you switch the plug back on. If the power was already below the *Finish threshold* at AURUM's last reading, for example because the program had ended and you unplugged it after unloading, the off time counts toward *Finish time* (but not as runtime), so the end is detected as usual. AURUM reads it the same way when you pause the program at the appliance and then switch the plug off: unless you switch the plug back on and resume within *Finish time*, the program counts as finished. The *finished* message reports the runtime AURUM counted for the program, without the time the plug was off under the override. When you switch the override off, a program AURUM has seen running under the override runs to its end untouched. AURUM has seen it once it has drawn more than the *Start threshold* for the *Detection time*. That takes at least two readings. AURUM reads the devices every second update cycle (every 30 s with the default 15 s update interval), so allow up to a minute before you switch the override off. This also works while the battery is at its reserve. A program you start or resume just before switching the override off is handled like any program start: AURUM pauses it until there is surplus. A paused program that isn't drawing power stays paused until there is surplus. Without a power sensor AURUM can't tell a program from standby, so it adopts no program under the override.
+
+### Two machines on one surplus (start reserve)
+
+A washer takes in water at about 25 W for several minutes before it heats at about 2,000 W. So that a second machine doesn't start on that surplus and both then heat from the grid or the battery, a running *Startup detection* program with a power sensor keeps its *Nominal power* minus what it draws free for others until it has drawn 90 % of its *Nominal power* once, for at most 30 minutes after it starts. A cold program that never gets there releases it after 30 minutes. Enter the heating power as *Power consumption (watts)*, the nominal power (about 2,000 W for a washer), not an average. A paused program needs that much surplus plus *Hysteresis ON* to resume.
+
+- Other *Startup detection* programs and non-interruptible devices don't start on the reserved surplus. Deadline, cheap-grid and PV-gate starts ignore it.
+- Interruptible devices (a pool pump) may use it: AURUM switches them off as usual once the heating leaves too little surplus. Holding them back too would leave the surplus unused for up to 30 minutes after a cold program. This doesn't apply while a device of higher priority is held back by the reserve: the surplus is kept for that device, so a pump can't take it and keep it after the release.
+- AURUM smooths the surplus it starts devices on, so it reacts to a heating that has just begun only over a few minutes. So while a reserve is held and for 3 minutes after its release, the starts that respect it are checked against the lower of the smoothed and the current surplus.
+- While a reserve is held, a waiting program doesn't switch off lower-priority devices to make room for itself. Neither does it in the update in which another program with a power sensor starts.
+- The Advisor shows a device held back by a reserve with reason `start_reserve`.
+- Without a power sensor, or while its plug is off, a program keeps no reserve. While its plug is unreachable, or while its power sensor is unavailable before the program has reached 90 %, its whole *Nominal power* stays reserved (still for at most 30 minutes).
 
 ---
 
@@ -455,9 +486,10 @@ The `devices` attribute lists every device with a machine-readable `reason`:
 | `runtime_done` / `program_done` | Done for today |
 | `program_standby` | Waiting for you to start a program (washer/dishwasher) |
 | `program_paused` | Program paused, waiting for surplus to resume |
+| `start_reserve` | There is enough surplus, but a program that has just started still needs it for its heating (see [start reserve](#two-machines-on-one-surplus-start-reserve)) |
 | `battery_charging` | Battery below reserve |
 | `below_soc_threshold` | Battery below this device's SOC threshold |
-| `condition_not_met` | Run condition blocks it (e.g. boiler already hot) |
+| `condition_not_met` | Run condition blocks it (e.g. boiler already hot, or still inside the restart margin) |
 | `disabled` | Force-off switch is on |
 | `switch_unavailable` | The device's switch is unavailable — AURUM sends it nothing until it reports again |
 | `input_fault` | Waiting because the surplus or the SOC is unknown (sensor failure) |
@@ -569,7 +601,7 @@ Most remaining setup issues fall into one of these. Before opening an issue, che
 
 ### Advisor says *Sensor fault – safe mode*
 
-One of AURUM's input sensors is unavailable or has stopped reporting new values. The `input_faults` attribute of `sensor.aurum_current_decision` names it, and *Settings → System → Repairs* shows it after 15 minutes. Check the device or integration behind that sensor. If it is a slow cloud meter that only updates every 10–15 minutes, raise *Sensor timeout* in *Configure → Energy & Battery*, or set it to 0. See [When a sensor fails](#when-a-sensor-fails-safe-mode) for what AURUM does meanwhile.
+One of AURUM's input sensors is unavailable or has stopped reporting new values. The `input_faults` attribute of `sensor.aurum_current_decision` names it, and *Settings → System → Repairs* shows it after 15 minutes. A sensor that no longer exists (renamed or removed) is listed in the repair issue *AURUM: configured entities not found* instead: select the current entity in *Configure*. Otherwise check the device or integration behind that sensor. If it is a slow cloud meter that only updates every 10–15 minutes, raise *Sensor timeout* in *Configure → Energy & Battery*, or set it to 0. See [When a sensor fails](#when-a-sensor-fails-safe-mode) for what AURUM does meanwhile.
 
 ### `sensor.aurum_excess_power` is always 0 (or always huge) — devices never react
 
@@ -605,10 +637,11 @@ You probably have a battery but didn't configure **Battery charge power** and **
 
 Open the device entity and check:
 
-- **Priority** — lower-priority devices wait while higher-priority ones get power first
+- **Priority** — lower-priority devices wait while higher-priority ones get power first. This includes the wait itself: while a higher-priority device counts down its *Debounce ON*, the surplus it needs to start is reserved, and a lower-priority device starts only if the surplus covers both. The reservation ends as soon as that device starts or something other than the surplus blocks it (run condition, *Minimum OFF time*, runtime target reached, budget cap, SOC threshold, force-off, manual override). After two starts within an hour that its switch didn't take (still off on the next check), that device reserves nothing until its switch is seen on, at most for an hour. If the surplus keeps dipping just below what the higher-priority device needs, its countdown starts over each time and the lower-priority device waits as well
 - **SOC threshold** — device won't run if battery is below this level (during `low_soc` mode)
 - **Hysteresis ON** — AURUM needs `nominal_power + hysteresis_on` of surplus before turning on, to avoid flapping
 - **Debounce ON** — surplus must stay sufficient for this many seconds before AURUM commits
+- **Start reserve** — another program that has just started still needs the surplus for its heating (Advisor reason `start_reserve`, see [start reserve](#two-machines-on-one-surplus-start-reserve))
 
 For diagnostic detail, look at the device entity's `scheduling_reason` attribute.
 

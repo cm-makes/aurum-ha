@@ -18,6 +18,9 @@ _DATETIME_FIELDS = (
     "on_since", "last_on", "last_off",
     "sd_detected_at", "sd_waiting_since", "sd_running_since",
     "sd_lockout_until", "sd_power_above_since", "sd_power_below_since",
+    # The run whose expected peak was measured: a restart during the
+    # program must not bring its start reserve back.
+    "sd_peak_run",
 )
 
 # Fields that are simple values (save/restore as-is)
@@ -37,6 +40,10 @@ _VALUE_FIELDS = (
     # Last seen muss_heute state: without it, an arm made after the last
     # save (or right after a restart) was not seen as a new job.
     "_mh_prev",
+    # Run condition latch (restart margin): without it, a restart reopened
+    # the band and a tank cooling from 55 to 53 was heated again at once.
+    # Not zeroed at a day rollover: it follows the sensor, not the day.
+    "_cond_latch",
 )
 
 

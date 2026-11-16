@@ -124,6 +124,7 @@ const STRINGS = {
     reason_runtime_done: "daily runtime reached",
     reason_program_done: "program finished",
     reason_program_paused: "program paused",
+    reason_start_reserve: "surplus reserved for a starting program",
     reason_program_standby: "waiting for program start",
     reason_battery_charging: "battery below reserve",
     reason_below_soc_threshold: "battery below threshold",
@@ -132,6 +133,8 @@ const STRINGS = {
     reason_waiting_surplus: "waiting for surplus",
     reason_switch_unavailable: "switch unreachable",
     reason_input_fault: "sensor fault – safe mode",
+    supportText: "AURUM is free. If it saves you money:",
+    supportLink: "☕ Buy me a coffee",
   },
   de: {
     solar: "Solar", grid: "Netz", battery: "Akku", surplus: "Überschuss",
@@ -170,6 +173,7 @@ const STRINGS = {
     reason_runtime_done: "Tageslaufzeit erreicht",
     reason_program_done: "Programm fertig",
     reason_program_paused: "Programm pausiert",
+    reason_start_reserve: "Überschuss für anlaufendes Programm reserviert",
     reason_program_standby: "wartet auf Programmstart",
     reason_battery_charging: "Akku unter Reserve",
     reason_below_soc_threshold: "Akku unter Schwelle",
@@ -178,8 +182,14 @@ const STRINGS = {
     reason_waiting_surplus: "wartet auf Überschuss",
     reason_switch_unavailable: "Schalter nicht erreichbar",
     reason_input_fault: "Sensorstörung – Sicherheitsmodus",
+    supportText: "AURUM ist kostenlos. Wenn es dir Strom spart:",
+    supportLink: "☕ Kaffee spendieren",
   },
 };
+
+// Footer link. A plain link that opens in a new tab: no tracking, nothing
+// loaded from the site until the user clicks it.
+const SUPPORT_URL = "https://www.buymeacoffee.com/cmmakes";
 
 class AurumPanel extends HTMLElement {
   constructor() {
@@ -411,6 +421,24 @@ class AurumPanel extends HTMLElement {
       devWrap.appendChild(grid);
     }
     root.appendChild(devWrap);
+
+    root.appendChild(this._buildFooter());
+  }
+
+  // Quiet support line below the devices.
+  _buildFooter() {
+    const foot = document.createElement("div");
+    foot.className = "aurum-footer";
+    const text = document.createElement("span");
+    text.textContent = this._t("supportText") + " ";
+    const link = document.createElement("a");
+    link.href = SUPPORT_URL;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = this._t("supportLink");
+    foot.appendChild(text);
+    foot.appendChild(link);
+    return foot;
   }
 
   // Translate an advisor reason code; fall back to the raw code so new
@@ -904,6 +932,11 @@ const CSS = `
 .aurum-num { width: 90px; background: var(--secondary-background-color, #2a2a2a);
   color: var(--primary-text-color); border: 1px solid var(--divider-color,#555);
   border-radius: 8px; padding: 4px 8px; }
+.aurum-footer { margin-top: 28px; padding: 8px 0; text-align: center;
+  color: var(--secondary-text-color); font-size: .78rem; }
+.aurum-footer a { color: var(--secondary-text-color); text-decoration: underline;
+  white-space: nowrap; }
+.aurum-footer a:hover { color: var(--primary-color, #03a9f4); }
 `;
 
 customElements.define("aurum-panel", AurumPanel);

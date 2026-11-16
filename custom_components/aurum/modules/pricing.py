@@ -8,15 +8,44 @@ device manager.
 Supports three data sources (all optional, user picks via entity selector):
   - price_entity:        current price in ct/kWh (numeric sensor)
   - price_level_entity:  price level enum (very_cheap/cheap/normal/...)
-  - cheap_period_entity: binary sensor ON = cheap period active
+  - cheap_period_entity: ON = cheap period active. A binary sensor from
+                         a price integration, or a Schedule helper /
+                         toggle (input_boolean) for a fixed day/night
+                         tariff. All report on/off and are read alike.
 """
 
 import logging
+import math
 from datetime import datetime
 
 from .helpers import get_float, get_price_ct, get_state_safe
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _minutes_until(event, now):
+    """Whole minutes from now until event (rounded up, at least 0).
+
+    event is a schedule's next_event attribute: an aware datetime, or an
+    ISO string if something serialised it. now is AURUM's naive local
+    time. None when either is missing or unusable.
+    """
+    if isinstance(event, str):
+        try:
+            event = datetime.fromisoformat(event)
+        except ValueError:
+            return None
+    if not isinstance(event, datetime) or not isinstance(now, datetime):
+        return None
+    if (event.tzinfo is None) != (now.tzinfo is None):
+        if event.tzinfo is None:
+            return None
+        # Naive now is the host's local time: attach that zone, which
+        # gives the true instant whatever time zone HA is set to.
+        now = now.astimezone()
+    # Rounded up, so 0 only once the period has begun.
+    return max(0, math.ceil((event - now).total_seconds() / 60))
+
 
 # Price levels ordered from cheapest to most expensive
 _LEVEL_ORDER = {
@@ -117,15 +146,16 @@ class PricingManager:
             _LEVEL_ORDER.get(price_level) if price_level else None
         )
 
-        # ── Cheap period active (binary sensor) ──
+        # ── Cheap period active (binary sensor, schedule, toggle) ──
         cheap_period = False
+        cheap_raw = None
         if self.cheap_period_entity:
-            raw = get_state_safe(self.hass, self.cheap_period_entity)
+            cheap_raw = get_state_safe(self.hass, self.cheap_period_entity)
             # "off" is still a valid (available) reading meaning "not cheap";
             # only unavailable/unknown/None counts as missing data.
-            if raw in ("on", "off"):
+            if cheap_raw in ("on", "off"):
                 data_available = True
-            cheap_period = raw == "on"
+            cheap_period = cheap_raw == "on"
         shared["cheap_period"] = cheap_period
         shared["price_data_available"] = data_available
 
@@ -135,6 +165,17 @@ class PricingManager:
             raw = get_float(self.hass, self.cheap_period_starts_in_entity, None)
             if raw is not None:
                 cheap_starts_in = round(raw)
+        elif (self.cheap_period_entity or "").startswith("schedule."):
+            # A Schedule helper knows its next switch time, so it needs no
+            # countdown sensor: 0 while on, else minutes to next_event
+            # (while off, that is the start of the next cheap block).
+            if cheap_raw == "on":
+                cheap_starts_in = 0
+            elif cheap_raw == "off":
+                cheap_starts_in = _minutes_until(
+                    self.hass.get_state(
+                        self.cheap_period_entity, attribute="next_event"),
+                    shared.get("now") or datetime.now())
         shared["cheap_period_starts_in_min"] = cheap_starts_in
 
     def is_price_ok(self, dev):

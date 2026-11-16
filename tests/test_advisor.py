@@ -237,3 +237,16 @@ def test_decision_options_cover_all_codes():
         "unknown",
     }
     assert emitted == set(DECISION_OPTIONS)
+
+
+def test_paused_program_inside_the_band_waits_for_the_condition():
+    # v1.17 review: a paused startup-detection program whose run
+    # condition is not met (tank still hot) waits for the condition,
+    # not for surplus.
+    data = _advisor().update({
+        "battery_mode": "normal", "battery_soc": 80,
+        "device_states": [{"name": "Dishwasher", "slug": "dishwasher",
+                           "state": "waiting", "sd_state": "waiting",
+                           "condition_met": False, "soc_threshold": 20}],
+    })
+    assert data["devices"][0]["reason"] == "condition_not_met"

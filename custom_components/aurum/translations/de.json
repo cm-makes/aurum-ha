@@ -36,7 +36,12 @@
           "min_soc": "Batterie-Reserve",
           "update_interval": "Aktualisierung",
           "sensor_timeout": "Sensor-Zeitlimit",
-          "battery_priority": "Batterie-Vorrang"
+          "battery_priority": "Batterie-Vorrang",
+          "notify_service": "Mobile Push-Benachrichtigungen (optional)",
+          "price_entity": "Strompreis-Sensor (optional)",
+          "price_level_entity": "Preisstufen-Sensor (optional)",
+          "cheap_period_entity": "Günstige Phase – Sensor oder Zeitplan (optional)",
+          "cheap_period_starts_in_entity": "Countdown bis zur günstigen Phase (optional)"
         },
         "data_description": {
           "battery_capacity_wh": "Wie groß ist deine Batterie? Angabe in Wattstunden. Beispiele: 5.000 Wh = 5 kWh, 10.000 Wh = 10 kWh.",
@@ -44,7 +49,12 @@
           "min_soc": "Unter welchem Ladestand sollen ALLE Geräte abgeschaltet werden? Schützt deine Batterie vor Tiefentladung. Standard: 10%.",
           "update_interval": "Wie oft AURUM prüft und steuert (in Sekunden). 15 Sekunden ist für die meisten Anlagen ideal. Muss normalerweise nicht geändert werden.",
           "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt. Eingefrorener Netzzähler: AURUM startet nichts mehr auf Überschuss und schaltet Geräte, die auf Überschuss laufen, nach ihrer Ausschaltverzögerung ab; Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter. Ein eingefrorener Solarsensor zählt als 0 W. Ein nicht verfügbarer Sensor wird immer erkannt. 0 = aus. Standard: 10 min. Erhöhe den Wert über das Aktualisierungsintervall deines Zählers, wenn er seltener meldet (z. B. eine Cloud-Integration).",
-          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
+          "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte.",
+          "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_your_phone'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
+          "price_entity": "Aktueller Strompreis in ct/kWh (der Hundertstel deiner Währung, z. B. Cent oder Rappen). Ein Sensor in EUR/kWh, CHF/kWh oder einer anderen Währung pro kWh oder MWh wird automatisch umgerechnet. Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
+          "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
+          "cheap_period_entity": "EIN, solange Netzstrom günstig ist. Entweder ein Binärsensor deiner Preis-Integration (z.B. tibber_prices Bestpreis-Phase) oder, bei einem Tag/Nacht-Tarif (HT/NT), ein Zeitplan-Helfer mit deinen günstigen Stunden, z.B. 22:00–06:00 (Einstellungen → Geräte & Dienste → Helfer → Zeitplan). Ein Schalter-Helfer (input_boolean) geht auch. Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Wasch- und Spülmaschinen mit Programmerkennung startet das nicht; nutze für sie Muss heute mit einer Deadline. Kann leer bleiben.",
+          "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Mit einem Zeitplan-Helfer nicht nötig: AURUM liest den nächsten Start aus dem Zeitplan. Kann leer bleiben."
         }
       }
     },
@@ -90,7 +100,7 @@
           "notify_service": "Mobile Push-Benachrichtigungen (optional)",
           "price_entity": "Strompreis-Sensor (optional)",
           "price_level_entity": "Preisstufen-Sensor (optional)",
-          "cheap_period_entity": "Sensor für günstige Preisphase (optional)",
+          "cheap_period_entity": "Günstige Phase – Sensor oder Zeitplan (optional)",
           "cheap_period_starts_in_entity": "Countdown bis zur günstigen Phase (optional)",
           "battery_priority": "Batterie-Vorrang"
         },
@@ -109,11 +119,11 @@
           "min_soc": "Unter diesem Ladestand werden ALLE Geräte abgeschaltet (Batterieschutz).",
           "update_interval": "Wie oft AURUM prüft und steuert, in Sekunden. Standard: 15s.",
           "sensor_timeout": "Minuten ohne neuen Netz- oder Solarleistungswert, bis AURUM den Sensor als eingefroren behandelt. Ein eingefrorener Netzzähler schaltet AURUM in den Sicherheitsmodus; ein eingefrorener Solarsensor zählt als 0 W. 0 = aus. Standard: 10 min.",
-          "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_christian'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
+          "notify_service": "Erhalte Push-Nachrichten auf dem Handy, wenn Geräte ein-/ausgeschaltet werden. Gib den Namen deines notify-Dienstes ein, z.B. 'mobile_app_your_phone'. Findest du unter Entwicklerwerkzeuge → Aktionen → notify. Leer lassen zum Deaktivieren.",
           "price_entity": "Aktueller Strompreis in ct/kWh (der Hundertstel deiner Währung, z. B. Cent oder Rappen). Ein Sensor in EUR/kWh, CHF/kWh oder einer anderen Währung pro kWh oder MWh wird automatisch umgerechnet. Funktioniert mit Tibber, Nordpool, aWATTar, EPEX Spot oder jedem Preis-Sensor. Aktiviert die preisbewusste Gerätesteuerung.",
           "price_level_entity": "Preisstufen-Einordnung (very_cheap/cheap/normal/expensive/very_expensive). Wird als Fallback genutzt, wenn für ein Gerät kein Maximalpreis gesetzt ist. Kann leer bleiben.",
-          "cheap_period_entity": "Binärsensor, der während günstiger Preisphasen EIN ist (z.B. tibber_prices Bestpreis-Phase). Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Kann leer bleiben.",
-          "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Kann leer bleiben.",
+          "cheap_period_entity": "EIN, solange Netzstrom günstig ist. Entweder ein Binärsensor deiner Preis-Integration (z.B. tibber_prices Bestpreis-Phase) oder, bei einem Tag/Nacht-Tarif (HT/NT), ein Zeitplan-Helfer mit deinen günstigen Stunden, z.B. 22:00–06:00 (Einstellungen → Geräte & Dienste → Helfer → Zeitplan). Ein Schalter-Helfer (input_boolean) geht auch. Geräte im Modus 'Günstiges Netz' laufen in diesen Phasen. Wasch- und Spülmaschinen mit Programmerkennung startet das nicht; nutze für sie Muss heute mit einer Deadline. Kann leer bleiben.",
+          "cheap_period_starts_in_entity": "Sensor mit den Minuten bis zur nächsten günstigen Preisphase (z.B. tibber_prices 'Bestpreis startet in'). Wird für die Countdown-Anzeige im Gerätestatus genutzt. Mit einem Zeitplan-Helfer nicht nötig: AURUM liest den nächsten Start aus dem Zeitplan. Kann leer bleiben.",
           "battery_priority": "Wenn aktiviert, zählt nur echter Netzexport als Überschuss für Geräte — die Batterie lädt zuerst — und Batterie-Entladung zählt als Defizit, sodass laufende Geräte abgeschaltet werden, sobald die Batterie sie versorgt (benötigt die Batterie-Leistungssensoren). Wenn deaktiviert (Standard), darf Ladeleistung der Batterie zu Geräten umgeleitet werden; dann schützen nur die SOC-Schwellen der Geräte."
         }
       },
@@ -151,13 +161,14 @@
           "condition_entity": "Bedingungs-Sensor (optional)",
           "condition_op": "Bedingung",
           "condition_value": "Grenzwert",
+          "condition_margin": "Wiedereinschalt-Abstand",
           "day_start_hour": "Reset-Stunde (täglich)"
         },
         "data_description": {
           "name": "Gib dem Gerät einen eindeutigen Namen, z.B. 'Waschmaschine', 'Poolpumpe' oder 'Wallbox'. Wird als Sensor-Name in Home Assistant angezeigt.",
           "switch_entity": "Die smarte Steckdose die das Gerät ein- und ausschaltet. Einfach aus der Liste wählen — es werden alle verfügbaren Steckdosen und Schalter angezeigt.",
           "power_entity": "Hat die Steckdose eine Verbrauchsmessung? Dann hier den Leistungs-Sensor wählen. AURUM nutzt dann den echten Verbrauch statt den geschätzten Wert. Kann leer bleiben.",
-          "nominal_power": "Wie viel Strom verbraucht das Gerät ungefähr? Steht oft auf dem Typenschild. Beispiele: Waschmaschine ≈ 2.000W, Poolpumpe ≈ 500W, Wallbox ≈ 3.700W. Wird als Schätzung genutzt wenn kein Verbrauchssensor vorhanden ist.",
+          "nominal_power": "Wie viel Strom verbraucht das Gerät ungefähr? Steht oft auf dem Typenschild. Beispiele: Waschmaschine ≈ 2.000W, Poolpumpe ≈ 500W, Wallbox ≈ 3.700W. Wird als Schätzung genutzt wenn kein Verbrauchssensor vorhanden ist. Mit Programmerkennung trag die Heizleistung ein (Waschmaschine ≈ 2.000W): So viel Überschuss (plus Hysterese EIN) braucht ein pausiertes Programm zum Fortsetzen, und so viel hält es nach dem Start für sein Aufheizen frei.",
           "priority": "Welche Geräte sollen zuerst Solarstrom bekommen? Höhere Zahl = wichtiger. Empfehlung: 80–100 für Waschmaschine/Spülmaschine, 50–70 für Poolpumpe/Heizstab, 20–40 für Wallbox.",
           "soc_threshold": "Wenn die Batterie unter das Ladeziel fällt: Ab welchem Ladestand darf dieses Gerät trotzdem noch laufen? Auf 0 setzen wenn das Gerät nur bei vollem Überschuss laufen soll.",
           "startup_detection": "Aktivieren für Geräte die ein Programm durchlaufen (Waschmaschine, Spülmaschine, Trockner). AURUM erkennt den Programmstart automatisch und schützt das laufende Programm vor Unterbrechung — selbst wenn gerade keine Sonne scheint.",
@@ -171,7 +182,7 @@
           "estimated_runtime": "Wie lange soll das Gerät pro Tag laufen bzw. wie lange dauert ein typischer Durchlauf? Beispiele: Poolpumpe ≈ 400 min/Tag, Waschmaschine ≈ 120 min. Wird zusammen mit der Deadline benutzt, damit AURUM rechtzeitig startet — und als Tagesziel für „Stoppen, sobald Tageslaufzeit erreicht\".",
           "stop_after_runtime": "Schaltet das Gerät ab, sobald es heute die eingestellte Laufzeit erreicht hat. Ohne diese Option läuft es weiter, solange Überschuss und Akku es erlauben. Der Zähler wird um Mitternacht zurückgesetzt. Ideal für Poolpumpen: „400 Minuten laufen, dann Schluss\".",
           "interruptible": "Darf AURUM dieses Gerät abschalten wenn der Überschuss sinkt? Deaktivieren für Geräte die nicht unterbrochen werden dürfen (z.B. 3D-Drucker, Aquariumheizung). Standard: ein.",
-          "price_mode": "Nur Solar: Das Gerät läuft ausschließlich mit PV-Überschuss — nie mit Netzstrom. Günstiges Netz: Das Gerät läuft vorrangig mit PV-Überschuss, schaltet aber AUCH ein, wenn der Strom günstig ist (unter deinem Maximalpreis oder während Bestpreis-Phasen) — auch nachts oder an bewölkten Tagen, unabhängig vom Akku-SOC. Günstiges Netz (SOC-abhängig): wie Günstiges Netz, aber das preisbasierte Einschalten ist nur erlaubt, solange der Akku-SOC mindestens dem SOC-Schwellwert dieses Geräts entspricht — darunter läuft das Gerät nur mit echtem Solarüberschuss. Alle Modi bevorzugen immer Solar, wenn verfügbar. Erfordert einen Preis-Sensor in den Einstellungen.",
+          "price_mode": "Nur Solar: Das Gerät läuft ausschließlich mit PV-Überschuss — nie mit Netzstrom. Günstiges Netz: Das Gerät läuft vorrangig mit PV-Überschuss, schaltet aber AUCH ein, wenn der Strom günstig ist (unter deinem Maximalpreis oder während Bestpreis-Phasen) — auch nachts oder an bewölkten Tagen, unabhängig vom Akku-SOC. Günstiges Netz (SOC-abhängig): wie Günstiges Netz, aber das preisbasierte Einschalten ist nur erlaubt, solange der Akku-SOC mindestens dem SOC-Schwellwert dieses Geräts entspricht — darunter läuft das Gerät nur mit echtem Solarüberschuss. Alle Modi bevorzugen immer Solar, wenn verfügbar. Erfordert einen Preis-Sensor oder eine günstige Phase (z.B. einen Zeitplan-Helfer) in den Einstellungen. Ein pausiertes Programm (Programmerkennung) startet ein günstiger Preis nicht.",
           "max_price": "Maximaler Strompreis in ct/kWh (der Hundertstel deiner Währung, z. B. Rappen), bis zu dem dieses Gerät Netzstrom nutzen darf. Auf 0 setzen, um stattdessen Preisstufe / günstige Phase zu verwenden. Gilt nur in den Modi 'Günstiges Netz' und 'Günstiges Netz (SOC-abhängig)'.",
           "residual_power": "Zusätzliche Sicherheitsmarge beim Einschalten. Verhindert dass das Gerät Leistung verbraucht die für die Netzstabilität gebraucht wird. Standard: 100W.",
           "pv_power_threshold": "Führt dieses Gerät aus, sobald die tatsächliche Solarerzeugung mindestens so viele Watt beträgt UND der Akku mindestens auf dem Geräte-SOC liegt — unabhängig von Hausverbrauch oder Tagesbudget. Ideal für eine Poolpumpe: \"läuft, wenn PV > 1000 W und Akku > 25 %\". Auf 0 setzen zum Deaktivieren; dann gilt nur die normale Überschuss-/Preislogik.",
@@ -183,6 +194,7 @@
           "min_off_time": "Wie lange muss das Gerät mindestens ausgeschaltet bleiben (Sekunden)? Nützlich für Kompressoren, Lüfter mit Nachlauf. Standard: 60s.",
           "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
           "condition_value": "Schwellwert für den Bedingungs-Sensor.",
+          "condition_margin": "Wie ein Thermostat: Hat der Sensor den Grenzwert erreicht, darf das Gerät erst wieder starten, wenn der Sensor um diesen Abstand wieder auf der erlaubten Seite liegt. Beispiel: unter 55 mit Abstand 3 → aus bei 55, wieder erlaubt unter 52, damit ein Speicher mit 54,9 das Gerät nicht gleich wieder einschaltet. In der Einheit des Sensors. 0 = kein Abstand (Standard).",
           "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf."
         }
       },
@@ -227,6 +239,7 @@
           "condition_entity": "Bedingungs-Sensor (optional)",
           "condition_op": "Bedingung",
           "condition_value": "Grenzwert",
+          "condition_margin": "Wiedereinschalt-Abstand",
           "day_start_hour": "Reset-Stunde (täglich)"
         },
         "data_description": {
@@ -257,6 +270,7 @@
           "min_off_time": "Mindestzeit die das Gerät ausgeschaltet bleibt (Sekunden).",
           "condition_entity": "Das Gerät darf nur laufen, solange dieser Sensor unter/über dem Grenzwert liegt — z. B. Warmwasser nur, solange die Boiler-Temperatur unter 55 liegt. Leer lassen für keine Bedingung.",
           "condition_value": "Schwellwert für den Bedingungs-Sensor.",
+          "condition_margin": "Thermostat-Band in der Einheit des Sensors: Nach Erreichen des Grenzwerts darf das Gerät erst wieder starten, wenn der Sensor um diesen Abstand wieder auf der erlaubten Seite liegt (unter 55, Abstand 3: wieder unter 52). 0 = aus.",
           "day_start_hour": "Uhrzeit (0-23), zu der die Laufzeit-/Energiezähler dieses Geräts zurückgesetzt werden. 0 = Mitternacht (Standard). Auf 9 gesetzt läuft ein Cheap-Grid-Gerät tagsüber zuerst auf Solar und füllt die Restlaufzeit nur nachts per Günstig-Netz auf."
         }
       },
@@ -311,6 +325,10 @@
     "input_stale": {
       "title": "AURUM: {entity} liefert keine neuen Werte",
       "description": "Der Netzzähler **{entity}** zeigt noch einen Wert, hat aber innerhalb des *Sensor-Zeitlimits* keinen neuen gemeldet. Ein eingefrorener Wert (MQTT-Sensor ohne Ablaufzeit, hängende Cloud-Verbindung) sieht aus wie ein Live-Wert, deshalb läuft AURUM im Sicherheitsmodus, bis der Zähler wieder meldet: Kein Gerät wird auf Überschuss gestartet, und Geräte, die auf Überschuss laufen, werden nach ihrer Ausschaltverzögerung abgeschaltet. Programme, Deadline-Aufträge und Billigstrom-Läufe laufen weiter.\n\nPrüfe das Gerät oder die Integration hinter diesem Sensor. Aktualisiert er normalerweise seltener, erhöhe das *Sensor-Zeitlimit* in den AURUM-Einstellungen über sein Aktualisierungsintervall oder setze es auf 0, um diese Prüfung abzuschalten. Die Meldung verschwindet von selbst, sobald der Sensor wieder meldet."
+    },
+    "missing_entities": {
+      "title": "AURUM: Konfigurierte Entitäten nicht gefunden",
+      "description": "Die AURUM-Konfiguration verwendet Entitäten, die es in Home Assistant nicht gibt. Sie fehlten auch noch, als AURUM 10 Minuten später erneut geprüft hat:\n\n{entities}\n\nMeist wurde eine solche Entität umbenannt (zum Beispiel, weil die Entitäts-IDs neu erstellt wurden), deaktiviert oder mit ihrem Gerät oder ihrer Integration entfernt. Bis es sie wieder gibt, arbeitet AURUM ohne sie: Ein Gerät ohne seinen Schalter wird nicht geschaltet, die Programmerkennung sieht ohne die Verbrauchsmessung keinen Programmstart, eine Bedingung ohne ihren Sensor gilt nicht, ein fehlender Netzzähler oder Batteriesensor versetzt AURUM in den Sicherheitsmodus, und ein fehlender Preis-, Prognose-, Wetter- oder PV-Erzeugungssensor liefert keine Daten.\n\nÖffne **Einstellungen → Geräte & Dienste → AURUM → Konfigurieren** und wähle die aktuellen Entitäten aus, aktiviere sie wieder oder leere das Feld, wenn du es nicht mehr brauchst. Die Meldung verschwindet von selbst, sobald es die Entitäten wieder gibt."
     }
   },
   "entity": {

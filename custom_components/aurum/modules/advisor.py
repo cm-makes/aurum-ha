@@ -181,6 +181,14 @@ class AdvisorManager:
         if sd_state == SD_STATE_DONE:
             return "program_done"
         if sd_state == SD_STATE_WAITING:
+            # A paused program inside the run-condition band (e.g. tank
+            # still hot) waits for the condition, not for surplus.
+            if d.get("condition_met") is False:
+                return "condition_not_met"
+            # The surplus would resume it, but a program that has just
+            # started still needs it for its heating (start reserve).
+            if d.get("start_reserve_hold"):
+                return "start_reserve"
             return "program_paused"
         if sd_state in (SD_STATE_STANDBY, SD_STATE_DETECTED):
             # SD device is monitoring for a program start – surplus is
@@ -198,6 +206,8 @@ class AdvisorManager:
         if (battery_mode == MODE_LOW_SOC and battery_soc is not None
                 and battery_soc >= 0 and battery_soc < threshold):
             return "below_soc_threshold"
+        if d.get("start_reserve_hold"):
+            return "start_reserve"
         return "waiting_surplus"
 
     # ── aggregate decision ───────────────────────────────────────────
