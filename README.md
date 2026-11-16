@@ -353,10 +353,11 @@ With *Startup detection* and a power sensor, AURUM keeps reading the power while
 A washer takes in water at about 25 W for several minutes before it heats at about 2,000 W. So that a second machine doesn't start on that surplus and both then heat from the grid or the battery, a running *Startup detection* program with a power sensor keeps its *Nominal power* minus what it draws free for others until it has drawn 90 % of its *Nominal power* once, for at most 30 minutes after it starts. A cold program that never gets there releases it after 30 minutes. Enter the heating power as *Nominal power* (about 2,000 W for a washer), not an average.
 
 - Other *Startup detection* programs and non-interruptible devices don't start on the reserved surplus. Deadline, cheap-grid and PV-gate starts ignore it.
-- Interruptible devices (a pool pump) may use it: AURUM switches them off as usual once the heating leaves too little surplus. Holding them back too would leave the surplus unused for up to 30 minutes after a cold program.
-- While a reserve is held, a waiting program doesn't switch off lower-priority devices to make room for itself.
+- Interruptible devices (a pool pump) may use it: AURUM switches them off as usual once the heating leaves too little surplus. Holding them back too would leave the surplus unused for up to 30 minutes after a cold program. This doesn't apply while a device of higher priority is held back by the reserve: the surplus is kept for that device, so a pump can't take it and keep it after the release.
+- AURUM smooths the surplus it starts devices on, so it reacts to a heating that has just begun only over a few minutes. So while a reserve is held and for 3 minutes after its release, the starts that respect it are checked against the lower of the smoothed and the current surplus.
+- While a reserve is held, a waiting program doesn't switch off lower-priority devices to make room for itself. Neither does it in the update in which another program with a power sensor starts.
 - The Advisor shows a device held back by a reserve with reason `start_reserve`.
-- Without a power sensor, or while its plug is off, a program keeps no reserve. While its power sensor is unavailable before the program has reached 90 %, its whole *Nominal power* stays reserved (still for at most 30 minutes).
+- Without a power sensor, or while its plug is off, a program keeps no reserve. While its plug is unreachable, or while its power sensor is unavailable before the program has reached 90 %, its whole *Nominal power* stays reserved (still for at most 30 minutes).
 
 ---
 
