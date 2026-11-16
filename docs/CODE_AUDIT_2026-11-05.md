@@ -1420,14 +1420,14 @@ kept: ['switch.aurum_washer_override', 'switch.aurum_was …
 ### 74. [LOW] notify_service entered as 'notify.mobile_app_x' builds service 'notify/notify.mobile_app_x'; push silently fails
 `custom_components/aurum/modules/devices.py:1401` · ha-lifecycle · bug · Verdict: confirmed
 
-**Beschreibung:** _notify only checks for '/'. The code comment says the 'notify.mobile_app_christian' format is supported, but that string becomes 'notify/notify.mobile_app_christian'. The bridge then schedules services.async_call('notify', 'notify.mobile_app_christian', ...) with hass.add_job. That raises ServiceNotFound inside the fire-and-forget task, so the surrounding try/except never sees it. No push is delivered, and the only trace is an unhandled-task error in the HA log. The option description sends users to Developer Tools, where actions are listed as 'notify.mobile_app_…'. Also, strings.json says pushes come 'when devices are turned on/off', but normal surplus on/off sends nothing. Only SD, deadline, runtime-target, disable and preempt events notify.
+**Beschreibung:** _notify only checks for '/'. The code comment says the 'notify.mobile_app_your_phone' format is supported, but that string becomes 'notify/notify.mobile_app_your_phone'. The bridge then schedules services.async_call('notify', 'notify.mobile_app_your_phone', ...) with hass.add_job. That raises ServiceNotFound inside the fire-and-forget task, so the surrounding try/except never sees it. No push is delivered, and the only trace is an unhandled-task error in the HA log. The option description sends users to Developer Tools, where actions are listed as 'notify.mobile_app_…'. Also, strings.json says pushes come 'when devices are turned on/off', but normal surplus on/off sends nothing. Only SD, deadline, runtime-target, disable and preempt events notify.
 
-**Fehlerszenario:** The user copies 'notify.mobile_app_pixel' from Developer Tools → Actions into the option. A washing machine is detected and started later, and no push ever arrives. Verified: the generated call is ('notify', 'notify.mobile_app_christian', {...}).
+**Fehlerszenario:** The user copies 'notify.mobile_app_pixel' from Developer Tools → Actions into the option. A washing machine is detected and started later, and no push ever arrives. Verified: the generated call is ('notify', 'notify.mobile_app_your_phone', {...}).
 
 **Fix-Vorschlag:** Normalize the value: strip a leading 'notify.' or 'notify/' and build f'notify/{name}'. Validate in the config flow with hass.services.has_service('notify', name). Fix the strings.json wording to list the events that actually notify.
 
 **Beleg (Verifier):** Code:
-- custom_components/aurum/modules/devices.py:1379, 1399-1401: the comment claims 'notify.mobile_app_christian' is supported, but the code does `svc = notify_svc if "/" in notify_svc else f"notify/{notify_svc}"`.
+- custom_components/aurum/modules/devices.py:1379, 1399-1401: the comment claims 'notify.mobile_app_your_phone' is supported, but the code does `svc = notify_svc if "/" in notify_svc else f"notify/{notify_svc}"`.
 - custom_components/aurum/hass_bridge.py:51-53: `domain, service_name = service.split("/", 1); self._hass.add_job(self._hass.services.async_call, domain, service_name, kwargs)`. This is fire-and-forget, so the exception never reaches _notify's try/except.
 - custom_components/aurum/config_flow.py:275-279: a plain TextSelector with no validation or normalization. coordinator.py:40, 67 passes the config through unchanged.
 - _notify call sites: devices.py:292 (disabled), 337 (runtime target), 408 (deadline), 835/903/936/991 (SD), 1097 (preempt). The plain surplus on/off paths have none.
@@ -1549,16 +1549,16 @@ Script: <scratch>/energy_total_stats.py (real DeviceManager, Heater at hour 0 an
 ### 83. [LOW] notify_service in the 'notify.xxx' format (what Developer Tools shows) silently breaks push notifications
 `custom_components/aurum/config_flow.py:275` · entities-config · bug · Verdict: confirmed
 
-**Beschreibung:** The notify_service description tells users to find the name under Developer Tools -> Services -> notify, where it appears as 'notify.mobile_app_x'. The config flow stores free text without validation or normalisation. DeviceManager._notify (devices.py:1401) builds svc = 'notify/' + value unless the value contains '/'. Its own comment claims 'notify.mobile_app_christian' is accepted, but the call becomes domain 'notify', service 'notify.mobile_app_christian' (checked with scratchpad/audit/notify_check.py). Because the call goes through hass.add_job, the ServiceNotFound only ends up as a background task error.
+**Beschreibung:** The notify_service description tells users to find the name under Developer Tools -> Services -> notify, where it appears as 'notify.mobile_app_x'. The config flow stores free text without validation or normalisation. DeviceManager._notify (devices.py:1401) builds svc = 'notify/' + value unless the value contains '/'. Its own comment claims 'notify.mobile_app_your_phone' is accepted, but the call becomes domain 'notify', service 'notify.mobile_app_your_phone' (checked with scratchpad/audit/notify_check.py). Because the call goes through hass.add_job, the ServiceNotFound only ends up as a background task error.
 
 **Fehlerszenario:** The user enters 'notify.mobile_app_pixel', copied from the Actions page. Every AURUM push (program detected, deadline start, runtime reached) silently fails; only the persistent notifications appear.
 
 **Fix-Vorschlag:** Normalise in the config flow: strip a leading 'notify.' or 'notify/' and validate with hass.services.has_service('notify', name), returning a form error if missing. Also strip the 'notify.' prefix in _notify.
 
 **Beleg (Verifier):** Code:
-- <local path> (docstring: "e.g. 'notify.mobile_app_christian'")
+- <local path> (docstring: "e.g. 'notify.mobile_app_your_phone'")
 - devices.py:1399-1401:
-  # notify_service can be "notify.mobile_app_christian" / or just "mobile_app_christian"
+  # notify_service can be "notify.mobile_app_your_phone" / or just "mobile_app_your_phone"
   svc = notify_svc if "/" in notify_svc else f"notify/{notify_svc}"
 - <local path> domain, service_name = service.split("/", 1); self._hass.add_job(self._hass.services.async_call, domain, service_name, kwargs)
 - <local path> free-text TextSelector. Neither config_flow.py:561-571 nor 646-654 normalises or validates the value.

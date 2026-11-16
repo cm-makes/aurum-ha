@@ -70,6 +70,8 @@ _FORCED_STOP_REASONS = frozenset({"pv_below_threshold"})
 # held every lower-priority device back for good.
 _RESERVE_MAX_FAILED_STARTS = 2
 _FAILED_START_WINDOW = timedelta(hours=1)
+# How long a device may reserve surplus without starting (see _reserve).
+_RESERVE_MAX_CLAIM = timedelta(minutes=15)
 
 # User-facing push/persistent notification texts. The HA config-flow
 # strings live in strings.json/translations, but these runtime
@@ -350,6 +352,7 @@ class DeviceManager:
             "_cached_on": False,            # Cached is_on state for shedding
             "_start_unconfirmed": False,    # 'on' sent, not yet seen on
             "_failed_starts": [],           # Starts next seen off (times)
+            "_reserve_since": None,         # First cycle of the current claim
 
             # Manual override
             "managed_on": False,
@@ -540,12 +543,17 @@ class DeviceManager:
         if recent_start:
             start_excess, start_grid = settled_excess, settled_grid
         free_excess, free_grid = (
-            (settled_excess, settled_grid) if recent_start
+            (settled_excess, settled_grid)
+            if recent_start or self._reserve_settling
             else (dec_excess, grid_excess))
         # A device evaluated earlier this cycle (so of higher priority) is
         # held back by a start reserve: the reserved surplus is its claim,
         # so interruptible devices below it respect the reserve too.
         reserve_claimed = False
+        # Lowest priority among the devices held back by a reserve so far
+        # this cycle (devices run highest first): only a strictly higher
+        # claim binds an interruptible device, as for the reservations.
+        claimed_prio = None
         # A program with a power sensor has started this cycle. It holds a
         # start reserve from the next cycle on, so waiting programs don't
         # switch devices off for themselves meanwhile.
@@ -739,6 +747,8 @@ class DeviceManager:
                     if dev["power_entity"]:
                         program_started = True
                 reserve_claimed |= dev["_start_reserve_hold"]
+                if dev["_start_reserve_hold"]:
+                    claimed_prio = dev["priority"]
                 if counted:
                     devices_on += 1
                 elif (dev["sd_state"] == SD_STATE_WAITING
@@ -783,7 +793,8 @@ class DeviceManager:
                 # reserved surplus keeps it after the release, and the
                 # higher one would wait for the rest of the run.
                 respects_reserve = (not dev["interruptible"]
-                                    or reserve_claimed)
+                                    or (claimed_prio is not None
+                                        and claimed_prio > dev["priority"]))
                 if respects_reserve:
                     reserve_w = self._start_reserve_for(dev)
                     base, base_grid = start_excess, start_grid
@@ -856,6 +867,8 @@ class DeviceManager:
                     dev, turnon_excess, turnon_grid, battery_soc,
                     soc_threshold, now, reserve_w=reserve_w)
                 reserve_claimed |= dev["_start_reserve_hold"]
+                if dev["_start_reserve_hold"]:
+                    claimed_prio = dev["priority"]
 
                 if should_on:
                     # _should_turn_on may have granted the start via
@@ -1172,6 +1185,17 @@ class DeviceManager:
         dev["_failed_starts"] = [
             t for t in dev["_failed_starts"] if t > cutoff]
         if len(dev["_failed_starts"]) >= _RESERVE_MAX_FAILED_STARTS:
+            return
+        # A debounce that clouds reset again and again never completes:
+        # its claim lapses after _RESERVE_MAX_CLAIM (counted from the first
+        # reserving cycle, not reset by the debounce) and comes back only
+        # after a start or an hour, so it can't strand surplus all day.
+        since = dev.get("_reserve_since")
+        if since is None or now - since > _FAILED_START_WINDOW:
+            dev["_reserve_since"] = since = now
+        limit = max(_RESERVE_MAX_CLAIM,
+                    timedelta(seconds=3 * dev["debounce_on"]))
+        if now - since > limit:
             return
         reservations.append((dev["priority"], self._start_need_w(dev)))
 
@@ -1896,11 +1920,15 @@ class DeviceManager:
                 continue  # Manual override: AURUM never switches it
             if not dev["interruptible"]:
                 continue  # non-interruptible, don't preempt
-            if (dev["force_started"]
-                    or dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID):
-                # Runs on grid on purpose (deadline, cheap tariff): what
-                # it frees is grid power, not surplus for the program
-                # (audit #6, e.g. a night-tariff water heater).
+            if dev["force_started"] or (
+                    dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID
+                    and self.pricing
+                    and self.pricing.should_run_on_grid(dev) is not False):
+                # Runs on grid on purpose (deadline, cheap tariff still
+                # granted): what it frees is grid power, not surplus for
+                # the program (audit #6, e.g. a night-tariff water heater).
+                # A cheap-grid run whose cheap period has ended keeps its
+                # label while surplus carries it, so the live grant decides.
                 continue
             if dev["priority"] >= sd_device["priority"]:
                 continue
@@ -2049,6 +2077,7 @@ class DeviceManager:
         """Turn a device on."""
         self.hass.turn_on(dev["switch_entity"])
         self._last_start_at = now
+        dev["_reserve_since"] = None
         dev["on_since"] = now
         dev["last_on"] = now
         dev["_runtime_tick"] = now
@@ -2366,7 +2395,7 @@ class DeviceManager:
         """Send notification via HA persistent_notification + optional mobile push.
 
         Uses persistent_notification.create for broad compatibility.
-        If notify_service is configured (e.g. 'notify.mobile_app_christian'),
+        If notify_service is configured (e.g. 'notify.mobile_app_your_phone'),
         also sends a mobile push notification.
         """
         # ── Persistent notification (always) ──
@@ -2386,8 +2415,8 @@ class DeviceManager:
         notify_svc = self.config.get("notify_service", "")
         if notify_svc:
             try:
-                # notify_service can be "notify.mobile_app_christian"
-                # or just "mobile_app_christian"
+                # notify_service can be "notify.mobile_app_your_phone"
+                # or just "mobile_app_your_phone"
                 svc = notify_svc if "/" in notify_svc else f"notify/{notify_svc}"
                 push_kwargs = {
                     "message": message,

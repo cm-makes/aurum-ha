@@ -514,11 +514,25 @@ class TestPreemptionSkipsGridRuns:
             self, hass, make_manager, make_device, now):
         mgr, washer, heat = self._setup(
             make_manager, make_device, price_mode="cheap_grid")
+        mgr.pricing = FakePricing(price_ok=True)
         hass.states[H_SW] = "on"
         self._running(heat, now, "cheap_grid")
         freed = mgr._preempt_for_sd(washer, 2000, -200, 80, 20, now, -200)
         assert freed == 0
         assert hass.states[H_SW] == "on"
+
+    def test_cheap_period_over_run_on_surplus_is_preempted(
+            self, hass, make_manager, make_device, now):
+        # The cheap period has ended, surplus carries the run and it keeps
+        # its cheap_grid label: it frees surplus now, so it may yield.
+        mgr, washer, heat = self._setup(
+            make_manager, make_device, price_mode="cheap_grid")
+        mgr.pricing = FakePricing(price_ok=False)
+        hass.states[H_SW] = "on"
+        self._running(heat, now, "cheap_grid")
+        freed = mgr._preempt_for_sd(washer, 2000, -200, 80, 20, now, -200)
+        assert freed > 0
+        assert hass.states[H_SW] == "off"
 
     def test_deadline_run_is_not_preempted(
             self, hass, make_manager, make_device, now):
@@ -538,3 +552,24 @@ class TestPreemptionSkipsGridRuns:
         freed = mgr._preempt_for_sd(washer, 2000, -200, 80, 20, now, -200)
         assert freed > 0
         assert hass.states[H_SW] == "off"
+
+
+class TestClaimLapses:
+    def test_reservation_lapses_after_the_claim_time(
+            self, hass, make_manager, make_device, now):
+        from datetime import timedelta as td
+        mgr = make_manager([_heater(make_device, debounce_on=60)])
+        dev = mgr.devices[0]
+        res = []
+        mgr._reserve(res, dev, now)
+        assert res                      # first claim
+        res = []
+        mgr._reserve(res, dev, now + td(minutes=14))
+        assert res                      # still within 15 min
+        res = []
+        mgr._reserve(res, dev, now + td(minutes=16))
+        assert res == []                # lapsed
+        # A start clears the claim; the next debounce may reserve again.
+        dev["_reserve_since"] = None
+        mgr._reserve(res, dev, now + td(minutes=17))
+        assert res

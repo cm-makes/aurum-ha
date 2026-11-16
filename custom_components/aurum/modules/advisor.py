@@ -181,6 +181,10 @@ class AdvisorManager:
         if sd_state == SD_STATE_DONE:
             return "program_done"
         if sd_state == SD_STATE_WAITING:
+            # A paused program inside the run-condition band (e.g. tank
+            # still hot) waits for the condition, not for surplus.
+            if d.get("condition_met") is False:
+                return "condition_not_met"
             # The surplus would resume it, but a program that has just
             # started still needs it for its heating (start reserve).
             if d.get("start_reserve_hold"):

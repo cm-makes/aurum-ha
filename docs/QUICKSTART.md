@@ -100,6 +100,10 @@ Du landest auf dem Standard-Dashboard „Übersicht".
 
 Für preisbewusstes Scheduling (günstigen Netzstrom nutzen, wenn wenig PV):
 
+- **Tag-/Nachttarif (HT/NT, Modul 3):** kein Preis-Sensor nötig. Leg einen
+  Zeitplan-Helfer mit deinen NT-Stunden an (zwei Blöcke, z. B. 00:00–06:00 und
+  22:00–24:00) und trag ihn im Schritt 2 als *Günstige Phase* ein.
+
 - **Tibber:** HACS-Integration [„Tibber Prices"](https://github.com/jpawlowski/hass.tibber_prices)
   (empfohlen) – liefert Preis, Preisstufe, Bestpreis-Zeitraum und Countdown.
   Die eingebaute HA-Integration „Tibber" liefert nur einen Preis-Sensor.
@@ -166,13 +170,14 @@ wget -O - https://raw.githubusercontent.com/cm-makes/aurum-ha/main/tools/quickst
 - **Akku-SOC-Sensor** (empfohlen, wenn Batterie vorhanden)
 - **Akku-Lade- und Entladeleistung** (empfohlen, wenn Batterie vorhanden;
   beide, je immer positiv). Ohne sie lernt AURUM den Hausverbrauch nicht.
-- **Strompreis-Sensor** (optional)
 
 **Step 2 – Akku-Einstellungen:**
 - Akkukapazität (Wh) – aus dem Datenblatt
 - Ziel-SOC: 80 % (Standardempfehlung)
 - Min-SOC: 15 % (Tiefentladeschutz)
 - Update-Intervall: 30 s
+- **Strompreis-Sensor, Preisstufe, Günstige Phase** (optional): siehe Schritt 3d.
+  Für einen Tag-/Nachttarif reicht der Zeitplan-Helfer als *Günstige Phase*.
 
 Nach „Senden" läuft AURUM.
 
@@ -199,7 +204,7 @@ Pro Gerät:
 - Pool-Pumpe: **30**
 - E-Bike laden: **20**
 
-**Preis-Modus** (nur mit Strompreis-Sensor aus Schritt 3d):
+**Preis-Modus** (nur mit Strompreis-Sensor oder günstiger Phase/Zeitplan aus Schritt 3d):
 - **Nur Solar** – läuft ausschließlich mit PV-Überschuss.
 - **Solar + günstiges Netz** – läuft zusätzlich, wenn der Strom günstig ist,
   auch nachts und unabhängig vom Akku (z. B. Heizstab).

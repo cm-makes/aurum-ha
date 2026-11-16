@@ -201,6 +201,31 @@ def _validate_energy_sources(hass, data: dict) -> dict[str, str]:
     return errors
 
 
+
+def _clearable(key: str, d: dict):
+    """Optional entity field that can be emptied in Configure.
+
+    With `default=` voluptuous put a cleared field back, so an entity that
+    is gone for good could never be removed from the configuration (audit
+    #27), and the missing-entity repair issue could not be resolved. The
+    current value is only suggested.
+    """
+    value = d.get(key)
+    if value in (None, ""):
+        return vol.Optional(key)
+    return vol.Optional(key, description={"suggested_value": value})
+
+# Hub entity fields the settings step may clear (see async_step_settings).
+_CLEARABLE_HUB_KEYS = (
+    CONF_PV_POWER_ENTITY, CONF_BATTERY_SOC_ENTITY,
+    CONF_BATTERY_CHARGE_POWER_ENTITY, CONF_BATTERY_DISCHARGE_POWER_ENTITY,
+    CONF_PV_FORECAST_ENTITY, CONF_PV_FORECAST_TODAY_ENTITY,
+    CONF_PV_ACTUAL_TODAY_ENTITY, CONF_WEATHER_ENTITY,
+    CONF_PRICE_ENTITY, CONF_PRICE_LEVEL_ENTITY, CONF_CHEAP_PERIOD_ENTITY,
+    CONF_CHEAP_PERIOD_STARTS_IN_ENTITY, CONF_NOTIFY_SERVICE,
+)
+
+
 def _schema_energy(defaults: dict | None = None) -> vol.Schema:
     """Schema for Step 1: Energy sources."""
     d = defaults or {}
@@ -209,38 +234,14 @@ def _schema_energy(defaults: dict | None = None) -> vol.Schema:
             CONF_GRID_POWER_ENTITY,
             default=d.get(CONF_GRID_POWER_ENTITY, vol.UNDEFINED),
         ): _SENSOR,
-        vol.Optional(
-            CONF_PV_POWER_ENTITY,
-            default=d.get(CONF_PV_POWER_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_BATTERY_SOC_ENTITY,
-            default=d.get(CONF_BATTERY_SOC_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_BATTERY_CHARGE_POWER_ENTITY,
-            default=d.get(CONF_BATTERY_CHARGE_POWER_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_BATTERY_DISCHARGE_POWER_ENTITY,
-            default=d.get(CONF_BATTERY_DISCHARGE_POWER_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_PV_FORECAST_ENTITY,
-            default=d.get(CONF_PV_FORECAST_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_PV_FORECAST_TODAY_ENTITY,
-            default=d.get(CONF_PV_FORECAST_TODAY_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_PV_ACTUAL_TODAY_ENTITY,
-            default=d.get(CONF_PV_ACTUAL_TODAY_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_WEATHER_ENTITY,
-            default=d.get(CONF_WEATHER_ENTITY, vol.UNDEFINED),
-        ): _WEATHER,
+        _clearable(CONF_PV_POWER_ENTITY, d): _SENSOR,
+        _clearable(CONF_BATTERY_SOC_ENTITY, d): _SENSOR,
+        _clearable(CONF_BATTERY_CHARGE_POWER_ENTITY, d): _SENSOR,
+        _clearable(CONF_BATTERY_DISCHARGE_POWER_ENTITY, d): _SENSOR,
+        _clearable(CONF_PV_FORECAST_ENTITY, d): _SENSOR,
+        _clearable(CONF_PV_FORECAST_TODAY_ENTITY, d): _SENSOR,
+        _clearable(CONF_PV_ACTUAL_TODAY_ENTITY, d): _SENSOR,
+        _clearable(CONF_WEATHER_ENTITY, d): _WEATHER,
     })
 
 
@@ -292,22 +293,10 @@ def _schema_battery(defaults: dict | None = None) -> vol.Schema:
             description={"suggested_value": d.get(CONF_NOTIFY_SERVICE, "")},
         ): selector.TextSelector(selector.TextSelectorConfig(
             type=selector.TextSelectorType.TEXT)),
-        vol.Optional(
-            CONF_PRICE_ENTITY,
-            default=d.get(CONF_PRICE_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_PRICE_LEVEL_ENTITY,
-            default=d.get(CONF_PRICE_LEVEL_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
-        vol.Optional(
-            CONF_CHEAP_PERIOD_ENTITY,
-            default=d.get(CONF_CHEAP_PERIOD_ENTITY, vol.UNDEFINED),
-        ): _CHEAP_PERIOD,
-        vol.Optional(
-            CONF_CHEAP_PERIOD_STARTS_IN_ENTITY,
-            default=d.get(CONF_CHEAP_PERIOD_STARTS_IN_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
+        _clearable(CONF_PRICE_ENTITY, d): _SENSOR,
+        _clearable(CONF_PRICE_LEVEL_ENTITY, d): _SENSOR,
+        _clearable(CONF_CHEAP_PERIOD_ENTITY, d): _CHEAP_PERIOD,
+        _clearable(CONF_CHEAP_PERIOD_STARTS_IN_ENTITY, d): _SENSOR,
     })
 
 
@@ -323,10 +312,7 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             CONF_DEV_SWITCH_ENTITY,
             default=d.get(CONF_DEV_SWITCH_ENTITY, vol.UNDEFINED),
         ): _SWITCH,
-        vol.Optional(
-            CONF_DEV_POWER_ENTITY,
-            default=d.get(CONF_DEV_POWER_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
+        _clearable(CONF_DEV_POWER_ENTITY, d): _SENSOR,
         vol.Required(
             CONF_DEV_NOMINAL_POWER,
             default=d.get(CONF_DEV_NOMINAL_POWER, DEFAULT_DEV_NOMINAL_POWER),
@@ -434,10 +420,7 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
         # ── Run condition (optional prerequisite) ─────────────
         # Device may only run while <entity> is below/above <value>,
         # e.g. water heater only when boiler temp is below 55 °C.
-        vol.Optional(
-            CONF_DEV_CONDITION_ENTITY,
-            default=d.get(CONF_DEV_CONDITION_ENTITY, vol.UNDEFINED),
-        ): _SENSOR,
+        _clearable(CONF_DEV_CONDITION_ENTITY, d): _SENSOR,
         vol.Optional(
             CONF_DEV_CONDITION_OP,
             default=d.get(CONF_DEV_CONDITION_OP, CONDITION_OP_BELOW),
@@ -673,6 +656,10 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             errors = _validate_energy_sources(self.hass, user_input)
             if not errors:
+                # A field left empty is cleared. Without an explicit None
+                # the value from the first setup (entry.data) came back.
+                for key in _CLEARABLE_HUB_KEYS:
+                    user_input.setdefault(key, None)
                 self._options.update(user_input)
                 self._options[CONF_DEVICES] = self._devices
                 return self.async_create_entry(title="", data=self._options)

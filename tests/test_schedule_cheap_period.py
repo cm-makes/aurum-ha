@@ -192,8 +192,11 @@ class TestCheapPeriodSelector:
     def test_options_form_keeps_a_configured_schedule(self):
         marker, _ = _field(
             _options_form(cheap_period_entity=SCHED), "cheap_period_entity")
+        # Suggested, not a default: a default put a cleared field back, so
+        # an entity that is gone for good could never be removed (#27).
+        assert marker.description["suggested_value"] == SCHED
         default = marker.default
-        assert (default() if callable(default) else default) == SCHED
+        assert (default() if callable(default) else default) != SCHED
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -535,3 +538,39 @@ class TestTexts:
         options = data["options"]["step"]["settings"]
         for part in ("data", "data_description"):
             assert setup[part].get(field) == options[part][field]
+
+
+class TestClearingAFieldInConfigure:
+    """Audit #27 / v1.17 review: an optional entity field emptied in
+    Configure must stay empty, so the missing-entity repair issue can be
+    resolved for an entity that is gone for good."""
+
+    def _save(self, **configured):
+        cf = _config_flow()
+        entry = types.SimpleNamespace(
+            data={"grid_power_entity": "sensor.grid", "devices": [],
+                  **configured},
+            options={})
+        handler = cf.AurumOptionsFlowHandler(entry)
+        grid = types.SimpleNamespace(
+            state="120", attributes={"unit_of_measurement": "W"})
+        handler.hass = types.SimpleNamespace(states=types.SimpleNamespace(
+            get=lambda eid: grid if eid == "sensor.grid" else None))
+        handler.async_create_entry = (
+            lambda title, data: {"type": "create_entry", "data": data})
+        # The user empties the price field: the frontend omits the key.
+        user_input = {"grid_power_entity": "sensor.grid",
+                      "battery_capacity_wh": 5000, "target_soc": 80,
+                      "min_soc": 10, "update_interval": 15,
+                      "sensor_timeout": 10}
+        return asyncio.run(handler.async_step_settings(user_input))
+
+    def test_emptied_field_is_saved_as_cleared(self):
+        result = self._save(price_entity="sensor.gone_price",
+                            cheap_period_entity=SCHED)
+        assert result["type"] == "create_entry"
+        assert result["data"]["price_entity"] is None
+        assert result["data"]["cheap_period_entity"] is None
+        # The runtime merge {**data, **options} then yields None.
+        merged = {"price_entity": "sensor.gone_price", **result["data"]}
+        assert merged["price_entity"] is None
