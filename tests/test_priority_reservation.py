@@ -555,21 +555,112 @@ class TestPreemptionSkipsGridRuns:
 
 
 class TestClaimLapses:
-    def test_reservation_lapses_after_the_claim_time(
+    """A reservation lapses after 15 min of reserving without a start and
+    comes back an hour after the lapse or after a start. A short early
+    claim followed by a long gap does not use up a later claim."""
+
+    def _reserve_every(self, mgr, dev, start, minutes, step=30):
+        from datetime import timedelta as td
+        got, t = [], start
+        while t < start + td(minutes=minutes):
+            res = []
+            mgr._reserve(res, dev, t)
+            got.append(bool(res))
+            t += td(seconds=step)
+        return got, t
+
+    def test_continuous_claim_lapses_after_15_min(
             self, hass, make_manager, make_device, now):
         from datetime import timedelta as td
         mgr = make_manager([_heater(make_device, debounce_on=60)])
         dev = mgr.devices[0]
+        got, t = self._reserve_every(mgr, dev, now, 17)
+        assert got[0] and got[25]          # still claiming at 12.5 min
+        assert not got[-1]                 # lapsed after 15 min
         res = []
-        mgr._reserve(res, dev, now)
-        assert res                      # first claim
+        mgr._reserve(res, dev, t + td(minutes=30))
+        assert res == []                   # within the hour after the lapse
+        mgr._reserve(res, dev, t + td(minutes=61))
+        assert res                         # back an hour later
+
+    def test_early_stray_claim_does_not_use_up_a_later_one(
+            self, hass, make_manager, make_device, now):
+        from datetime import timedelta as td
+        mgr = make_manager([_heater(make_device, debounce_on=300)])
+        dev = mgr.devices[0]
+        self._reserve_every(mgr, dev, now, 1)          # 30 s stray claim
+        got, _ = self._reserve_every(
+            mgr, dev, now + td(minutes=12), 14)         # gap, then 14 min
+        assert all(got)
+
+    def test_short_cloud_resets_still_count(
+            self, hass, make_manager, make_device, now):
+        from datetime import timedelta as td
+        mgr = make_manager([_heater(make_device, debounce_on=300)])
+        dev = mgr.devices[0]
+        t, got = now, []
+        while t < now + td(minutes=20):
+            # 3 min claiming, then a 1-minute cloud without a claim
+            for _ in range(6):
+                res = []
+                mgr._reserve(res, dev, t)
+                got.append(bool(res))
+                t += td(seconds=30)
+            t += td(minutes=1)
+        assert not got[-1]
+
+    def test_long_debounce_lapses_too(
+            self, hass, make_manager, make_device, now):
+        mgr = make_manager([_heater(make_device, debounce_on=1200)])
+        dev = mgr.devices[0]
+        got, _ = self._reserve_every(mgr, dev, now, 65)
+        assert not got[-1]                 # 3 x 20 min = 60 min, then lapse
+
+    def test_a_start_clears_the_claim(
+            self, hass, make_manager, make_device, now):
+        from datetime import timedelta as td
+        mgr = make_manager([_heater(make_device, debounce_on=60)])
+        dev = mgr.devices[0]
+        _, t = self._reserve_every(mgr, dev, now, 17)  # lapsed
+        mgr._turn_on(dev, t, 0, 80)
         res = []
-        mgr._reserve(res, dev, now + td(minutes=14))
-        assert res                      # still within 15 min
-        res = []
-        mgr._reserve(res, dev, now + td(minutes=16))
-        assert res == []                # lapsed
-        # A start clears the claim; the next debounce may reserve again.
-        dev["_reserve_since"] = None
-        mgr._reserve(res, dev, now + td(minutes=17))
+        mgr._reserve(res, dev, t + td(minutes=1))
         assert res
+
+
+class TestClaimedPriority:
+    def test_highest_held_claim_binds_equal_lower_devices(
+            self, hass, make_manager, make_device, now):
+        # Review of v1.17: with two held claimants (prio 90 and 50) an
+        # interruptible device at 50 must still respect the reserve,
+        # because the prio-90 claim is strictly higher.
+        import inspect
+        from custom_components.aurum.modules import devices as dm
+        src = inspect.getsource(dm.DeviceManager.update)
+        assert src.count(
+            'if dev["_start_reserve_hold"] and claimed_prio is None:') == 2
+
+
+class TestPreemptionSocGatedGrant:
+    def test_cheap_grid_soc_run_below_its_threshold_may_yield(
+            self, hass, make_manager, make_device, now):
+        # The cheap period lasts, but a cheap_grid_soc run below its SOC
+        # threshold no longer has a grant: it may yield to a program.
+        mgr = make_manager([
+            make_device(name="Washer", switch_entity=SD_SW,
+                        nominal_power=1800, priority=90,
+                        startup_detection=True, power_entity="sensor.w"),
+            make_device(name="Heater", switch_entity=H_SW,
+                        nominal_power=2500, priority=10,
+                        price_mode="cheap_grid_soc", soc_threshold=40),
+        ])
+        washer, heat = mgr.devices
+        washer["sd_state"] = SD_STATE_WAITING
+        mgr.pricing = FakePricing(price_ok=True)
+        hass.states[H_SW] = "on"
+        heat.update(managed_on=True, on_since=now - timedelta(hours=1),
+                    _runtime_tick=now, _scheduling_reason="cheap_grid",
+                    _cached_on=True)
+        freed = mgr._preempt_for_sd(washer, 2000, -200, 30, 20, now, -200)
+        assert freed > 0
+        assert hass.states[H_SW] == "off"

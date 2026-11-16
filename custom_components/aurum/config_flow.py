@@ -203,7 +203,7 @@ def _validate_energy_sources(hass, data: dict) -> dict[str, str]:
 
 
 def _clearable(key: str, d: dict):
-    """Optional entity field that can be emptied in Configure.
+    """Optional field that can be emptied in Configure.
 
     With `default=` voluptuous put a cleared field back, so an entity that
     is gone for good could never be removed from the configuration (audit
@@ -386,14 +386,8 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             min=600, max=18000, step=600,
             unit_of_measurement="s",
             mode=selector.NumberSelectorMode.BOX)),
-        vol.Optional(
-            CONF_DEV_DEADLINE,
-            default=d.get(CONF_DEV_DEADLINE, vol.UNDEFINED),
-        ): selector.TimeSelector(),
-        vol.Optional(
-            CONF_DEV_ESTIMATED_RUNTIME,
-            default=d.get(CONF_DEV_ESTIMATED_RUNTIME, vol.UNDEFINED),
-        ): selector.NumberSelector(selector.NumberSelectorConfig(
+        _clearable(CONF_DEV_DEADLINE, d): selector.TimeSelector(),
+        _clearable(CONF_DEV_ESTIMATED_RUNTIME, d): selector.NumberSelector(selector.NumberSelectorConfig(
             min=10, max=1440, step=10,
             unit_of_measurement="min",
             mode=selector.NumberSelectorMode.BOX)),
@@ -434,10 +428,7 @@ def _schema_add_device(defaults: dict | None = None) -> vol.Schema:
             translation_key="condition_op",
             mode=selector.SelectSelectorMode.DROPDOWN,
         )),
-        vol.Optional(
-            CONF_DEV_CONDITION_VALUE,
-            default=d.get(CONF_DEV_CONDITION_VALUE, vol.UNDEFINED),
-        ): selector.NumberSelector(selector.NumberSelectorConfig(
+        _clearable(CONF_DEV_CONDITION_VALUE, d): selector.NumberSelector(selector.NumberSelectorConfig(
             min=-100, max=10000, step=0.5,
             mode=selector.NumberSelectorMode.BOX)),
         # Restart margin (thermostat band) in the sensor's unit: once the
@@ -664,7 +655,12 @@ class AurumOptionsFlowHandler(config_entries.OptionsFlow):
                 self._options[CONF_DEVICES] = self._devices
                 return self.async_create_entry(title="", data=self._options)
 
-        combined = {**self._current, **self._options, **(user_input or {})}
+        combined = {**self._current, **self._options}
+        if user_input is not None:
+            # Shown again after an error: fields the user emptied stay
+            # empty instead of falling back to the stored value.
+            combined.update({key: None for key in _CLEARABLE_HUB_KEYS})
+            combined.update(user_input)
         all_schema = {}
         for key, val in _schema_energy(combined).schema.items():
             all_schema[key] = val

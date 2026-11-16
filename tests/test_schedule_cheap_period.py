@@ -574,3 +574,43 @@ class TestClearingAFieldInConfigure:
         # The runtime merge {**data, **options} then yields None.
         merged = {"price_entity": "sensor.gone_price", **result["data"]}
         assert merged["price_entity"] is None
+
+    def test_form_shown_again_keeps_an_emptied_field_empty(self):
+        # Price emptied, PV left pointing at a sensor that no longer
+        # exists: the form comes back with an error, and the emptied price
+        # field must not suggest the old entity again.
+        cf = _config_flow()
+        entry = types.SimpleNamespace(
+            data={"grid_power_entity": "sensor.grid", "devices": [],
+                  "price_entity": "sensor.gone_price",
+                  "pv_power_entity": "sensor.gone_pv"},
+            options={})
+        handler = cf.AurumOptionsFlowHandler(entry)
+        grid = types.SimpleNamespace(
+            state="120", attributes={"unit_of_measurement": "W"})
+        handler.hass = types.SimpleNamespace(states=types.SimpleNamespace(
+            get=lambda eid: grid if eid == "sensor.grid" else None))
+        form = asyncio.run(handler.async_step_settings({
+            "grid_power_entity": "sensor.grid",
+            "pv_power_entity": "sensor.gone_pv",
+            "battery_capacity_wh": 5000, "target_soc": 80, "min_soc": 10,
+            "update_interval": 15, "sensor_timeout": 10}))
+        assert form["type"] == "form" and form["errors"]
+        marker, _ = _field(form, "price_entity")
+        desc = getattr(marker, "description", None) or {}
+        assert desc.get("suggested_value") in (None, "")
+
+    def test_device_deadline_runtime_and_limit_are_clearable(self):
+        cf = _config_flow()
+        schema = cf._schema_add_device({
+            "name": "Washer", "switch_entity": "switch.w",
+            "deadline": "18:00:00", "estimated_runtime": 120,
+            "condition_value": 55})
+        for key, value in (("deadline", "18:00:00"),
+                           ("estimated_runtime", 120),
+                           ("condition_value", 55)):
+            marker = next(m for m in schema.schema
+                          if getattr(m, "schema", m) == key)
+            assert marker.description["suggested_value"] == value
+            default = marker.default
+            assert (default() if callable(default) else default) != value

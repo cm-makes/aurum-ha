@@ -198,6 +198,7 @@ class DeviceManager:
         # A start reserve is held or was released less than
         # _SD_RESERVE_SETTLE_S ago (_update_sd_start_reserves).
         self._reserve_settling = False
+        self._reserve_released_recently = False
         # When AURUM last switched a device on (_turn_on): the smoothed
         # surplus shows that load only after a few minutes.
         self._last_start_at = None
@@ -353,6 +354,8 @@ class DeviceManager:
             "_start_unconfirmed": False,    # 'on' sent, not yet seen on
             "_failed_starts": [],           # Starts next seen off (times)
             "_reserve_since": None,         # First cycle of the current claim
+            "_reserve_last": None,          # Last reserving cycle
+            "_reserve_lapsed_at": None,     # When the claim lapsed
 
             # Manual override
             "managed_on": False,
@@ -544,15 +547,13 @@ class DeviceManager:
             start_excess, start_grid = settled_excess, settled_grid
         free_excess, free_grid = (
             (settled_excess, settled_grid)
-            if recent_start or self._reserve_settling
+            if recent_start or self._reserve_released_recently
             else (dec_excess, grid_excess))
-        # A device evaluated earlier this cycle (so of higher priority) is
-        # held back by a start reserve: the reserved surplus is its claim,
-        # so interruptible devices below it respect the reserve too.
-        reserve_claimed = False
-        # Lowest priority among the devices held back by a reserve so far
-        # this cycle (devices run highest first): only a strictly higher
-        # claim binds an interruptible device, as for the reservations.
+        # Highest priority among the devices held back by a start reserve
+        # this cycle (devices run highest first, so the first one): the
+        # reserved surplus is its claim, so interruptible devices of
+        # strictly lower priority respect the reserve too. Equal
+        # priorities don't hold each other back, as for the reservations.
         claimed_prio = None
         # A program with a power sensor has started this cycle. It holds a
         # start reserve from the next cycle on, so waiting programs don't
@@ -746,8 +747,7 @@ class DeviceManager:
                     newly_allocated += sd_new
                     if dev["power_entity"]:
                         program_started = True
-                reserve_claimed |= dev["_start_reserve_hold"]
-                if dev["_start_reserve_hold"]:
+                if dev["_start_reserve_hold"] and claimed_prio is None:
                     claimed_prio = dev["priority"]
                 if counted:
                     devices_on += 1
@@ -866,8 +866,7 @@ class DeviceManager:
                 should_on = self._should_turn_on(
                     dev, turnon_excess, turnon_grid, battery_soc,
                     soc_threshold, now, reserve_w=reserve_w)
-                reserve_claimed |= dev["_start_reserve_hold"]
-                if dev["_start_reserve_hold"]:
+                if dev["_start_reserve_hold"] and claimed_prio is None:
                     claimed_prio = dev["priority"]
 
                 if should_on:
@@ -1187,15 +1186,26 @@ class DeviceManager:
         if len(dev["_failed_starts"]) >= _RESERVE_MAX_FAILED_STARTS:
             return
         # A debounce that clouds reset again and again never completes:
-        # its claim lapses after _RESERVE_MAX_CLAIM (counted from the first
-        # reserving cycle, not reset by the debounce) and comes back only
-        # after a start or an hour, so it can't strand surplus all day.
-        since = dev.get("_reserve_since")
-        if since is None or now - since > _FAILED_START_WINDOW:
+        # its claim lapses after _RESERVE_MAX_CLAIM of reserving (or three
+        # debounces, if longer) and comes back after a start, or an hour
+        # after the lapse, so it can't strand surplus all day. Short
+        # resets count toward it; a claim that stopped for longer than a
+        # debounce starts over, so an early stray claim doesn't use it up.
+        debounce = timedelta(
+            seconds=dev["debounce_on"] * self._get_switch_penalty(dev, now))
+        lapsed = dev.get("_reserve_lapsed_at")
+        if lapsed is not None:
+            if now - lapsed < _FAILED_START_WINDOW:
+                return
+            dev["_reserve_lapsed_at"] = None
+            dev["_reserve_since"] = None
+        since, last = dev.get("_reserve_since"), dev.get("_reserve_last")
+        if since is None or last is None or now - last > max(
+                debounce, timedelta(minutes=2)):
             dev["_reserve_since"] = since = now
-        limit = max(_RESERVE_MAX_CLAIM,
-                    timedelta(seconds=3 * dev["debounce_on"]))
-        if now - since > limit:
+        dev["_reserve_last"] = now
+        if now - since > max(_RESERVE_MAX_CLAIM, 3 * debounce):
+            dev["_reserve_lapsed_at"] = now
             return
         reservations.append((dev["priority"], self._start_need_w(dev)))
 
@@ -1826,7 +1836,7 @@ class DeviceManager:
         cycle's 'held back by a reserve' flags, and set _reserve_settling
         while a reserve is held or was released less than
         _SD_RESERVE_SETTLE_S ago (the smoothed surplus lags behind)."""
-        settling = False
+        settling = released_recently = False
         for dev in self.devices:
             dev["_start_reserve_hold"] = False
             held = dev["_sd_start_reserve_w"]
@@ -1835,12 +1845,19 @@ class DeviceManager:
             if held > 0 and reserve <= 0:
                 dev["_sd_reserve_released_at"] = now
             released = dev["_sd_reserve_released_at"]
-            if reserve > 0 or (
-                    released is not None
-                    and (now - released).total_seconds()
-                    < _SD_RESERVE_SETTLE_S):
+            just_released = (
+                released is not None
+                and (now - released).total_seconds() < _SD_RESERVE_SETTLE_S)
+            if reserve > 0 or just_released:
                 settling = True
+            if just_released:
+                released_recently = True
         self._reserve_settling = settling
+        # Only right after a release does the smoothed surplus still hold
+        # the heating that just began; interruptible devices that may use
+        # the reserve settle then, not for the whole hold (single raw dips
+        # would reset their debounce for up to 30 min).
+        self._reserve_released_recently = released_recently
 
     def _sd_start_reserve_w(self, dev, now):
         """Watts a program that has just started keeps free for its
@@ -1923,7 +1940,10 @@ class DeviceManager:
             if dev["force_started"] or (
                     dev.get("_scheduling_reason") == SCHED_REASON_CHEAP_GRID
                     and self.pricing
-                    and self.pricing.should_run_on_grid(dev) is not False):
+                    and self.pricing.should_run_on_grid(dev) is not False
+                    and (dev.get("price_mode") != PRICE_MODE_CHEAP_GRID_SOC
+                         or battery_soc < 0
+                         or battery_soc >= dev["soc_threshold"])):
                 # Runs on grid on purpose (deadline, cheap tariff still
                 # granted): what it frees is grid power, not surplus for
                 # the program (audit #6, e.g. a night-tariff water heater).
@@ -2078,6 +2098,8 @@ class DeviceManager:
         self.hass.turn_on(dev["switch_entity"])
         self._last_start_at = now
         dev["_reserve_since"] = None
+        dev["_reserve_last"] = None
+        dev["_reserve_lapsed_at"] = None
         dev["on_since"] = now
         dev["last_on"] = now
         dev["_runtime_tick"] = now
